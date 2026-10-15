@@ -1,0 +1,368 @@
+[
+  {
+    "name": "Postman",
+    "domain": "postman.com",
+    "attemptedSlugs": [
+      "postman",
+      "postmanhq",
+      "postmaninc",
+      "postmantech"
+    ]
+  },
+  {
+    "name": "Zomato",
+    "domain": "zomato.com",
+    "attemptedSlugs": [
+      "zomato",
+      "zomatohq",
+      "zomatoinc",
+      "zomatotech"
+    ]
+  },
+  {
+    "name": "Zerodha",
+    "domain": "zerodha.com",
+    "attemptedSlugs": [
+      "zerodha",
+      "zerodhahq",
+      "zerodhainc",
+      "zerodhatech"
+    ]
+  },
+  {
+    "name": "Flipkart",
+    "domain": "flipkart.com",
+    "attemptedSlugs": [
+      "flipkart",
+      "flipkarthq",
+      "flipkartinc",
+      "flipkarttech"
+    ]
+  },
+  {
+    "name": "Dream11",
+    "domain": "dream11.com",
+    "attemptedSlugs": [
+      "dream11",
+      "dream11hq",
+      "dream11inc",
+      "dream11tech"
+    ]
+  },
+  {
+    "name": "ShareChat",
+    "domain": "sharechat.com",
+    "attemptedSlugs": [
+      "sharechat",
+      "sharechathq",
+      "sharechatinc",
+      "sharechattech"
+    ]
+  },
+  {
+    "name": "Juspay",
+    "domain": "juspay.in",
+    "attemptedSlugs": [
+      "juspay",
+      "juspayhq",
+      "juspayinc",
+      "juspaytech"
+    ]
+  },
+  {
+    "name": "BrowserStack",
+    "domain": "browserstack.com",
+    "attemptedSlugs": [
+      "browserstack",
+      "browserstackhq",
+      "browserstackinc",
+      "browserstacktech"
+    ]
+  },
+  {
+    "name": "Chargebee",
+    "domain": "chargebee.com",
+    "attemptedSlugs": [
+      "chargebee",
+      "chargebeehq",
+      "chargebeeinc",
+      "chargebeetech"
+    ]
+  },
+  {
+    "name": "Hasura",
+    "domain": "hasura.io",
+    "attemptedSlugs": [
+      "hasura",
+      "hasurahq",
+      "hasurainc",
+      "hasuratech"
+    ]
+  },
+  {
+    "name": "Gupshup",
+    "domain": "gupshup.io",
+    "attemptedSlugs": [
+      "gupshup",
+      "gupshuphq",
+      "gupshupinc",
+      "gupshuptech"
+    ]
+  },
+  {
+    "name": "Innovaccer",
+    "domain": "innovaccer.com",
+    "attemptedSlugs": [
+      "innovaccer",
+      "innovaccerhq",
+      "innovaccerinc",
+      "innovaccertech"
+    ]
+  },
+  {
+    "name": "Darwinbox",
+    "domain": "darwinbox.com",
+    "attemptedSlugs": [
+      "darwinbox",
+      "darwinboxhq",
+      "darwinboxinc",
+      "darwinboxtech"
+    ]
+  },
+  {
+    "name": "Sprinto",
+    "domain": "sprinto.com",
+    "attemptedSlugs": [
+      "sprinto",
+      "sprintohq",
+      "sprintoinc",
+      "sprintotech"
+    ]
+  },
+  {
+    "name": "Rapido",
+    "domain": "rapido.bike",
+    "attemptedSlugs": [
+      "rapido",
+      "rapidohq",
+      "rapidoinc",
+      "rapidotech"
+    ]
+  },
+  {
+    "name": "Urban Company",
+    "domain": "urbancompany.com",
+    "attemptedSlugs": [
+      "urbancompany",
+      "urban-company",
+      "urbancompanyhq",
+      "urbancompanyinc",
+      "urbancompanytech",
+      "urbanclap"
+    ]
+  },
+  {
+    "name": "Lenskart",
+    "domain": "lenskart.com",
+    "attemptedSlugs": [
+      "lenskart",
+      "lenskarthq",
+      "lenskartinc",
+      "lenskarttech"
+    ]
+  },
+  {
+    "name": "Nykaa",
+    "domain": "nykaa.com",
+    "attemptedSlugs": [
+      "nykaa",
+      "nykaahq",
+      "nykaainc",
+      "nykaatech"
+    ]
+  },
+  {
+    "name": "PharmEasy",
+    "domain": "pharmeasy.in",
+    "attemptedSlugs": [
+      "pharmeasy",
+      "pharmeasyhq",
+      "pharmeasyinc",
+      "pharmeasytech"
+    ]
+  },
+  {
+    "name": "Spinny",
+    "domain": "spinny.com",
+    "attemptedSlugs": [
+      "spinny",
+      "spinnyhq",
+      "spinnyinc",
+      "spinnytech"
+    ]
+  },
+  {
+    "name": "Licious",
+    "domain": "licious.in",
+    "attemptedSlugs": [
+      "licious",
+      "licioushq",
+      "liciousinc",
+      "licioustech"
+    ]
+  },
+  {
+    "name": "Udaan",
+    "domain": "udaan.com",
+    "attemptedSlugs": [
+      "udaan",
+      "udaanhq",
+      "udaaninc",
+      "udaantech"
+    ]
+  },
+  {
+    "name": "upGrad",
+    "domain": "upgrad.com",
+    "attemptedSlugs": [
+      "upgrad",
+      "upgradhq",
+      "upgradinc",
+      "upgradtech"
+    ]
+  },
+  {
+    "name": "Vedantu",
+    "domain": "vedantu.com",
+    "attemptedSlugs": [
+      "vedantu",
+      "vedantuhq",
+      "vedantuinc",
+      "vedantutech"
+    ]
+  },
+  {
+    "name": "PhysicsWallah",
+    "domain": "pw.live",
+    "attemptedSlugs": [
+      "physicswallah",
+      "pw",
+      "physicswallahhq",
+      "physicswallahinc",
+      "physicswallahtech"
+    ]
+  },
+  {
+    "name": "MoEngage",
+    "domain": "moengage.com",
+    "attemptedSlugs": [
+      "moengage",
+      "moengagehq",
+      "moengageinc",
+      "moengagetech"
+    ]
+  },
+  {
+    "name": "CleverTap",
+    "domain": "clevertap.com",
+    "attemptedSlugs": [
+      "clevertap",
+      "clevertaphq",
+      "clevertapinc",
+      "clevertaptech"
+    ]
+  },
+  {
+    "name": "WebEngage",
+    "domain": "webengage.com",
+    "attemptedSlugs": [
+      "webengage",
+      "webengagehq",
+      "webengageinc",
+      "webengagetech"
+    ]
+  },
+  {
+    "name": "Setu",
+    "domain": "setu.co",
+    "attemptedSlugs": [
+      "setu",
+      "setuhq",
+      "setuinc",
+      "setutech"
+    ]
+  },
+  {
+    "name": "Pine Labs",
+    "domain": "pinelabs.com",
+    "attemptedSlugs": [
+      "pinelabs",
+      "pine-labs",
+      "pinelabshq",
+      "pinelabsinc",
+      "pinelabstech"
+    ]
+  },
+  {
+    "name": "Jupiter",
+    "domain": "jupiter.money",
+    "attemptedSlugs": [
+      "jupiter",
+      "jupiterhq",
+      "jupiterinc",
+      "jupitertech"
+    ]
+  },
+  {
+    "name": "LeadSquared",
+    "domain": "leadsquared.com",
+    "attemptedSlugs": [
+      "leadsquared",
+      "leadsquaredhq",
+      "leadsquaredinc",
+      "leadsquaredtech"
+    ]
+  },
+  {
+    "name": "Yellow.ai",
+    "domain": "yellow.ai",
+    "attemptedSlugs": [
+      "yellowai",
+      "yellow-ai",
+      "yellow",
+      "yellowaihq",
+      "yellowaiinc",
+      "yellowaitech"
+    ]
+  },
+  {
+    "name": "Uniphore",
+    "domain": "uniphore.com",
+    "attemptedSlugs": [
+      "uniphore",
+      "uniphorehq",
+      "uniphoreinc",
+      "uniphoretech"
+    ]
+  },
+  {
+    "name": "DoorDash",
+    "domain": "doordash.com",
+    "attemptedSlugs": [
+      "doordash",
+      "doordashhq",
+      "doordashinc",
+      "doordashtech"
+    ]
+  },
+  {
+    "name": "Atlassian",
+    "domain": "atlassian.com",
+    "attemptedSlugs": [
+      "atlassian",
+      "atlassianhq",
+      "atlassianinc",
+      "atlassiantech"
+    ]
+  }
+]

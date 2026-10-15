@@ -1,0 +1,16 @@
+{
+  "name": "jobradar",
+  "version": "1.0.0",
+  "description": "Personal, local-only job-search tool aggregating Greenhouse, Lever, Ashby, and SmartRecruiters public job boards",
+  "scripts": {
+    "dev": "npm run --prefix backend dev",
+    "collect": "npm run --prefix backend collect",
+    "discover": "npm run --prefix backend discover",
+    "unparsed-locations": "npm run --prefix backend unparsed-locations",
+    "backend": "npm run --prefix backend dev",
+    "frontend": "npm run --prefix frontend dev"
+  },
+  "keywords": ["greenhouse", "lever", "ashby", "smartrecruiters", "jobs", "react", "express", "mongodb"],
+  "author": "",
+  "license": "ISC"
+}

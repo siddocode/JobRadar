@@ -1,0 +1,132 @@
+{
+  "cities": {
+    "Bengaluru": {
+      "state": "Karnataka",
+      "country": "India",
+      "aliases": ["bengaluru", "bangalore", "blr", "bangaluru"]
+    },
+    "Mumbai": {
+      "state": "Maharashtra",
+      "country": "India",
+      "aliases": ["mumbai", "bombay", "navi mumbai", "thane"]
+    },
+    "Gurugram": {
+      "state": "Haryana",
+      "country": "India",
+      "aliases": ["gurgaon", "gurugram"]
+    },
+    "Noida": {
+      "state": "Uttar Pradesh",
+      "country": "India",
+      "aliases": ["noida", "greater noida"]
+    },
+    "Hyderabad": {
+      "state": "Telangana",
+      "country": "India",
+      "aliases": ["hyderabad", "secunderabad", "cyberabad"]
+    },
+    "Pune": {
+      "state": "Maharashtra",
+      "country": "India",
+      "aliases": ["pune", "poona"]
+    },
+    "Chennai": {
+      "state": "Tamil Nadu",
+      "country": "India",
+      "aliases": ["chennai", "madras"]
+    },
+    "Kolkata": {
+      "state": "West Bengal",
+      "country": "India",
+      "aliases": ["kolkata", "calcutta"]
+    },
+    "New Delhi": {
+      "state": "Delhi",
+      "country": "India",
+      "aliases": ["new delhi", "delhi", "delhi ncr", "ncr"]
+    },
+    "Ahmedabad": {
+      "state": "Gujarat",
+      "country": "India",
+      "aliases": ["ahmedabad", "amdavad"]
+    },
+    "Jaipur": {
+      "state": "Rajasthan",
+      "country": "India",
+      "aliases": ["jaipur"]
+    },
+    "Kochi": {
+      "state": "Kerala",
+      "country": "India",
+      "aliases": ["kochi", "cochin", "ernakulam"]
+    },
+    "Thiruvananthapuram": {
+      "state": "Kerala",
+      "country": "India",
+      "aliases": ["thiruvananthapuram", "trivandrum"]
+    },
+    "Indore": {
+      "state": "Madhya Pradesh",
+      "country": "India",
+      "aliases": ["indore"]
+    },
+    "Bhubaneswar": {
+      "state": "Odisha",
+      "country": "India",
+      "aliases": ["bhubaneswar", "bhubaneshwar"]
+    },
+    "Chandigarh": {
+      "state": "Chandigarh",
+      "country": "India",
+      "aliases": ["chandigarh", "mohali", "panchkula"]
+    },
+    "Coimbatore": {
+      "state": "Tamil Nadu",
+      "country": "India",
+      "aliases": ["coimbatore"]
+    },
+    "Nagpur": {
+      "state": "Maharashtra",
+      "country": "India",
+      "aliases": ["nagpur"]
+    },
+    "Lucknow": {
+      "state": "Uttar Pradesh",
+      "country": "India",
+      "aliases": ["lucknow"]
+    },
+    "Visakhapatnam": {
+      "state": "Andhra Pradesh",
+      "country": "India",
+      "aliases": ["visakhapatnam", "vizag"]
+    },
+    "Surat": {
+      "state": "Gujarat",
+      "country": "India",
+      "aliases": ["surat"]
+    },
+    "Vadodara": {
+      "state": "Gujarat",
+      "country": "India",
+      "aliases": ["vadodara", "baroda"]
+    },
+    "Goa": {
+      "state": "Goa",
+      "country": "India",
+      "aliases": ["goa", "panaji"]
+    }
+  },
+  "remoteIndiaPatterns": [
+    "remote, india",
+    "india, remote",
+    "remote - india",
+    "india - remote",
+    "remote (india)",
+    "india (remote)",
+    "remote in india",
+    "anywhere in india",
+    "india / remote",
+    "remote / india",
+    "india remote"
+  ]
+}

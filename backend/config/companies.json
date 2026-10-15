@@ -1,0 +1,164 @@
+[
+  {
+    "name": "Cloudflare",
+    "ats": "greenhouse",
+    "slug": "cloudflare",
+    "verifiedAt": "2026-10-15T10:18:14.205Z"
+  },
+  {
+    "name": "Figma",
+    "ats": "greenhouse",
+    "slug": "figma",
+    "verifiedAt": "2026-10-15T10:18:17.248Z"
+  },
+  {
+    "name": "GitLab",
+    "ats": "greenhouse",
+    "slug": "gitlab",
+    "verifiedAt": "2026-10-15T10:18:19.718Z"
+  },
+  {
+    "name": "Stripe",
+    "ats": "greenhouse",
+    "slug": "stripe",
+    "verifiedAt": "2026-10-15T10:18:25.729Z"
+  },
+  {
+    "name": "Razorpay",
+    "ats": "greenhouse",
+    "slug": "razorpaysoftwareprivatelimited",
+    "verifiedAt": "2026-10-15T10:51:55.599Z"
+  },
+  {
+    "name": "Freshworks",
+    "ats": "lever",
+    "slug": "freshworks",
+    "verifiedAt": "2026-10-15T10:52:07.829Z"
+  },
+  {
+    "name": "Swiggy",
+    "ats": "smartrecruiters",
+    "slug": "swiggy",
+    "verifiedAt": "2026-10-15T10:52:11.009Z"
+  },
+  {
+    "name": "CRED",
+    "ats": "lever",
+    "slug": "cred",
+    "verifiedAt": "2026-10-15T10:52:17.878Z"
+  },
+  {
+    "name": "Groww",
+    "ats": "greenhouse",
+    "slug": "groww",
+    "verifiedAt": "2026-10-15T10:52:18.180Z"
+  },
+  {
+    "name": "PhonePe",
+    "ats": "smartrecruiters",
+    "slug": "phonepelimited",
+    "verifiedAt": "2026-10-15T10:52:36.976Z"
+  },
+  {
+    "name": "Meesho",
+    "ats": "lever",
+    "slug": "meesho",
+    "verifiedAt": "2026-10-15T10:52:44.973Z"
+  },
+  {
+    "name": "Paytm",
+    "ats": "lever",
+    "slug": "paytm",
+    "verifiedAt": "2026-10-15T10:53:13.412Z"
+  },
+  {
+    "name": "Slice",
+    "ats": "greenhouse",
+    "slug": "slice",
+    "verifiedAt": "2026-10-15T10:53:36.100Z"
+  },
+  {
+    "name": "Zeta",
+    "ats": "lever",
+    "slug": "zeta",
+    "verifiedAt": "2026-10-15T10:54:02.974Z"
+  },
+  {
+    "name": "Atlan",
+    "ats": "ashby",
+    "slug": "atlan",
+    "verifiedAt": "2026-10-15T10:54:03.886Z"
+  },
+  {
+    "name": "Hevo Data",
+    "ats": "lever",
+    "slug": "hevodata",
+    "verifiedAt": "2026-10-15T10:54:46.255Z"
+  },
+  {
+    "name": "Cars24",
+    "ats": "smartrecruiters",
+    "slug": "cars24",
+    "verifiedAt": "2026-10-15T10:55:32.630Z"
+  },
+  {
+    "name": "Unacademy",
+    "ats": "smartrecruiters",
+    "slug": "unacademy",
+    "verifiedAt": "2026-10-15T10:55:57.139Z"
+  },
+  {
+    "name": "Navi",
+    "ats": "ashby",
+    "slug": "navi",
+    "verifiedAt": "2026-10-15T10:57:12.598Z"
+  },
+  {
+    "name": "InMobi",
+    "ats": "greenhouse",
+    "slug": "inmobi",
+    "verifiedAt": "2026-10-15T10:57:12.970Z"
+  },
+  {
+    "name": "Mindtickle",
+    "ats": "lever",
+    "slug": "mindtickle",
+    "verifiedAt": "2026-10-15T10:57:18.718Z"
+  },
+  {
+    "name": "Whatfix",
+    "ats": "smartrecruiters",
+    "slug": "whatfix",
+    "verifiedAt": "2026-10-15T10:57:20.982Z"
+  },
+  {
+    "name": "Sarvam AI",
+    "ats": "ashby",
+    "slug": "sarvam",
+    "verifiedAt": "2026-10-15T10:57:56.090Z"
+  },
+  {
+    "name": "Reddit",
+    "ats": "greenhouse",
+    "slug": "reddit",
+    "verifiedAt": "2026-10-15T10:57:56.683Z"
+  },
+  {
+    "name": "Discord",
+    "ats": "greenhouse",
+    "slug": "discord",
+    "verifiedAt": "2026-10-15T10:57:58.447Z"
+  },
+  {
+    "name": "Airbnb",
+    "ats": "greenhouse",
+    "slug": "airbnb",
+    "verifiedAt": "2026-10-15T10:57:58.862Z"
+  },
+  {
+    "name": "Databricks",
+    "ats": "greenhouse",
+    "slug": "databricks",
+    "verifiedAt": "2026-10-15T10:58:12.667Z"
+  }
+]

@@ -1,0 +1,22 @@
+{
+  "name": "jobradar-backend",
+  "version": "1.0.0",
+  "description": "Backend for JobRadar local job search tool",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "collect": "node scripts/collect.js",
+    "discover": "node scripts/discoverSlugs.js",
+    "unparsed-locations": "node scripts/unparsedLocations.js"
+  },
+  "keywords": ["greenhouse", "lever", "ashby", "smartrecruiters", "jobs", "job-search"],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "mongoose": "^8.9.2"
+  }
+}

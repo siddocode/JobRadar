@@ -1,0 +1,1749 @@
+{
+  "version": 0.6,
+  "generator": "Overpass API 0.7.62.11 87bfad18",
+  "osm3s": {
+    "timestamp_osm_base": "2026-06-01T08:52:28Z",
+    "copyright": "The data included in this document is from www.openstreetmap.org. The data is made available under ODbL."
+  },
+  "elements": [
+    {
+      "type": "node",
+      "id": 1684294356,
+      "lat": 22.5773103,
+      "lon": 88.4147938,
+      "tags": {
+        "name": "PEOBRiCS Software Private Limited",
+        "name:bn": "পিওব্রিকস সফটওয়্যার প্রাইভেট লিমিটেড",
+        "office": "company"
+      }
+    },
+    {
+      "type": "node",
+      "id": 2464357928,
+      "lat": 22.5829614,
+      "lon": 88.4483443,
+      "tags": {
+        "name": "Tech Mahindra",
+        "office": "company"
+      }
+    },
+    {
+      "type": "node",
+      "id": 2468842548,
+      "lat": 22.5745663,
+      "lon": 88.4312336,
+      "tags": {
+        "addr:housenumber": "EN-79",
+        "addr:postcode": "700091",
+        "check_date": "2026-02-15",
+        "name": "Anthropological Survey of india",
+        "office": "research",
+        "phone": "3323570090",
+        "website": "https://ansi.gov.in/"
+      }
+    },
+    {
+      "type": "node",
+      "id": 3502906053,
+      "lat": 22.5833115,
+      "lon": 88.4482536,
+      "tags": {
+        "name": "Lexmark International Pvt Ltd",
+        "office": "it"
+      }
+    },
+    {
+      "type": "node",
+      "id": 4591918240,
+      "lat": 22.6492847,
+      "lon": 88.4343869,
+      "tags": {
+        "addr:city": "KOLKATA",
+        "addr:housenumber": "NO.2",
+        "addr:postcode": "700081",
+        "addr:street": "MOTILAL COLONY",
+        "name": "SURAVI GHEE CO.",
+        "office": "company",
+        "smoking": "outside"
+      }
+    },
+    {
+      "type": "node",
+      "id": 4738155124,
+      "lat": 22.5285923,
+      "lon": 88.3609876,
+      "tags": {
+        "check_date": "2023-12-16",
+        "consulate": "yes",
+        "country": "MM",
+        "diplomatic": "consulate",
+        "name": "Consulate of the Republic of the Union of Myanmar",
+        "name:en": "Consulate of the Republic of the Union of Myanmar",
+        "name:fr": "Consulat du Myanmar",
+        "office": "diplomatic",
+        "opening_hours": "Mo-Fr 10:00-12:00, 15:00-16:30",
+        "target": "IN",
+        "website": "https://www.mcgkolkata.org/"
+      }
+    },
+    {
+      "type": "node",
+      "id": 5189737322,
+      "lat": 22.5818344,
+      "lon": 88.3816786,
+      "tags": {
+        "addr:housenumber": "238",
+        "addr:postcode": "700054",
+        "addr:street": "Satin Sen Sarani",
+        "email": "heritagewalkcalcutta@gmail.com",
+        "name": "Heritage Walk Calcutta",
+        "office": "company",
+        "website": "https://www.heritagewalkcalcutta.com/"
+      }
+    },
+    {
+      "type": "node",
+      "id": 5495975671,
+      "lat": 22.5403996,
+      "lon": 88.3497175,
+      "tags": {
+        "addr:city": "Kolkata",
+        "addr:housenumber": "4",
+        "addr:postcode": "700020",
+        "addr:street": "Lee ROad (OC Ganguly Street)",
+        "check_date": "2026-03-22",
+        "consulate": "honorary_consul",
+        "contact:email": "kolkata@honorary.mzv.cz",
+        "contact:phone": "+91 033 2290 7406",
+        "country": "CZ",
+        "diplomatic": "consulate",
+        "name": "Honorary Consulate of the Czech Republic",
+        "name:cs": "Honorární konzulát České republiky",
+        "office": "diplomatic",
+        "opening_hours": "Mo, Th 10:30-12:30",
+        "website": "https://www.mzv.cz/jnp/cz/o_ministerstvu/adresar_diplomatickych_misi/ceske_urady_v_zahranici/indie_honorarni_konzulat_kalkata.html"
+      }
+    },
+    {
+      "type": "node",
+      "id": 5729637830,
+      "lat": 22.5287952,
+      "lon": 88.3607559,
+      "tags": {
+        "addr:housenumber": "Ballygunge Maidan Camp",
+        "addr:street": "Ballygunge Circular Road (Pramatesh Barua Sarani)",
+        "check_date": "2023-12-16",
+        "consulate": "consulate_general",
+        "country": "MM",
+        "diplomatic": "consulate",
+        "name": "Myanmar Consulate General",
+        "office": "diplomatic",
+        "website": "https://www.mcgkolkata.org/"
+      }
+    },
+    {
+      "type": "node",
+      "id": 6141500380,
+      "lat": 22.5501167,
+      "lon": 88.3537662,
+      "tags": {
+        "brand": "Awfis",
+        "brand:wikidata": "Q60747757",
+        "brand:wikipedia": "en:Awfis",
+        "fee": "yes",
+        "name": "Awfis",
+        "office": "coworking"
+      }
+    },
+    {
+      "type": "node",
+      "id": 6520437985,
+      "lat": 22.5513016,
+      "lon": 88.3495279,
+      "tags": {
+        "addr:housenumber": "38 A",
+        "addr:postcode": "700071",
+        "addr:street": "Jawaharlal Nehru Road",
+        "check_date": "2026-03-22",
+        "name": "American Center",
+        "office": "company"
+      }
+    },
+    {
+      "type": "node",
+      "id": 6520712487,
+      "lat": 22.5512076,
+      "lon": 88.3495882,
+      "tags": {
+        "addr:housenumber": "38 A",
+        "addr:postcode": "700071",
+        "check_date": "2026-03-22",
+        "name": "American Center,",
+        "office": "company"
+      }
+    },
+    {
+      "type": "node",
+      "id": 6741701403,
+      "lat": 22.5537196,
+      "lon": 88.3307292,
+      "tags": {
+        "addr:city": "Kolkata",
+        "addr:housenumber": "1",
+        "addr:postcode": "700022",
+        "addr:street": "Napier Road",
+        "check_date": "2025-02-05",
+        "name": "CCE R&D East DRDO",
+        "office": "research",
+        "opening_hours": "Mo-Fr 09:00-17:00"
+      }
+    },
+    {
+      "type": "node",
+      "id": 6753037287,
+      "lat": 22.5310607,
+      "lon": 88.355007,
+      "tags": {
+        "check_date": "2026-03-22",
+        "name": "Bengal motor sports club",
+        "office": "company"
+      }
+    },
+    {
+      "type": "node",
+      "id": 6847500326,
+      "lat": 22.5706444,
+      "lon": 88.4355904,
+      "tags": {
+        "addr:city": "Sector V, Salt Lake City",
+        "addr:country": "IN",
+        "addr:district": "Kolkata",
+        "addr:housenumber": "704",
+        "addr:postcode": "700091",
+        "addr:street": "Shaila Towers J - 1/16, EP Block",
+        "email": "info@bluwebmedia.co.in",
+        "level": "7",
+        "name": "BluWebMedia IT Services Pvt. Ltd.",
+        "office": "it",
+        "phone": "+916289187548",
+        "source": "website",
+        "website": "https://www.bluwebmedia.co.in"
+      }
+    },
+    {
+      "type": "node",
+      "id": 7149569346,
+      "lat": 22.6233689,
+      "lon": 88.4422409,
+      "tags": {
+        "name": "MSQube Technology",
+        "office": "company"
+      }
+    },
+    {
+      "type": "node",
+      "id": 7244551701,
+      "lat": 22.580394,
+      "lon": 88.4372361,
+      "tags": {
+        "addr:city": "Kolkata",
+        "addr:postcode": "700091",
+        "addr:street": "Martin Burn Business Park Office #1105 BP Block, Sector V, Bidhannagar",
+        "internet_access": "yes",
+        "name": "Workstreet",
+        "office": "coworking",
+        "opening_hours": "Mo-Fr 09:00-22:00"
+      }
+    },
+    {
+      "type": "node",
+      "id": 8294406672,
+      "lat": 22.5771819,
+      "lon": 88.3486868,
+      "tags": {
+        "addr:city": "Kolkata",
+        "addr:housenumber": "31",
+        "addr:postcode": "700 001",
+        "addr:street": "Netaji Subhash Road",
+        "consulate": "consulate_general",
+        "country": "CA",
+        "diplomatic": "consulate",
+        "email": "india.consular@international.gc.ca",
+        "fax": "+91 33 2242 6828",
+        "name": "Consulate of Canada",
+        "name:bn": "কানাডা দূতাবাস",
+        "name:en": "Consulate of Canada",
+        "name:fr": "Consulat du Canada",
+        "name:hi": "कनाडा का वाणिज्य दूतावास",
+        "office": "diplomatic",
+        "phone": "+91 33 2242 6820",
+        "target": "IN",
+        "website": "https://www.canada.ca/CanadaAndIndia"
+      }
+    },
+    {
+      "type": "node",
+      "id": 9462516917,
+      "lat": 22.5930902,
+      "lon": 88.4138896,
+      "tags": {
+        "addr:housenumber": "109,110",
+        "addr:postcode": "700064",
+        "addr:street": "CE block sector 1",
+        "check_date": "2025-02-05",
+        "name": "Arunachal Bhawan",
+        "office": "government",
+        "website": "https://www.arunachalilp.com/"
+      }
+    },
+    {
+      "type": "node",
+      "id": 9528024217,
+      "lat": 22.5844654,
+      "lon": 88.42385,
+      "tags": {
+        "addr:housenumber": "F-42",
+        "addr:postcode": "700106",
+        "addr:street": "DK Block",
+        "name:en": "Geological Survey Of India",
+        "office": "government",
+        "opening_hours": "Mo-Fr 09:30-18:00",
+        "website": "https://gsi.gov.in/"
+      }
+    },
+    {
+      "type": "node",
+      "id": 9566184317,
+      "lat": 22.5821736,
+      "lon": 88.391285,
+      "tags": {
+        "addr:city": "Kolkata",
+        "addr:district": "Kolkata",
+        "addr:housenumber": "P1/4",
+        "addr:postcode": "700054",
+        "addr:street": "CIT Road",
+        "government": "social_welfare",
+        "name": "Ambedkar Bhawan - Cultural Research Institute",
+        "name:en": "Ambedkar Bhawan - Cultural Research Institute",
+        "office": "government",
+        "opening_hours": "Mo-Fr 10:00-17:30",
+        "phone": "03323207623",
+        "website": "https://criwb.in/"
+      }
+    },
+    {
+      "type": "node",
+      "id": 9567693817,
+      "lat": 22.5665248,
+      "lon": 88.3538974,
+      "tags": {
+        "addr:housenumber": "4",
+        "addr:postcode": "700072",
+        "addr:street": "Chittaranjan Avenue",
+        "name": "The Hindusthan Buildings( LIC Eastern Zonal Office)",
+        "office": "company",
+        "opening_hours": "Mo-Sa 10:00-17:00",
+        "website": "https://www.licindia.in/"
+      }
+    },
+    {
+      "type": "node",
+      "id": 9573572717,
+      "lat": 22.5857652,
+      "lon": 88.4222462,
+      "tags": {
+        "addr:housenumber": "8",
+        "addr:postcode": "700091",
+        "addr:street": "DJ Block",
+        "check_date": "2025-02-05",
+        "name": "West Bengal Board Of Secondary Education",
+        "office": "government",
+        "opening_hours": "Mo-Fr 10:15-17:15",
+        "phone": "033 2321 3827",
+        "website": "https://wbbse.org/"
+      }
+    },
+    {
+      "type": "node",
+      "id": 9640618218,
+      "lat": 22.5943195,
+      "lon": 88.3967279,
+      "tags": {
+        "check_date": "2023-10-04",
+        "name": "GTPL KCBPL OFFICE",
+        "office": "company"
+      }
+    },
+    {
+      "type": "node",
+      "id": 9640954417,
+      "lat": 22.5941744,
+      "lon": 88.3965655,
+      "tags": {
+        "name": "Wish net internet provider office",
+        "office": "company"
+      }
+    },
+    {
+      "type": "node",
+      "id": 9743048672,
+      "lat": 22.5820684,
+      "lon": 88.4604841,
+      "tags": {
+        "addr:city": "Kolkata",
+        "addr:housenumber": "1417",
+        "addr:postcode": "700156",
+        "addr:street": "DLF Galleria, New Town, AA-1",
+        "email": "response@brandwizz.com",
+        "name": "Brandwizz Communications",
+        "office": "company",
+        "opening_hours": "Mo-Sa 09:30-18:30",
+        "phone": "9830011612",
+        "website": "https://www.brandwizz.com"
+      }
+    },
+    {
+      "type": "node",
+      "id": 9911039719,
+      "lat": 22.5414151,
+      "lon": 88.3474561,
+      "tags": {
+        "check_date": "2026-03-22",
+        "name": "EXIDE",
+        "office": "company"
+      }
+    },
+    {
+      "type": "node",
+      "id": 9911115017,
+      "lat": 22.5454269,
+      "lon": 88.3482922,
+      "tags": {
+        "check_date": "2026-03-22",
+        "name": "SAHARA INDIA SADAN",
+        "office": "company"
+      }
+    },
+    {
+      "type": "node",
+      "id": 9920799449,
+      "lat": 22.5695415,
+      "lon": 88.4365689,
+      "tags": {
+        "addr:city": "GP Block, Sector V, Salt Lake City",
+        "addr:housenumber": "4th Floor, Manibhandar Building, Module E",
+        "addr:postcode": "700091",
+        "addr:street": "Ring Road",
+        "name": "InGreens",
+        "office": "company",
+        "phone": "+91 3340726621",
+        "website": "https://www.ingreens.in/"
+      }
+    },
+    {
+      "type": "node",
+      "id": 9920814609,
+      "lat": 22.5696848,
+      "lon": 88.4365441,
+      "tags": {
+        "addr:city": "EP Block, Sector V, Salt Lake City",
+        "addr:housenumber": "7th Floor, K-1, Manibhandar Building, Module 7A",
+        "addr:postcode": "700091",
+        "addr:street": "Ring Road",
+        "name": "Geforce Consulting Solutions Pvt. Ltd.",
+        "office": "company",
+        "website": "https://gforces.in/"
+      }
+    },
+    {
+      "type": "node",
+      "id": 10009392417,
+      "lat": 22.5664773,
+      "lon": 88.3566943,
+      "tags": {
+        "addr:postcode": "700072",
+        "addr:street": "Prisep street",
+        "check_date": "2026-03-22",
+        "name": "সিইএসসি লিমিটেড",
+        "name:en": "CESC LTD",
+        "office": "company",
+        "opening_hours": "Mo-Sa 09:00-20:00",
+        "phone": "1860 500 1912",
+        "website": "https://www.cesc.co.in/"
+      }
+    },
+    {
+      "type": "node",
+      "id": 10017879140,
+      "lat": 22.5689289,
+      "lon": 88.434095,
+      "tags": {
+        "image": "https://wholisticyou.co.in/wp-content/uploads/elementor/thumbs/Logo-pr1ed8kkd92bqi0ueug84yg4f9wlrvuryg48gx9pr8.png",
+        "name": "Wholistic You",
+        "office": "company",
+        "website": "https://wholisticyou.co.in"
+      }
+    },
+    {
+      "type": "node",
+      "id": 10092487418,
+      "lat": 22.5759605,
+      "lon": 88.4371706,
+      "tags": {
+        "addr:housenumber": "1st floor",
+        "addr:postcode": "700091",
+        "addr:street": "CP Block",
+        "name": "Banglasesh visa office",
+        "name:en": "বাংলাদেশ ভিসা আবেদন কেন্দ্র কলিকাতা Bangladesh Visa Application Centre Kolkata",
+        "office": "diplomatic",
+        "opening_hours": "Mo-Fr 09:00-18:00",
+        "phone": "072890 00071",
+        "website": "https://bdvisa.com"
+      }
+    },
+    {
+      "type": "node",
+      "id": 10092505517,
+      "lat": 22.5761004,
+      "lon": 88.4372068,
+      "tags": {
+        "name": "Infinium digispace",
+        "office": "company"
+      }
+    },
+    {
+      "type": "node",
+      "id": 10605409406,
+      "lat": 22.4914567,
+      "lon": 88.3872785,
+      "tags": {
+        "addr:housenumber": "16",
+        "addr:postcode": "700075",
+        "addr:street": "Lake East 4th Road",
+        "email": "abhinnabangla@gmail.com",
+        "name": "Abhinna Bangla",
+        "office": "ngo",
+        "opening_hours": "24/7",
+        "phone": "+919930794022",
+        "website": "http://www.abhinnabangla.com"
+      }
+    },
+    {
+      "type": "node",
+      "id": 10823696764,
+      "lat": 22.5932295,
+      "lon": 88.4725068,
+      "tags": {
+        "addr:city": "New Town, Kolkata",
+        "addr:postcode": "700156",
+        "addr:street": "Biswa Bangla Sarani",
+        "name": "Viveka Tirtha",
+        "office": "educational_institution",
+        "operator": "Ramakrishna Mission",
+        "operator:type": "religious",
+        "website": "https://belurmath.org/",
+        "wheelchair": "yes"
+      }
+    },
+    {
+      "type": "node",
+      "id": 11001329711,
+      "lat": 22.5449507,
+      "lon": 88.3571804,
+      "tags": {
+        "addr:street": "Shakespeare Sarani",
+        "amenity": "embassy",
+        "check_date": "2026-03-22",
+        "name": "Jasmin Tower US Embassy",
+        "office": "company"
+      }
+    },
+    {
+      "type": "node",
+      "id": 11634668932,
+      "lat": 22.6012498,
+      "lon": 88.3759204,
+      "tags": {
+        "addr:city": "Kolkata",
+        "addr:housenumber": "185/B",
+        "addr:street": "Raja Dinendra Street",
+        "name": "calcutta capsule",
+        "office": "guide",
+        "website": "https://calcuttacapsule.com"
+      }
+    },
+    {
+      "type": "node",
+      "id": 11949762371,
+      "lat": 22.5097431,
+      "lon": 88.3703047,
+      "tags": {
+        "name": "Cpim party office",
+        "office": "company"
+      }
+    },
+    {
+      "type": "node",
+      "id": 11949762372,
+      "lat": 22.5913854,
+      "lon": 88.3916289,
+      "tags": {
+        "name": "TMC party office",
+        "office": "company"
+      }
+    },
+    {
+      "type": "node",
+      "id": 11953292031,
+      "lat": 22.5042691,
+      "lon": 88.359248,
+      "tags": {
+        "addr:city": "kolkata",
+        "addr:district": "Kolkata",
+        "addr:postcode": "700045",
+        "addr:street": "Gobindapur Rd, Jodhpur Gardens, Jodhpur Park",
+        "name": "Virtubox Infotech Pvt Ltd",
+        "office": "it",
+        "opening_hours": "Mo-Fr 09:00-18:00",
+        "phone": "09007114888",
+        "website": "https://www.virtubox.io/"
+      }
+    },
+    {
+      "type": "node",
+      "id": 12100005309,
+      "lat": 22.5571644,
+      "lon": 88.3633469,
+      "tags": {
+        "addr:city": "kolkata",
+        "addr:district": "west bengal",
+        "addr:housenumber": "29E",
+        "addr:postcode": "700014",
+        "addr:street": "Doctor Lane",
+        "alt_name": "কমিউনিস্ট পার্টি অব ইন্ডিয়া - মার্কসবাদী",
+        "check_date": "2026-03-22",
+        "contact:email": "contact@cpimwb.org.in",
+        "email": "contact@cpimwb.org.in",
+        "internet_access": "wlan",
+        "name": "Communist Party Of India",
+        "office": "company",
+        "opening_hours": "Mo-Su 08:00-20:00",
+        "website": "https://cpimwb.org.in/en/",
+        "website:menu": "https://cpim.org/",
+        "wikidata": "Q234277",
+        "wikipedia": "en:Communist Party of India (Marxist)"
+      }
+    },
+    {
+      "type": "node",
+      "id": 12164837932,
+      "lat": 22.5973785,
+      "lon": 88.3665981,
+      "tags": {
+        "addr:housenumber": "4",
+        "addr:postcode": "700004",
+        "addr:street": "Old Mayor's Ct",
+        "alt_name": "বিএসএনএল টেলিফোন এক্সচেঞ্জ - বাগবাজার",
+        "contact:twitter": "BSNL_KOTD",
+        "internet_access": "wlan",
+        "name": "Bagbazar BSNL Telephone Exchange",
+        "office": "government",
+        "opening_hours": "Mo-Sa 10:00-16:00",
+        "outdoor_seating": "no",
+        "website": "https://bsnl.co.in"
+      }
+    },
+    {
+      "type": "node",
+      "id": 12164840101,
+      "lat": 22.5822239,
+      "lon": 88.3762921,
+      "tags": {
+        "addr:postcode": "700006",
+        "addr:street": "Raja Dinendra Street",
+        "alt_name": "ভারত সঞ্চার নিগম লিমিটেড গ্রাহক পরিষেবা কেন্দ্র",
+        "contact:twitter": "BSNL_KOTD",
+        "internet_access": "wlan",
+        "name": "Bharat Sanchar Nigam Limited Customer Service Center (bsnl)",
+        "office": "government",
+        "opening_hours": "Mo-Sa 10:00-17:30",
+        "outdoor_seating": "no",
+        "website": "https://bsnl.co.in"
+      }
+    },
+    {
+      "type": "node",
+      "id": 12164841116,
+      "lat": 22.5145771,
+      "lon": 88.3543281,
+      "tags": {
+        "addr:housenumber": "46",
+        "addr:postcode": "700029",
+        "addr:street": "Dr Sarat Banerjee Road",
+        "contact:twitter": "BSNL_KOTD",
+        "internet_access": "wlan",
+        "name": "BSNL Telephone Exchange Russa",
+        "office": "government",
+        "opening_hours": "Mo-Sa 10:00-17:00",
+        "outdoor_seating": "no",
+        "website": "https://banl.co.in"
+      }
+    },
+    {
+      "type": "node",
+      "id": 12164841203,
+      "lat": 22.5287267,
+      "lon": 88.3518767,
+      "tags": {
+        "addr:housenumber": "47",
+        "addr:postcode": "700025",
+        "addr:street": "Ramesh Mitra Road",
+        "check_date": "2026-03-22",
+        "contact:twitter": "BSNL_KOTD",
+        "internet_access": "wlan",
+        "name": "BSNL Kalighat Telephone Exchange BSNL",
+        "office": "government",
+        "opening_hours": "Mo-Sa 10:00-17:00",
+        "outdoor_seating": "no",
+        "website": "https://www.bsnl.co.in"
+      }
+    },
+    {
+      "type": "node",
+      "id": 12164944801,
+      "lat": 22.5731002,
+      "lon": 88.3556295,
+      "tags": {
+        "addr:housenumber": "p-10",
+        "addr:postcode": "700073",
+        "internet_access": "wlan",
+        "name": "BSNL Telephone Exchange Terreti Bazar",
+        "name:en": "BSNL Telephone Exchange Terreti Bazar",
+        "office": "government",
+        "opening_hours": "Mo-Sa 10:00-17:00",
+        "outdoor_seating": "no",
+        "phone": "9400024365",
+        "website": "https://www.bsnl.co.in"
+      }
+    },
+    {
+      "type": "node",
+      "id": 12164955101,
+      "lat": 22.5796574,
+      "lon": 88.3614095,
+      "tags": {
+        "addr:housenumber": "148",
+        "addr:postcode": "700007",
+        "addr:street": "Chittaranjan Avenue",
+        "alt_name": "বিএসএনএল কাস্টমার সার্ভিস সেন্টার - বুরাবাজার",
+        "contact:twitter": "BSNL_KOTD",
+        "internet_access": "wlan",
+        "name": "BSNL Customer Service Centre - Burrabazar",
+        "office": "government",
+        "opening_hours": "Mo-Sa 10:00-17:00",
+        "outdoor_seating": "no",
+        "phone": "9400024365",
+        "website": "https://www.bsnl.co.in/"
+      }
+    },
+    {
+      "type": "node",
+      "id": 12216299395,
+      "lat": 22.4841999,
+      "lon": 88.3427472,
+      "tags": {
+        "addr:city": "Kolkata",
+        "addr:district": "Kolkata",
+        "addr:housenumber": "172",
+        "addr:postcode": "700041",
+        "addr:street": "Putiary Banerjee Para Road",
+        "loc_name": "Math Phobia",
+        "name": "Math Phobia Study Centre",
+        "office": "educational_institution",
+        "official_name": "Math Phobia Study Centre",
+        "official_name:bn": "ম্যাথ ফোবিয়া স্টাডি সেন্টার",
+        "opening_hours": "Mo-Su 09:00-23:00",
+        "phone": "8537082486",
+        "website": "https://mathphobiastudycentre.in/"
+      }
+    },
+    {
+      "type": "node",
+      "id": 12468773212,
+      "lat": 22.5798581,
+      "lon": 88.4357561,
+      "tags": {
+        "addr:city": "Kolkata",
+        "addr:district": "North 24 Parganas",
+        "addr:housenumber": "Unit 508",
+        "addr:postcode": "700091",
+        "addr:street": "Adventz Infinity, Street Number 18, BN Block, Sector V",
+        "name": "Innoraft",
+        "office": "company",
+        "website": "https://www.innoraft.com"
+      }
+    },
+    {
+      "type": "node",
+      "id": 12514799449,
+      "lat": 22.6015562,
+      "lon": 88.4187303,
+      "tags": {
+        "addr:block": "AF",
+        "addr:city": "Bidhannagar",
+        "addr:district": "Kolkata",
+        "addr:full": "VECC, 1/AF, Bidhannagar, Kolkata-700064",
+        "addr:postcode": "700064",
+        "name": "Variable Energy Cyclotron Centre",
+        "office": "research",
+        "research": "accelerator_physics",
+        "short_name": "VECC",
+        "website": "https://www.vecc.gov.in/",
+        "wikidata": "Q3532635",
+        "wikipedia": "en:Variable Energy Cyclotron Centre"
+      }
+    },
+    {
+      "type": "node",
+      "id": 12839811295,
+      "lat": 22.6304542,
+      "lon": 88.4370013,
+      "tags": {
+        "addr:city": "Kolkata",
+        "addr:district": "North 24 Parganas",
+        "addr:housenumber": "151",
+        "addr:postcode": "700052",
+        "addr:street": "Sardarpara, Kaikhali",
+        "email": "info@vibegeo.com",
+        "name": "VibeGeo Technologies Pvt. Ltd.",
+        "office": "it",
+        "opening_hours": "Mo-Fr 10:00-18:00",
+        "phone": "+919830426829",
+        "website": "https://www.vibegeo.com"
+      }
+    },
+    {
+      "type": "node",
+      "id": 12995430301,
+      "lat": 22.5817007,
+      "lon": 88.4283333,
+      "tags": {
+        "addr:housenumber": "133",
+        "addr:postcode": "700091",
+        "addr:street": "Canal Side Road",
+        "level": "0",
+        "name": "Passionate Solver Technologies",
+        "office": "company",
+        "opening_hours": "Mo-Fr 09:00-18:00",
+        "website": "https://www.passionatesolver.tech/"
+      }
+    },
+    {
+      "type": "node",
+      "id": 13120976609,
+      "lat": 22.5190309,
+      "lon": 88.3515381,
+      "tags": {
+        "addr:city": "Kolkata",
+        "addr:district": "Kolkata",
+        "addr:housenumber": "3/A",
+        "addr:postcode": "700026",
+        "addr:street": "Bipin Pal Road",
+        "air_conditioning": "yes",
+        "description": "At Growth Studioz, we scale lifestyle e-commerce brands with performance marketing that drives growth. From launches to customer acquisition, creatives to data-driven insights, we’ve helped 150+ brands achieve 3.2x ROAS. Let’s grow your brand.",
+        "email": "care@growthstuioz.com",
+        "image": "https://lh3.googleusercontent.com/p/AF1QipMuqFllkaKRLCS5eXi_dhsRvxdMweFcNQXg7xCS=s680-w680-h510-rw",
+        "internet_access": "wlan",
+        "name": "Growth Studioz",
+        "office": "advertising_agency",
+        "opening_hours": "Mo-Fr 10:00-19:00",
+        "phone": "+9190731 04869",
+        "website": "https://growthstudioz.com/"
+      }
+    },
+    {
+      "type": "node",
+      "id": 13512470397,
+      "lat": 22.5140065,
+      "lon": 88.4027815,
+      "tags": {
+        "addr:city": "Kolkata",
+        "addr:district": "Kolkata",
+        "addr:housenumber": "781",
+        "addr:postcode": "700107",
+        "addr:street": "Eastern Metropolitan Bypass Sector C",
+        "government": "social_services",
+        "name": "Passport Seva Kendra",
+        "office": "government",
+        "opening_hours": "Mo-Fr 09:30-16:30",
+        "phone": "+91 4066720567",
+        "website": "https://www.passportindia.gov.in/"
+      }
+    },
+    {
+      "type": "node",
+      "id": 13751860778,
+      "lat": 22.573449,
+      "lon": 88.431377,
+      "tags": {
+        "addr:city": "Salt Lake Sector 5",
+        "addr:district": "Kolkata",
+        "addr:housenumber": "EN 34",
+        "addr:postcode": "700091",
+        "addr:street": "Street Number 13",
+        "name": "BEAS Consultancy & Services",
+        "office": "it",
+        "website": "https://www.beasconsultancy.com/"
+      }
+    },
+    {
+      "type": "node",
+      "id": 13771577845,
+      "lat": 22.607218,
+      "lon": 88.4025331,
+      "tags": {
+        "name": "Einetic",
+        "name:bn": "আইনেটিক",
+        "office": "it",
+        "opening_hours": "Mo-Fr 10:30-18:30"
+      }
+    },
+    {
+      "type": "way",
+      "id": 120230901,
+      "center": {
+        "lat": 22.4989355,
+        "lon": 88.3686469
+      },
+      "nodes": [
+        1348551856,
+        1348551832,
+        1348551891,
+        1348551760,
+        1348551936,
+        1348551797,
+        1348551638,
+        3673276538,
+        3673276537,
+        3673276534,
+        1348551944,
+        1348551939,
+        1348551622,
+        1348551627,
+        1348551963,
+        1348551617,
+        1348551950,
+        1348552000,
+        1348551977,
+        3673276533,
+        3673276532,
+        3673276535,
+        3673276536,
+        1348551860,
+        1348551869,
+        1348551852,
+        1348551856
+      ],
+      "tags": {
+        "building": "yes",
+        "name": "Indian Association for the Cultivation of Science (Main Building)",
+        "office": "research"
+      }
+    },
+    {
+      "type": "way",
+      "id": 120230912,
+      "center": {
+        "lat": 22.4983682,
+        "lon": 88.3685703
+      },
+      "nodes": [
+        1348552004,
+        1348551790,
+        1348551825,
+        1348551646,
+        1348551684,
+        1348551676,
+        1348551642,
+        1348551981,
+        1348551886,
+        1348551724,
+        1348551717,
+        1348551644,
+        1348552004
+      ],
+      "tags": {
+        "air_conditioning": "yes",
+        "building": "yes",
+        "name": "Indian Association for the Cultivation of Science (Centenary Building))",
+        "office": "research",
+        "source": "local knowledge"
+      }
+    },
+    {
+      "type": "way",
+      "id": 121328849,
+      "center": {
+        "lat": 22.4874694,
+        "lon": 88.3430713
+      },
+      "nodes": [
+        1358935875,
+        1358935869,
+        6351878539,
+        6351878538,
+        1358935788,
+        1358935828,
+        6351878536,
+        6351878537,
+        1358935783,
+        1358935825,
+        1358935811,
+        1358935875
+      ],
+      "tags": {
+        "building": "yes",
+        "consulate": "consulate_general",
+        "country": "JP",
+        "diplomatic": "consulate",
+        "name": "कोलकाता में जापान के वाणिज्य दूतावास जनरल",
+        "name:en": "Consulate-General of Japan in kolkata",
+        "name:ja": "在コルカタ日本国総領事館",
+        "office": "diplomatic",
+        "phone": "91-33-2421-1970",
+        "website": "https://www.kolkata.in.emb-japan.go.jp/index.html"
+      }
+    },
+    {
+      "type": "way",
+      "id": 153790970,
+      "center": {
+        "lat": 22.5908733,
+        "lon": 88.4176385
+      },
+      "nodes": [
+        1664312452,
+        1664312447,
+        1664312441,
+        1665256789,
+        1664312407,
+        1664312391,
+        1664312383,
+        1664312395,
+        1665256715,
+        1665256713,
+        1664312452
+      ],
+      "tags": {
+        "addr:postcode": "700064",
+        "addr:street": "5th Cross Road",
+        "building": "yes",
+        "building:levels": "5",
+        "check_date": "2025-02-05",
+        "name": "Jala Sampad Bhavan",
+        "name:en": "Purta Bhavan",
+        "office": "government",
+        "opening_hours": "Mo-Sa 10:30-18:00",
+        "website": "https://www.wbpwd.gov.in/"
+      }
+    },
+    {
+      "type": "way",
+      "id": 192052855,
+      "center": {
+        "lat": 22.5869618,
+        "lon": 88.4224345
+      },
+      "nodes": [
+        2026121653,
+        2026121651,
+        2026121650,
+        2026121652,
+        2026121653
+      ],
+      "tags": {
+        "addr:city": "Bidhannagar",
+        "addr:postcode": "700097",
+        "addr:street": "3rd Avenue",
+        "building": "yes",
+        "government": "government",
+        "name": "Vidyut Bhavan",
+        "name:bn": "বিদ্যুৎ ভবন",
+        "name:hi": "विद्युत भवन",
+        "office": "government",
+        "website": "https://wbsedcl.in/"
+      }
+    },
+    {
+      "type": "way",
+      "id": 192072920,
+      "center": {
+        "lat": 22.5925394,
+        "lon": 88.4140159
+      },
+      "nodes": [
+        2026293357,
+        2026293282,
+        2026293318,
+        2026293327,
+        2026293357
+      ],
+      "tags": {
+        "building": "yes",
+        "building:levels": "4",
+        "contact:twitter": "BSNL_KOTD",
+        "internet_access": "wlan",
+        "name": "BSNL Telephone Exchange saltlake",
+        "office": "government",
+        "opening_hours": "Mo-Fr 10:30-17:00",
+        "outdoor_seating": "no",
+        "website": "https://www.bsnl.co.in"
+      }
+    },
+    {
+      "type": "way",
+      "id": 193308962,
+      "center": {
+        "lat": 22.5790972,
+        "lon": 88.4307673
+      },
+      "nodes": [
+        2038164663,
+        2038164611,
+        2038164667,
+        2038164633,
+        2038164591,
+        3671749255,
+        3671749253,
+        2038164641,
+        2038164601,
+        3671749251,
+        2038164586,
+        2038164647,
+        2038164658,
+        2038164672,
+        2038164597,
+        2038164595,
+        2038164624,
+        2038164615,
+        2038164639,
+        2038164608,
+        2038164587,
+        2038164612,
+        2038164663
+      ],
+      "tags": {
+        "addr:city": "kolkata",
+        "addr:housenumber": "CN-1,, CN-1, Camac St, DN Block, Sector V,",
+        "addr:postcode": "700091",
+        "addr:street": "camac street road",
+        "building": "yes",
+        "check_date": "2025-01-19",
+        "government": "yes",
+        "name": "Wipro Tower 5",
+        "office": "company",
+        "opening_hours": "Mo-Fr 08:00-18:00"
+      }
+    },
+    {
+      "type": "way",
+      "id": 193308964,
+      "center": {
+        "lat": 22.5786886,
+        "lon": 88.4312122
+      },
+      "nodes": [
+        2038164603,
+        2038164622,
+        2038164651,
+        2038164592,
+        2038164668,
+        2038164656,
+        2038164665,
+        2038164634,
+        2038164588,
+        2038164594,
+        2038164603
+      ],
+      "tags": {
+        "addr:city": "kolkata",
+        "addr:housenumber": "HCHJ+CFW,DN Block, Sector V,",
+        "addr:postcode": "700091",
+        "building": "yes",
+        "name": "Meridian Capital",
+        "office": "company"
+      }
+    },
+    {
+      "type": "way",
+      "id": 193475634,
+      "center": {
+        "lat": 22.5772909,
+        "lon": 88.4322772
+      },
+      "nodes": [
+        2039926673,
+        2039926670,
+        2039926672,
+        2039926704,
+        2039926673
+      ],
+      "tags": {
+        "building": "yes",
+        "name": "Srijan Tech Park",
+        "office": "company"
+      }
+    },
+    {
+      "type": "way",
+      "id": 309160990,
+      "center": {
+        "lat": 22.5249953,
+        "lon": 88.3342869
+      },
+      "nodes": [
+        3144957692,
+        3673159401,
+        3144957694,
+        3673159404,
+        3144957701,
+        3144957700,
+        3673159405,
+        3673159406,
+        3144957696,
+        3144957702,
+        3144957705,
+        3144957698,
+        3144957697,
+        3144957703,
+        3144957704,
+        3144957695,
+        3144957691,
+        3144957699,
+        3673159403,
+        3144957692
+      ],
+      "tags": {
+        "addr:city": "Kolkata",
+        "addr:housename": "Consulate General of the Federal Republic of Germany",
+        "addr:housenumber": "1",
+        "addr:postcode": "700 027",
+        "addr:street": "Hastings Park Road",
+        "building": "yes",
+        "consulate": "consulate_general",
+        "country": "DE",
+        "diplomatic": "consulate",
+        "name": "Consulate General of the Federal Republic of Germany",
+        "name:de": "Generalkonsulat der Bundesrepublik Deutschland",
+        "office": "diplomatic",
+        "website": "https://india.diplo.de/in-de/vertretungen/generalkonsulat3"
+      }
+    },
+    {
+      "type": "way",
+      "id": 358178129,
+      "center": {
+        "lat": 22.5167094,
+        "lon": 88.4017305
+      },
+      "nodes": [
+        3631455441,
+        11283395581,
+        11283395580,
+        11283395579,
+        11283395578,
+        3672802782,
+        3672802778,
+        3631455435,
+        3631455400,
+        3631455407,
+        3631455441
+      ],
+      "tags": {
+        "addr:city": "Kolkata",
+        "addr:housenumber": "687",
+        "addr:postcode": "700107",
+        "addr:street": "Anandapur",
+        "building": "yes",
+        "name": "Emami Tower",
+        "office": "company"
+      }
+    },
+    {
+      "type": "way",
+      "id": 358820026,
+      "center": {
+        "lat": 22.4913077,
+        "lon": 88.3721683
+      },
+      "nodes": [
+        3636650116,
+        3636650112,
+        3636650103,
+        3636650104,
+        3636650116
+      ],
+      "tags": {
+        "addr:city": "Kolkata",
+        "addr:district": "Kolkata",
+        "addr:housenumber": "53",
+        "addr:postcode": "700032",
+        "addr:street": "Raja Subodh Chandra Mullick Road",
+        "building": "yes",
+        "name": "The Fortuna",
+        "office": "company",
+        "phone": "09434024070"
+      }
+    },
+    {
+      "type": "way",
+      "id": 358820059,
+      "center": {
+        "lat": 22.4909097,
+        "lon": 88.3721239
+      },
+      "nodes": [
+        3636649866,
+        3636649863,
+        3636649849,
+        3636649851,
+        3636649866
+      ],
+      "tags": {
+        "addr:city": "Kolkata",
+        "addr:district": "Kolkata",
+        "addr:housenumber": "204",
+        "addr:postcode": "700032",
+        "addr:street": "Raja Subodh Chandra Mullick Road",
+        "building": "yes",
+        "name": "A to Z Consultancy Services",
+        "office": "company",
+        "opening_hours": "Mo-Fri 11:15-17:00",
+        "phone": "09088020827"
+      }
+    },
+    {
+      "type": "way",
+      "id": 358852858,
+      "center": {
+        "lat": 22.5445219,
+        "lon": 88.3487176
+      },
+      "nodes": [
+        3636876427,
+        3636876419,
+        3636876396,
+        3636876398,
+        3636876427
+      ],
+      "tags": {
+        "addr:city": "Kolkata",
+        "addr:district": "Kolkata",
+        "addr:housenumber": "2A",
+        "addr:postcode": "700071",
+        "addr:street": "Lord Sinha Road",
+        "air_conditioning": "yes",
+        "building": "office",
+        "building:levels": "4",
+        "check_date": "2026-03-22",
+        "name": "CESC",
+        "office": "company",
+        "website": "https://www.cesc.co.in/"
+      }
+    },
+    {
+      "type": "way",
+      "id": 358886998,
+      "center": {
+        "lat": 22.5712015,
+        "lon": 88.4357021
+      },
+      "nodes": [
+        3637084228,
+        3637084216,
+        3637084199,
+        3637084208,
+        3637084228
+      ],
+      "tags": {
+        "building": "yes",
+        "name": "Kredent Tower, PCI Software Pvt. Ltd.",
+        "office": "company"
+      }
+    },
+    {
+      "type": "way",
+      "id": 358887081,
+      "center": {
+        "lat": 22.5766906,
+        "lon": 88.4344983
+      },
+      "nodes": [
+        3637084791,
+        3637084772,
+        3637084741,
+        3637084764,
+        3637084791
+      ],
+      "tags": {
+        "building": "yes",
+        "building:levels": "10",
+        "name": "R S Softwares",
+        "office": "company"
+      }
+    },
+    {
+      "type": "way",
+      "id": 359136028,
+      "center": {
+        "lat": 22.5535612,
+        "lon": 88.3646557
+      },
+      "nodes": [
+        3639078533,
+        3639078525,
+        3639078530,
+        3639078526,
+        3639078498,
+        3639078501,
+        3639078508,
+        3639078507,
+        3639078518,
+        3639078523,
+        3639078533
+      ],
+      "tags": {
+        "addr:city": "Kolkata",
+        "addr:housenumber": "168",
+        "addr:postcode": "700014",
+        "addr:street": "Acharya Jagadish Chandra Bose Road",
+        "building": "yes",
+        "check_date": "2026-03-22",
+        "name": "Pratt Memorial School",
+        "office": "educational_institution",
+        "opening_hours": "Mo-Fr 08:00-17:00",
+        "phone": "033 2284 4593",
+        "website": "http://prattmemorialschool.edu.in/"
+      }
+    },
+    {
+      "type": "way",
+      "id": 359157506,
+      "center": {
+        "lat": 22.5858135,
+        "lon": 88.3916914
+      },
+      "nodes": [
+        3639202662,
+        3639202657,
+        3639202643,
+        3639202649,
+        3639202662
+      ],
+      "tags": {
+        "addr:postcode": "700054",
+        "building": "yes",
+        "building:levels": "3",
+        "name": "Cardiological Society of India",
+        "office": "government",
+        "opening_hours": "Mo-Su 09:00-18:00",
+        "website": "https://csi.org.in/"
+      }
+    },
+    {
+      "type": "way",
+      "id": 359501720,
+      "center": {
+        "lat": 22.5937949,
+        "lon": 88.3708604
+      },
+      "nodes": [
+        3642041870,
+        3642041813,
+        3642041560,
+        3642041587,
+        3642041506,
+        3642041534,
+        3642041870
+      ],
+      "tags": {
+        "addr:housenumber": "79",
+        "building": "yes",
+        "check_date": "2023-10-30",
+        "internet_access": "wlan",
+        "internet_access:fee": "customers",
+        "name": "Kolkata Municipal Corporation",
+        "office": "government",
+        "opening_hours": "Mo-Fr 10:00-17:00",
+        "website": "https://g.co/kgs/qkJw3h"
+      }
+    },
+    {
+      "type": "way",
+      "id": 362948078,
+      "center": {
+        "lat": 22.5795052,
+        "lon": 88.4383938
+      },
+      "nodes": [
+        3671749340,
+        3671749333,
+        3671749277,
+        3671749287,
+        3671749340
+      ],
+      "tags": {
+        "building": "yes",
+        "name": "WEBEL TECHNOLOGY LIMITED",
+        "office": "it"
+      }
+    },
+    {
+      "type": "way",
+      "id": 362948114,
+      "center": {
+        "lat": 22.5720063,
+        "lon": 88.4308762
+      },
+      "nodes": [
+        3671748347,
+        6618406192,
+        4841395622,
+        3671748332,
+        3671748334,
+        3671748347
+      ],
+      "tags": {
+        "addr:city": "Salt Lake Sector 5",
+        "addr:district": "Kolkata",
+        "addr:housenumber": "GN 37/1",
+        "addr:postcode": "700091",
+        "building": "yes",
+        "name": "Asyst Park",
+        "office": "it"
+      }
+    },
+    {
+      "type": "way",
+      "id": 659403183,
+      "center": {
+        "lat": 22.5414837,
+        "lon": 88.3612353
+      },
+      "nodes": [
+        6173705445,
+        6173705444,
+        6173705443,
+        6173705442,
+        6173705441,
+        6173705440,
+        6173705439,
+        6173705438,
+        6173705445
+      ],
+      "tags": {
+        "check_date": "2026-03-22",
+        "country": "BD",
+        "diplomatic": "embassy",
+        "embassy": "high_commission",
+        "name": "Deputy High Commission of Bangladesh",
+        "name:fr": "Haut-commissaire adjoint du Bengladesh",
+        "office": "diplomatic",
+        "official_name": "Deputy High Commission for the People's Republic of Bangladesh Kolkata",
+        "opening_hours": "Mo-Fr 09:00-17:00",
+        "target": "IN",
+        "website": "https://bdhc-kolkata.org/"
+      }
+    },
+    {
+      "type": "way",
+      "id": 673964145,
+      "center": {
+        "lat": 22.6031734,
+        "lon": 88.4670865
+      },
+      "nodes": [
+        6311588795,
+        6311588794,
+        6311588793,
+        6311588792,
+        6311588795
+      ],
+      "tags": {
+        "building": "yes",
+        "name": "Eco park office",
+        "office": "company"
+      }
+    },
+    {
+      "type": "way",
+      "id": 986447755,
+      "center": {
+        "lat": 22.5836628,
+        "lon": 88.392094
+      },
+      "nodes": [
+        9118370235,
+        9118370236,
+        9118370237,
+        9118370238,
+        9118370235
+      ],
+      "tags": {
+        "addr:city": "KOLKATA",
+        "addr:housenumber": "17",
+        "addr:postcode": "700054",
+        "addr:street": "Bagmari Lane",
+        "building": "yes",
+        "building:levels": "2",
+        "name": "Gano susrusha cpim",
+        "name:en": "Gano susrusha cpim office",
+        "office": "political_party",
+        "opening_hours": "closed",
+        "operator": "CPIM West Bengal",
+        "website": "https://cpimwb.org.in/en/"
+      }
+    },
+    {
+      "type": "way",
+      "id": 986865092,
+      "center": {
+        "lat": 22.5772413,
+        "lon": 88.4345512
+      },
+      "nodes": [
+        9121833094,
+        9121833095,
+        9121833096,
+        9121833097,
+        9121833094
+      ],
+      "tags": {
+        "building": "yes",
+        "building:levels": "12",
+        "name": "sidco global tower",
+        "office": "company"
+      }
+    },
+    {
+      "type": "way",
+      "id": 986867354,
+      "center": {
+        "lat": 22.5790139,
+        "lon": 88.435206
+      },
+      "nodes": [
+        9121856933,
+        9121856934,
+        9121856935,
+        9407446794,
+        9121856933
+      ],
+      "tags": {
+        "addr:city": "Kolkata",
+        "addr:housenumber": "Tcg Lifesciences Chembiotek, Salt Lake Electronics Complex, Plot No-7, Street Number 18, BN Block, Sector V,",
+        "addr:postcode": "700091",
+        "air_conditioning": "yes",
+        "building": "yes",
+        "check_date": "2025-02-05",
+        "name": "TCG Lifesciences Private Limited Chembiotek",
+        "office": "research",
+        "website": "https://www.tcgls.com"
+      }
+    },
+    {
+      "type": "way",
+      "id": 986997165,
+      "center": {
+        "lat": 22.5705132,
+        "lon": 88.430874
+      },
+      "nodes": [
+        9123073930,
+        9123073931,
+        9123073932,
+        9123073933,
+        9123073934,
+        9123073935,
+        9123073936,
+        9123073937,
+        9123073938,
+        9123073939,
+        9123073940,
+        9123073941,
+        9123073942,
+        9123073943,
+        9123073944,
+        9123073945,
+        9123073946,
+        9123073947,
+        9123073948,
+        9123073949,
+        9123073950,
+        9123073951,
+        9123073952,
+        9123073953,
+        9123073954,
+        9123073955,
+        9123073956,
+        9123073957,
+        9123073958,
+        9123073959,
+        9123073960,
+        9123073961,
+        9123073962,
+        9123073963,
+        9123073964,
+        9123073965,
+        9123073966,
+        9123073967,
+        9123073968,
+        9123073969,
+        9123073970,
+        9123073971,
+        9123073930
+      ],
+      "tags": {
+        "addr:city": "KOLKATA",
+        "addr:housenumber": "35 Rashtriya Atlas Bhavan",
+        "addr:postcode": "700091",
+        "addr:street": "GN BLOCK",
+        "building": "yes",
+        "government": "government",
+        "name": "National Atlas and Thematic Mapping Organisation",
+        "office": "government",
+        "website": "https://www.geoportal.natmo.gov.in/"
+      }
+    },
+    {
+      "type": "way",
+      "id": 986997182,
+      "center": {
+        "lat": 22.5717683,
+        "lon": 88.4269559
+      },
+      "nodes": [
+        9123074173,
+        9123074174,
+        9123074175,
+        9123074176,
+        9123074177,
+        9123074179,
+        9123074180,
+        2047985020,
+        9123074173
+      ],
+      "tags": {
+        "addr:city": "KOLKATA",
+        "addr:housenumber": "GODREJ BHAVAN",
+        "addr:postcode": "700091",
+        "addr:street": "GN BLOCK",
+        "building": "yes",
+        "name": "Godrej & Boyce Mfg. Co. Ltd",
+        "office": "company",
+        "opening_hours": "Mo-Su 08:00-22:00",
+        "website": "https://www.godrejsecure.com/"
+      }
+    }
+  ]
+}
