@@ -22,6 +22,11 @@ const { fetchGreenhouseJobs } = require('../adapters/greenhouse');
 const { fetchLeverJobs } = require('../adapters/lever');
 const { fetchAshbyJobs } = require('../adapters/ashby');
 const { fetchSmartRecruitersJobs } = require('../adapters/smartrecruiters');
+const { fetchWorkdayJobs } = require('../adapters/workday');
+const { fetchAmazonJobs } = require('../adapters/amazon');
+const { fetchGoogleJobs } = require('../adapters/google');
+const { fetchEightfoldJobs } = require('../adapters/eightfold');
+const { fetchUniversalJobs } = require('../adapters/universalFeed');
 const { fetchAdzunaJobs } = require('../adapters/adzuna');
 const Job = require('../models/Job');
 const SourceRun = require('../models/SourceRun');
@@ -71,6 +76,21 @@ async function collectForCompany(company) {
         break;
       case 'smartrecruiters':
         fetchResult = await fetchSmartRecruitersJobs(slug, company.name);
+        break;
+      case 'workday':
+        fetchResult = await fetchWorkdayJobs(company.workday || company, company.name);
+        break;
+      case 'amazon':
+        fetchResult = await fetchAmazonJobs(company.query || {}, company.name);
+        break;
+      case 'google':
+        fetchResult = await fetchGoogleJobs(company.query || 'software', company.name);
+        break;
+      case 'eightfold':
+        fetchResult = await fetchEightfoldJobs(company.eightfold || company, company.name);
+        break;
+      case 'universal':
+        fetchResult = await fetchUniversalJobs(company, company.name);
         break;
       default:
         fetchResult = {
@@ -330,5 +350,6 @@ if (require.main === module) {
 
 module.exports = {
   runCollection,
-  collectForCompany
+  collectForCompany,
+  connectDB
 };

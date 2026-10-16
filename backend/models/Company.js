@@ -59,7 +59,7 @@ const companySchema = new mongoose.Schema(
     },
     atsType: {
       type: String,
-      enum: ['greenhouse', 'lever', 'ashby', 'smartrecruiters', null],
+      enum: ['greenhouse', 'lever', 'ashby', 'smartrecruiters', 'workday', 'amazon', 'google', 'custom', null],
       default: null
     },
     atsSlug: {

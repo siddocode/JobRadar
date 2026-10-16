@@ -8,7 +8,17 @@ router.get('/', jobController.getJobs);
 // GET /api/jobs/cities - Aggregate cities that have jobs
 router.get('/cities', jobController.getCities);
 
+// GET /api/jobs/countries - Aggregate countries that have jobs
+router.get('/countries', jobController.getCountries);
+
 // GET /api/jobs/stats - Aggregate counts and latest sync runs
 router.get('/stats', jobController.getJobStats);
 
+// POST /api/jobs/sync - Trigger on-demand job collection
+router.post('/sync', jobController.triggerSync);
+
+// GET /api/jobs/sync/status - Check ongoing sync status
+router.get('/sync/status', jobController.getSyncStatus);
+
 module.exports = router;
+

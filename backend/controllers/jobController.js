@@ -26,6 +26,7 @@ async function getJobs(req, res) {
       location,
       status,
       company,
+      techOnly,
       limit = 50,
       page = 1
     } = req.query;
@@ -36,6 +37,21 @@ async function getJobs(req, res) {
     if (q && typeof q === 'string' && q.trim()) {
       const sanitizedQ = q.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       filter.title = { $regex: sanitizedQ, $options: 'i' };
+    }
+
+    // Filter by tech roles only (coding, software engineering, AI, DevOps, data, product)
+    if (techOnly === 'true' || techOnly === true) {
+      const techRoleRegex = /(engineer|engineering|developer|development|software|swe|coder|coding|programmer|frontend|front-end|backend|back-end|fullstack|full-stack|devops|sre|reliability|cloud|infrastructure|architect|data|machine learning|\bml\b|\bai\b|artificial intelligence|deep learning|\bnlp\b|computer vision|\bllm\b|quality assurance|\bqa\b|\bsdet\b|test|tester|automation|security|cybersecurity|infosec|product manager|technical product|\btpm\b|technical program|tech lead|platform|database|\bdba\b|embedded|firmware|hardware|network|systems|solutions architect|webmaster|sysadmin)/i;
+
+      if (filter.title) {
+        filter.$and = [
+          { title: filter.title },
+          { title: { $regex: techRoleRegex } }
+        ];
+        delete filter.title;
+      } else {
+        filter.title = { $regex: techRoleRegex };
+      }
     }
 
     // Filter by city
@@ -217,6 +233,56 @@ async function getCities(req, res) {
 }
 
 /**
+ * GET /api/countries or /api/jobs/countries
+ * Returns countries that have jobs, with job counts.
+ */
+async function getCountries(req, res) {
+  try {
+    const { status } = req.query;
+    const match = {
+      country: { $ne: null, $nin: ['', null] }
+    };
+
+    if (status && status !== 'all') {
+      match.status = status.toLowerCase();
+    } else {
+      match.status = 'open';
+    }
+
+    const countryStats = await Job.aggregate([
+      { $match: match },
+      {
+        $group: {
+          _id: '$country',
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { count: -1, _id: 1 } },
+      {
+        $project: {
+          _id: 0,
+          country: '$_id',
+          count: 1
+        }
+      }
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      totalCountries: countryStats.length,
+      countries: countryStats
+    });
+  } catch (error) {
+    console.error('[jobController:getCountries] Error:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to retrieve countries',
+      message: error.message
+    });
+  }
+}
+
+/**
  * GET /api/jobs/stats
  * Provides aggregate stats for dashboard metrics.
  */
@@ -253,8 +319,83 @@ async function getJobStats(req, res) {
   }
 }
 
+// In-memory sync state
+const syncState = {
+  isRunning: false,
+  startedAt: null,
+  finishedAt: null,
+  lastSummary: null,
+  error: null
+};
+
+/**
+ * POST /api/jobs/sync
+ * Triggers an on-demand ingestion run in the background.
+ */
+async function triggerSync(req, res) {
+  try {
+    if (syncState.isRunning) {
+      return res.status(200).json({
+        success: true,
+        message: 'A job sync is already in progress.',
+        syncState
+      });
+    }
+
+    syncState.isRunning = true;
+    syncState.startedAt = new Date();
+    syncState.finishedAt = null;
+    syncState.error = null;
+
+    // Run collection asynchronously in the background
+    const { runCollection } = require('../scripts/collect');
+    runCollection()
+      .then((summary) => {
+        syncState.isRunning = false;
+        syncState.finishedAt = new Date();
+        syncState.lastSummary = summary;
+        console.log('[Sync] Collection run finished successfully.');
+      })
+      .catch((err) => {
+        syncState.isRunning = false;
+        syncState.finishedAt = new Date();
+        syncState.error = err.message || 'Collection encountered an error';
+        console.error('[Sync] Collection run failed:', err);
+      });
+
+    return res.status(202).json({
+      success: true,
+      message: 'Sync started successfully in the background.',
+      syncState
+    });
+  } catch (error) {
+    console.error('[jobController:triggerSync] Error:', error);
+    syncState.isRunning = false;
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to initiate sync',
+      message: error.message
+    });
+  }
+}
+
+/**
+ * GET /api/jobs/sync/status
+ * Returns current sync status and latest summary.
+ */
+async function getSyncStatus(req, res) {
+  return res.status(200).json({
+    success: true,
+    syncState
+  });
+}
+
 module.exports = {
   getJobs,
   getCities,
-  getJobStats
+  getCountries,
+  getJobStats,
+  triggerSync,
+  getSyncStatus
 };
+

@@ -105,9 +105,11 @@ jobSchema.index({ source: 1, sourceJobId: 1 }, { unique: true });
 // Additional indexing for filtering and search performance
 jobSchema.index({ status: 1, lastSeenAt: -1 });
 jobSchema.index({ company: 1, status: 1 });
+jobSchema.index({ companyId: 1, status: 1 });
 jobSchema.index({ city: 1, status: 1 });
 jobSchema.index({ country: 1, status: 1 });
 jobSchema.index({ workMode: 1, status: 1 });
 jobSchema.index({ fingerprint: 1, status: 1 });
 
 module.exports = mongoose.model('Job', jobSchema);
+

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 
 function ReachOutCard({ comp, onUpdateFollowUp, copyToClipboard, copiedItem }) {
   const [showAllContacts, setShowAllContacts] = useState(false);
@@ -178,11 +178,21 @@ function ReachOutCard({ comp, onUpdateFollowUp, copyToClipboard, copiedItem }) {
                   <a href={`mailto:${em.value}`} className="chip-anchor">{em.value}</a>
                   <button
                     type="button"
-                    className="chip-copy-btn"
+                    className={`chip-copy-btn ${copiedItem === `ro-em-${comp._id}-${idx}` ? 'copied' : ''}`}
                     onClick={() => copyToClipboard(em.value, `ro-em-${comp._id}-${idx}`)}
-                    title="Copy email"
+                    title={copiedItem === `ro-em-${comp._id}-${idx}` ? 'Copied email!' : 'Copy email'}
+                    aria-label="Copy email"
                   >
-                    {copiedItem === `ro-em-${comp._id}-${idx}` ? '✓' : 'Copy'}
+                    {copiedItem === `ro-em-${comp._id}-${idx}` ? (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    ) : (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                      </svg>
+                    )}
                   </button>
                 </div>
               ))}
@@ -195,11 +205,21 @@ function ReachOutCard({ comp, onUpdateFollowUp, copyToClipboard, copiedItem }) {
                   <a href={`tel:${ph.value}`} className="chip-anchor">{ph.value}</a>
                   <button
                     type="button"
-                    className="chip-copy-btn"
+                    className={`chip-copy-btn ${copiedItem === `ro-ph-${comp._id}-${idx}` ? 'copied' : ''}`}
                     onClick={() => copyToClipboard(ph.value, `ro-ph-${comp._id}-${idx}`)}
-                    title="Copy phone"
+                    title={copiedItem === `ro-ph-${comp._id}-${idx}` ? 'Copied phone!' : 'Copy phone'}
+                    aria-label="Copy phone"
                   >
-                    {copiedItem === `ro-ph-${comp._id}-${idx}` ? '✓' : 'Copy'}
+                    {copiedItem === `ro-ph-${comp._id}-${idx}` ? (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    ) : (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                      </svg>
+                    )}
                   </button>
                 </div>
               ))}
@@ -238,6 +258,7 @@ function ReachOutCard({ comp, onUpdateFollowUp, copyToClipboard, copiedItem }) {
                 <option value="contacted">Contacted</option>
                 <option value="replied">Replied</option>
                 <option value="not_interested">Not Interested</option>
+                <option value="none">✕ Remove from Pipeline</option>
               </select>
             </div>
 
@@ -278,8 +299,37 @@ export default function ReachOutView({ cities = [] }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedCity, setSelectedCity] = useState('all');
+  const [stageFilter, setStageFilter] = useState('all'); // 'all' | 'to_contact' | 'contacted' | 'replied' | 'not_interested'
+  const [stageCounts, setStageCounts] = useState({
+    all: 0,
+    to_contact: 0,
+    contacted: 0,
+    replied: 0,
+    not_interested: 0
+  });
   const [searchQuery, setSearchQuery] = useState('');
   const [copiedItem, setCopiedItem] = useState(null);
+
+  const groupedReachoutCities = useMemo(() => {
+    const tier1Slugs = ['bengaluru', 'hyderabad', 'pune', 'kolkata', 'mumbai', 'delhi-ncr', 'chennai', 'gurgaon', 'noida'];
+    const tier1 = [];
+    const others = [];
+    let totalOffices = 0;
+
+    (cities || []).forEach(c => {
+      totalOffices += (c.officeCount || 0);
+      if (tier1Slugs.includes(c.slug.toLowerCase())) {
+        tier1.push(c);
+      } else {
+        others.push(c);
+      }
+    });
+
+    tier1.sort((a, b) => (b.officeCount || 0) - (a.officeCount || 0) || a.name.localeCompare(b.name));
+    others.sort((a, b) => (b.officeCount || 0) - (a.officeCount || 0) || a.name.localeCompare(b.name));
+
+    return { tier1, others, totalOffices };
+  }, [cities]);
 
   const fetchReachOut = useCallback(async () => {
     setLoading(true);
@@ -287,6 +337,7 @@ export default function ReachOutView({ cities = [] }) {
     try {
       const params = new URLSearchParams();
       if (selectedCity !== 'all') params.append('city', selectedCity);
+      if (stageFilter !== 'all') params.append('status', stageFilter);
       if (searchQuery.trim()) params.append('q', searchQuery.trim());
 
       const res = await fetch(`/api/directory/reach-out?${params.toString()}`);
@@ -295,6 +346,9 @@ export default function ReachOutView({ cities = [] }) {
       const data = await res.json();
       if (data.success) {
         setCompanies(data.companies || []);
+        if (data.stageCounts) {
+          setStageCounts(data.stageCounts);
+        }
       } else {
         throw new Error(data.error || 'Failed to fetch reach out list');
       }
@@ -304,7 +358,7 @@ export default function ReachOutView({ cities = [] }) {
     } finally {
       setLoading(false);
     }
-  }, [selectedCity, searchQuery]);
+  }, [selectedCity, stageFilter, searchQuery]);
 
   useEffect(() => {
     fetchReachOut();
@@ -318,13 +372,20 @@ export default function ReachOutView({ cities = [] }) {
         body: JSON.stringify({ followUpStatus, notes })
       });
       if (res.ok) {
-        setCompanies(prev =>
-          prev.map(c =>
-            c._id === id
-              ? { ...c, followUpStatus: followUpStatus || c.followUpStatus, notes: notes !== undefined ? notes : c.notes }
-              : c
-          )
-        );
+        if (followUpStatus === 'none' || (stageFilter !== 'all' && followUpStatus !== stageFilter)) {
+          // If removed from pipeline or moved out of current filtered stage, remove from view
+          setCompanies(prev => prev.filter(c => c._id !== id));
+        } else {
+          setCompanies(prev =>
+            prev.map(c =>
+              c._id === id
+                ? { ...c, followUpStatus: followUpStatus || c.followUpStatus, notes: notes !== undefined ? notes : c.notes }
+                : c
+            )
+          );
+        }
+        // Refresh stage counts quietly
+        fetchReachOut();
       }
     } catch (err) {
       console.error('Failed to update follow-up:', err);
@@ -345,11 +406,11 @@ export default function ReachOutView({ cities = [] }) {
         <div className="hero-text">
           <h2>🎯 Proactive Outreach Pipeline</h2>
           <p>
-            Target companies directly before jobs are publicly listed. Connect with hiring leads and recruiters across verified Indian tech hubs.
+            Track your cold outreach and hiring inquiries across Indian tech companies. Manage communication stages, HR emails, and outreach logs.
           </p>
         </div>
         <div className="reach-out-stats-pill">
-          {companies.length} Outreach Candidates Ready
+          {stageCounts.all} Target Companies in Pipeline
         </div>
       </div>
 
@@ -385,13 +446,66 @@ export default function ReachOutView({ cities = [] }) {
               value={selectedCity}
               onChange={(e) => setSelectedCity(e.target.value)}
             >
-              <option value="all">All Indian Cities</option>
-              {cities.map((c) => (
-                <option key={c.slug} value={c.slug}>
-                  {c.name} {c.officeCount > 0 ? `(${c.officeCount} offices)` : ''}
-                </option>
-              ))}
+              <option value="all">🌐 All Indian Cities ({groupedReachoutCities.totalOffices} offices)</option>
+              {groupedReachoutCities.tier1.length > 0 && (
+                <optgroup label="🏢 Major Indian Tech Hubs">
+                  {groupedReachoutCities.tier1.map((c) => (
+                    <option key={c.slug} value={c.slug}>
+                      {c.name}{c.state ? `, ${c.state}` : ''} {c.officeCount > 0 ? `— ${c.officeCount} offices` : ''}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+              {groupedReachoutCities.others.length > 0 && (
+                <optgroup label="📍 Regional IT Clusters & Cities">
+                  {groupedReachoutCities.others.map((c) => (
+                    <option key={c.slug} value={c.slug}>
+                      {c.name}{c.state ? `, ${c.state}` : ''} {c.officeCount > 0 ? `— ${c.officeCount} offices` : ''}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
             </select>
+          </div>
+        </div>
+
+        {/* Pipeline CRM Stage Tabs */}
+        <div className="filter-row-secondary">
+          <div className="hiring-toggle-group">
+            <button
+              className={`hiring-toggle-btn ${stageFilter === 'all' ? 'active' : ''}`}
+              onClick={() => setStageFilter('all')}
+            >
+              All In Pipeline {stageCounts.all > 0 && <span className="pill-badge">{stageCounts.all}</span>}
+            </button>
+            <button
+              className={`hiring-toggle-btn ${stageFilter === 'to_contact' ? 'active' : ''}`}
+              onClick={() => setStageFilter('to_contact')}
+            >
+              <span className="dot dot-to_contact"></span>
+              To Contact {stageCounts.to_contact > 0 && <span className="pill-badge">{stageCounts.to_contact}</span>}
+            </button>
+            <button
+              className={`hiring-toggle-btn ${stageFilter === 'contacted' ? 'active' : ''}`}
+              onClick={() => setStageFilter('contacted')}
+            >
+              <span className="dot dot-contacted"></span>
+              Contacted {stageCounts.contacted > 0 && <span className="pill-badge">{stageCounts.contacted}</span>}
+            </button>
+            <button
+              className={`hiring-toggle-btn ${stageFilter === 'replied' ? 'active' : ''}`}
+              onClick={() => setStageFilter('replied')}
+            >
+              <span className="dot dot-replied"></span>
+              Replied {stageCounts.replied > 0 && <span className="pill-badge">{stageCounts.replied}</span>}
+            </button>
+            <button
+              className={`hiring-toggle-btn ${stageFilter === 'not_interested' ? 'active' : ''}`}
+              onClick={() => setStageFilter('not_interested')}
+            >
+              <span className="dot dot-not_interested"></span>
+              Not Interested {stageCounts.not_interested > 0 && <span className="pill-badge">{stageCounts.not_interested}</span>}
+            </button>
           </div>
         </div>
       </div>

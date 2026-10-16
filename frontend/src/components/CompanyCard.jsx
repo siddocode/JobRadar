@@ -2,42 +2,30 @@ import React, { useState } from 'react';
 
 export default function CompanyCard({ company, onUpdate }) {
   const [followUpStatus, setFollowUpStatus] = useState(company.followUpStatus || 'to_contact');
-  const [notes, setNotes] = useState(company.notes || '');
+  const [notes] = useState(company.notes || '');
   const [isSaving, setIsSaving] = useState(false);
-  const [saveSuccess, setSaveSuccess] = useState(false);
   const [showJobs, setShowJobs] = useState(false);
   const [showEvidence, setShowEvidence] = useState(false);
-  const [showNotesInput, setShowNotesInput] = useState(Boolean(company.notes));
   const [showAllContacts, setShowAllContacts] = useState(false);
   const [copiedItem, setCopiedItem] = useState(null);
 
-  const handleStatusChange = async (newStatus) => {
-    setFollowUpStatus(newStatus);
-    saveChanges(newStatus, notes);
-  };
+  const isInPipeline = Boolean(followUpStatus && followUpStatus !== 'none');
 
-  const handleNotesBlur = () => {
-    if (notes !== company.notes) {
-      saveChanges(followUpStatus, notes);
-    }
-  };
-
-  const saveChanges = async (statusToSave, notesToSave) => {
+  const handleTogglePipeline = async () => {
+    const nextStatus = isInPipeline ? 'none' : 'to_contact';
+    setFollowUpStatus(nextStatus);
     setIsSaving(true);
-    setSaveSuccess(false);
     try {
       const res = await fetch(`/api/directory/companies/${company._id}/follow-up`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          followUpStatus: statusToSave,
-          notes: notesToSave
+          followUpStatus: nextStatus,
+          notes: notes
         })
       });
       if (res.ok) {
-        setSaveSuccess(true);
-        setTimeout(() => setSaveSuccess(false), 2000);
-        if (onUpdate) onUpdate(company._id, { followUpStatus: statusToSave, notes: notesToSave });
+        if (onUpdate) onUpdate(company._id, { followUpStatus: nextStatus, notes });
       }
     } catch (err) {
       console.error('Failed to update follow-up:', err);
@@ -286,11 +274,21 @@ export default function CompanyCard({ company, onUpdate }) {
                   <a href={`mailto:${em.value}`} className="chip-anchor">{em.value}</a>
                   <button
                     type="button"
-                    className="chip-copy-btn"
+                    className={`chip-copy-btn ${copiedItem === `em-${idx}` ? 'copied' : ''}`}
                     onClick={() => copyToClipboard(em.value, `em-${idx}`)}
-                    title="Copy email"
+                    title={copiedItem === `em-${idx}` ? 'Copied email!' : 'Copy email to clipboard'}
+                    aria-label="Copy email"
                   >
-                    {copiedItem === `em-${idx}` ? '✓' : 'Copy'}
+                    {copiedItem === `em-${idx}` ? (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    ) : (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                      </svg>
+                    )}
                   </button>
                 </div>
               ))}
@@ -303,11 +301,21 @@ export default function CompanyCard({ company, onUpdate }) {
                   <a href={`tel:${ph.value}`} className="chip-anchor">{ph.value}</a>
                   <button
                     type="button"
-                    className="chip-copy-btn"
+                    className={`chip-copy-btn ${copiedItem === `ph-${idx}` ? 'copied' : ''}`}
                     onClick={() => copyToClipboard(ph.value, `ph-${idx}`)}
-                    title="Copy phone"
+                    title={copiedItem === `ph-${idx}` ? 'Copied phone!' : 'Copy phone to clipboard'}
+                    aria-label="Copy phone"
                   >
-                    {copiedItem === `ph-${idx}` ? '✓' : 'Copy'}
+                    {copiedItem === `ph-${idx}` ? (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    ) : (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                      </svg>
+                    )}
                   </button>
                 </div>
               ))}
@@ -375,54 +383,31 @@ export default function CompanyCard({ company, onUpdate }) {
         )}
       </div>
 
-      {/* Card Divider & Outreach Controls Always Pinned at Bottom */}
+      {/* Card Pinned Footer: Clean Pipeline Indicator & Action */}
       <div className="card-pinned-footer">
         <div className="card-hairline-divider"></div>
 
-        <div className="card-outreach-footer">
-          <div className="status-selector-row">
-            <label className="outreach-field-label">Outreach:</label>
-            <div className="status-select-container">
-              <span className={`status-colored-dot dot-${followUpStatus}`}></span>
-              <select
-                className={`clean-status-select select-${followUpStatus}`}
-                value={followUpStatus}
-                onChange={(e) => handleStatusChange(e.target.value)}
-              >
-                <option value="to_contact">To Contact</option>
-                <option value="contacted">Contacted</option>
-                <option value="replied">Replied</option>
-                <option value="not_interested">Not Interested</option>
-                <option value="none">None</option>
-              </select>
+        <div className="dir-action-footer">
+          {isInPipeline ? (
+            <div className="pipeline-indicator active">
+              <span className="dot dot-green"></span>
+              <span className="pipeline-indicator-text">
+                In Outreach Pipeline {followUpStatus !== 'to_contact' ? `(${followUpStatus.replace('_', ' ')})` : ''}
+              </span>
             </div>
-
-            <button
-              type="button"
-              className="toggle-note-btn"
-              onClick={() => setShowNotesInput(!showNotesInput)}
-              title="Toggle outreach notes"
-            >
-              {notes ? '📝 Edit note' : '+ Add note'}
-            </button>
-
-            {isSaving && <span className="mini-status-text saving">Saving...</span>}
-            {saveSuccess && <span className="mini-status-text saved">✓ Saved</span>}
-          </div>
-
-          {/* Collapsible Notes Box */}
-          {showNotesInput && (
-            <div className="notes-box-wrapper">
-              <textarea
-                className="clean-notes-input"
-                placeholder="Outreach notes (e.g. Sent email to recruiting lead, connected on LinkedIn)..."
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                onBlur={handleNotesBlur}
-                rows={2}
-              />
-            </div>
+          ) : (
+            <span className="pipeline-indicator-empty">Not in outreach pipeline</span>
           )}
+
+          <button
+            type="button"
+            className={`pipeline-action-btn ${isInPipeline ? 'remove' : 'add'}`}
+            onClick={handleTogglePipeline}
+            disabled={isSaving}
+            title={isInPipeline ? 'Remove from outreach pipeline' : 'Track in your outreach pipeline'}
+          >
+            {isSaving ? '...' : (isInPipeline ? '✕ Remove' : '🎯 + Add to Pipeline')}
+          </button>
         </div>
       </div>
     </div>

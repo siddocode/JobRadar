@@ -2,7 +2,7 @@
   "version": 0.6,
   "generator": "Overpass API 0.7.62.11 87bfad18",
   "osm3s": {
-    "timestamp_osm_base": "2026-06-01T08:52:28Z",
+    "timestamp_osm_base": "2026-10-16T08:35:50Z",
     "copyright": "The data included in this document is from www.openstreetmap.org. The data is made available under ODbL."
   },
   "elements": [
@@ -15,6 +15,25 @@
         "name": "PEOBRiCS Software Private Limited",
         "name:bn": "পিওব্রিকস সফটওয়্যার প্রাইভেট লিমিটেড",
         "office": "company"
+      }
+    },
+    {
+      "type": "node",
+      "id": 2461327584,
+      "lat": 22.5762267,
+      "lon": 88.431659,
+      "tags": {
+        "addr:district": "Kolkata",
+        "addr:postcode": "700091",
+        "check_date": "2025-02-05",
+        "email": "ertleast@stqc.gov.in",
+        "fax": "+91 33 23679472",
+        "government": "yes",
+        "name": "Electronics Regional Test Laboratory (East)",
+        "office": "government",
+        "phone": "+91 33 23673421",
+        "short_name": "ERTL (E)",
+        "website": "https://stqc.gov.in/en/ertle-kolkata"
       }
     },
     {
@@ -909,6 +928,37 @@
       }
     },
     {
+      "type": "node",
+      "id": 13919712934,
+      "lat": 22.629178,
+      "lon": 88.3808121,
+      "tags": {
+        "email": "nisdkolkata@gmail.com",
+        "mobile": "9875439576",
+        "name": "Nishtha Institute of Skill Development PVT LTD",
+        "office": "educational_institution",
+        "phone": "6290208932",
+        "website": "https://www.nisdkolkata.com"
+      }
+    },
+    {
+      "type": "node",
+      "id": 14165459653,
+      "lat": 22.6095527,
+      "lon": 88.3893739,
+      "tags": {
+        "addr:city": "Kolkata",
+        "addr:district": "Kolkata",
+        "addr:housenumber": "37",
+        "addr:postcode": "700037",
+        "addr:street": "Belgachia Road",
+        "name": "Eastern Regional Station, ICAR - Indian Veterinary Research Institute",
+        "office": "research",
+        "opening_hours": "Monday -Friday 9.00am to 5.30pm",
+        "website": "https://ivri.nic.in/campuses/ERSKolkata/Default.aspx"
+      }
+    },
+    {
       "type": "way",
       "id": 120230901,
       "center": {
@@ -1390,6 +1440,34 @@
         "building:levels": "10",
         "name": "R S Softwares",
         "office": "company"
+      }
+    },
+    {
+      "type": "way",
+      "id": 359074059,
+      "center": {
+        "lat": 22.4721359,
+        "lon": 88.3830223
+      },
+      "nodes": [
+        3638684173,
+        3638684162,
+        3638684130,
+        3638684140,
+        3638684173
+      ],
+      "tags": {
+        "addr:city": "Kolkata",
+        "addr:district": "South 24 Parganas",
+        "addr:housenumber": "C-60",
+        "addr:postcode": "700094",
+        "addr:street": "Eastern Metropolitan Bypass Link Rd, opposite 45 Bus Stand, Ashutoshpally, Baishnabghata Patuli Twp, Patuli",
+        "building": "yes",
+        "name": "Fill Design Group",
+        "office": "advertising_agency",
+        "opening_hours": "Mo-Fr 11:30 - 20:30",
+        "phone": "6289368112",
+        "website": "https://filldesigngroup.com/"
       }
     },
     {

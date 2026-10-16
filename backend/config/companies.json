@@ -160,5 +160,198 @@
     "ats": "greenhouse",
     "slug": "databricks",
     "verifiedAt": "2026-10-15T10:58:12.667Z"
+  },
+  {
+    "name": "OpenAI",
+    "ats": "ashby",
+    "slug": "openai",
+    "verifiedAt": "2026-10-16T09:14:00.000Z"
+  },
+  {
+    "name": "Anthropic",
+    "ats": "greenhouse",
+    "slug": "anthropic",
+    "verifiedAt": "2026-10-16T09:14:00.000Z"
+  },
+  {
+    "name": "Coinbase",
+    "ats": "greenhouse",
+    "slug": "coinbase",
+    "verifiedAt": "2026-10-16T09:14:00.000Z"
+  },
+  {
+    "name": "Spotify",
+    "ats": "lever",
+    "slug": "spotify",
+    "verifiedAt": "2026-10-16T09:14:00.000Z"
+  },
+  {
+    "name": "DoorDash",
+    "ats": "greenhouse",
+    "slug": "doordashusa",
+    "verifiedAt": "2026-10-16T09:14:00.000Z"
+  },
+  {
+    "name": "MongoDB",
+    "ats": "greenhouse",
+    "slug": "mongodb",
+    "verifiedAt": "2026-10-16T09:14:00.000Z"
+  },
+  {
+    "name": "Datadog",
+    "ats": "greenhouse",
+    "slug": "datadog",
+    "verifiedAt": "2026-10-16T09:14:00.000Z"
+  },
+  {
+    "name": "Elastic",
+    "ats": "greenhouse",
+    "slug": "elastic",
+    "verifiedAt": "2026-10-16T09:14:00.000Z"
+  },
+  {
+    "name": "Pinterest",
+    "ats": "greenhouse",
+    "slug": "pinterest",
+    "verifiedAt": "2026-10-16T09:14:00.000Z"
+  },
+  {
+    "name": "Lyft",
+    "ats": "greenhouse",
+    "slug": "lyft",
+    "verifiedAt": "2026-10-16T09:14:00.000Z"
+  },
+  {
+    "name": "Robinhood",
+    "ats": "greenhouse",
+    "slug": "robinhood",
+    "verifiedAt": "2026-10-16T09:14:00.000Z"
+  },
+  {
+    "name": "Twilio",
+    "ats": "greenhouse",
+    "slug": "twilio",
+    "verifiedAt": "2026-10-16T09:14:00.000Z"
+  },
+  {
+    "name": "Notion",
+    "ats": "ashby",
+    "slug": "notion",
+    "verifiedAt": "2026-10-16T09:14:00.000Z"
+  },
+  {
+    "name": "Scale AI",
+    "ats": "greenhouse",
+    "slug": "scaleai",
+    "verifiedAt": "2026-10-16T09:14:00.000Z"
+  },
+  {
+    "name": "Brex",
+    "ats": "greenhouse",
+    "slug": "brex",
+    "verifiedAt": "2026-10-16T09:14:00.000Z"
+  },
+  {
+    "name": "Ramp",
+    "ats": "ashby",
+    "slug": "ramp",
+    "verifiedAt": "2026-10-16T09:14:00.000Z"
+  },
+  {
+    "name": "Instacart",
+    "ats": "greenhouse",
+    "slug": "instacart",
+    "verifiedAt": "2026-10-16T09:14:00.000Z"
+  },
+  {
+    "name": "Plaid",
+    "ats": "ashby",
+    "slug": "plaid",
+    "verifiedAt": "2026-10-16T09:14:00.000Z"
+  },
+  {
+    "name": "Vercel",
+    "ats": "greenhouse",
+    "slug": "vercel",
+    "verifiedAt": "2026-10-16T09:14:00.000Z"
+  },
+  {
+    "name": "Supabase",
+    "ats": "ashby",
+    "slug": "supabase",
+    "verifiedAt": "2026-10-16T09:14:00.000Z"
+  },
+  {
+    "name": "Visa",
+    "ats": "workday",
+    "slug": "visa",
+    "workday": {
+      "host": "visa.wd5.myworkdayjobs.com",
+      "tenant": "visa",
+      "site": "Visa"
+    },
+    "verifiedAt": "2026-10-16T09:30:00.000Z"
+  },
+  {
+    "name": "Mastercard",
+    "ats": "workday",
+    "slug": "mastercard",
+    "workday": {
+      "host": "mastercard.wd1.myworkdayjobs.com",
+      "tenant": "mastercard",
+      "site": "CorporateCareers"
+    },
+    "verifiedAt": "2026-10-16T09:30:00.000Z"
+  },
+  {
+    "name": "Amazon",
+    "ats": "amazon",
+    "slug": "amazon",
+    "verifiedAt": "2026-10-16T09:30:00.000Z"
+  },
+  {
+    "name": "Google",
+    "ats": "google",
+    "slug": "google",
+    "verifiedAt": "2026-10-16T09:30:00.000Z"
+  },
+  {
+    "name": "Twitter / X (xAI)",
+    "ats": "greenhouse",
+    "slug": "xai",
+    "verifiedAt": "2026-10-16T10:20:00.000Z"
+  },
+  {
+    "name": "Netflix",
+    "ats": "eightfold",
+    "slug": "netflix",
+    "eightfold": {
+      "domain": "netflix.com"
+    },
+    "verifiedAt": "2026-10-16T10:20:00.000Z"
+  },
+  {
+    "name": "Salesforce",
+    "ats": "workday",
+    "slug": "salesforce",
+    "workday": {
+      "host": "salesforce.wd12.myworkdayjobs.com",
+      "tenant": "salesforce",
+      "site": "External_Career_Site"
+    },
+    "verifiedAt": "2026-10-16T10:20:00.000Z"
+  },
+  {
+    "name": "Adobe",
+    "ats": "workday",
+    "slug": "adobe",
+    "workday": {
+      "host": "adobe.wd5.myworkdayjobs.com",
+      "tenant": "adobe",
+      "site": "external_experienced"
+    },
+    "verifiedAt": "2026-10-16T10:20:00.000Z"
   }
 ]
+
+

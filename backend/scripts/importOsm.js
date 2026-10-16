@@ -104,16 +104,14 @@ async function importOsmForCity(citySlug, forceRefresh = false) {
   console.log(`OSM Discovery & Import for City: "${citySlug}"`);
   console.log(`========================================`);
 
-  await mongoose.connect(process.env.MONGODB_URI);
-  console.log('[DB] Connected to MongoDB');
+  if (mongoose.connection.readyState !== 1) {
+    await mongoose.connect(process.env.MONGODB_URI);
+    console.log('[DB] Connected to MongoDB');
+  }
 
   const city = await City.findOne({ slug: citySlug });
   if (!city) {
-    const available = await City.find({}, 'slug name');
-    console.error(`[Error] City "${citySlug}" not found in database.`);
-    console.log('Available cities:', available.map(c => `${c.name} (${c.slug})`).join(', '));
-    await mongoose.disconnect();
-    process.exit(1);
+    throw new Error(`City "${citySlug}" not found in database.`);
   }
 
   console.log(`[City] Found ${city.name}, ${city.state}. Bbox: [${city.bbox.join(', ')}]`);
@@ -137,20 +135,15 @@ async function importOsmForCity(citySlug, forceRefresh = false) {
     const [south, west, north, east] = city.bbox;
     const query = `[out:json][timeout:90];
 (
-  node["office"="it"](${south},${west},${north},${east});
-  way["office"="it"](${south},${west},${north},${east});
-  node["office"="software"](${south},${west},${north},${east});
-  way["office"="software"](${south},${west},${north},${east});
-  node["office"="company"](${south},${west},${north},${east});
-  way["office"="company"](${south},${west},${north},${east});
-  node["office"="research"](${south},${west},${north},${east});
-  way["office"="research"](${south},${west},${north},${east});
-  node["office"="coworking"](${south},${west},${north},${east});
-  way["office"="coworking"](${south},${west},${north},${east});
-  node["office"]["website"](${south},${west},${north},${east});
-  way["office"]["website"](${south},${west},${north},${east});
+  node["office"](${south},${west},${north},${east});
+  way["office"](${south},${west},${north},${east});
+  node["name"~"Software|Tech|Technologies|Solutions|Infotech|Labs|Digital|Consultancy",i](${south},${west},${north},${east});
+  way["name"~"Software|Tech|Technologies|Solutions|Infotech|Labs|Digital|Consultancy",i](${south},${west},${north},${east});
+  node["amenity"="coworking_space"](${south},${west},${north},${east});
+  way["amenity"="coworking_space"](${south},${west},${north},${east});
 );
 out center;`;
+
 
     const data = await fetchOverpassWithFallback(query);
     elements = data.elements || [];
@@ -389,6 +382,18 @@ out center;`;
     }
   }
 
+  const summary = {
+    city: city.name,
+    citySlug: city.slug,
+    elementsCount: elements.length,
+    createdCompanies,
+    updatedCompanies,
+    createdOffices,
+    skippedDuplicates,
+    uncertainMerges,
+    jobsLinked
+  };
+
   console.log(`\n========================================`);
   console.log(`OSM Import Results for ${city.name}:`);
   console.log(`- Companies Created: ${createdCompanies}`);
@@ -399,13 +404,28 @@ out center;`;
   console.log(`- Jobs Linked:       ${jobsLinked}`);
   console.log(`========================================\n`);
 
-  await mongoose.disconnect();
+  return summary;
 }
 
-const cityArg = process.argv[2] || 'kolkata';
-const forceArg = process.argv.includes('--force');
+if (require.main === module) {
+  const cityArg = process.argv[2] || 'kolkata';
+  const forceArg = process.argv.includes('--force');
 
-importOsmForCity(cityArg, forceArg).catch(err => {
-  console.error('[Fatal Error]:', err);
-  process.exit(1);
-});
+  importOsmForCity(cityArg, forceArg)
+    .then(async (summary) => {
+      console.log('[CLI] Finished:', summary);
+      await mongoose.disconnect();
+      process.exit(0);
+    })
+    .catch(async (err) => {
+      console.error('[Fatal Error]:', err);
+      try { await mongoose.disconnect(); } catch (_) {}
+      process.exit(1);
+    });
+}
+
+module.exports = {
+  importOsmForCity,
+  constructAddress
+};
+

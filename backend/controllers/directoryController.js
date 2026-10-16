@@ -48,6 +48,32 @@ exports.getCities = async (req, res) => {
 };
 
 /**
+ * GET /api/directory/stats
+ * High-speed aggregate metrics for top cards
+ */
+exports.getDirectoryStats = async (req, res) => {
+  try {
+    const [total, officesCount, hiringCompIds] = await Promise.all([
+      Company.countDocuments(),
+      Office.countDocuments(),
+      Job.distinct('companyId', { status: 'open', companyId: { $ne: null } })
+    ]);
+
+    res.status(200).json({
+      success: true,
+      stats: {
+        total,
+        hiring: hiringCompIds.length,
+        offices: officesCount
+      }
+    });
+  } catch (err) {
+    console.error('Error fetching directory stats:', err);
+    res.status(500).json({ success: false, error: 'Failed to fetch directory stats' });
+  }
+};
+
+/**
  * GET /api/directory/companies
  * Query params: city, hiring ('hiring' | 'no_vacancy' | 'all'), q, techOnly, followUp, page, limit
  */
@@ -115,19 +141,53 @@ exports.getCompanies = async (req, res) => {
       ];
     }
 
-    // Find companies matching query
-    const rawCompanies = await Company.find(companyQuery)
-      .sort({ name: 1 })
-      .lean();
+    // Filter by hiring status before querying companies
+    if (hiring === 'hiring' || hiring === 'no_vacancy') {
+      const hiringCompIds = await Job.distinct('companyId', { status: 'open', companyId: { $ne: null } });
+      if (hiring === 'hiring') {
+        if (companyQuery._id && companyQuery._id.$in) {
+          const idSet = new Set(hiringCompIds.map(id => id.toString()));
+          companyQuery._id = { $in: companyQuery._id.$in.filter(id => idSet.has(id.toString())) };
+        } else {
+          companyQuery._id = { $in: hiringCompIds };
+        }
+      } else if (hiring === 'no_vacancy') {
+        if (companyQuery._id && companyQuery._id.$in) {
+          const idSet = new Set(hiringCompIds.map(id => id.toString()));
+          companyQuery._id = { $in: companyQuery._id.$in.filter(id => !idSet.has(id.toString())) };
+        } else {
+          companyQuery._id = { $nin: hiringCompIds };
+        }
+      }
+    }
 
-    // Attach open jobs and offices
-    const companyIds = rawCompanies.map(c => c._id);
+    // Fast count at database level
+    console.time('[Perf] countDocuments');
+    const total = await Company.countDocuments(companyQuery);
+    console.timeEnd('[Perf] countDocuments');
+
+    const startIndex = (pageNum - 1) * limitNum;
+
+    // Fast database-level pagination
+    console.time('[Perf] findPaginated');
+    const paginatedCompanies = await Company.find(companyQuery)
+      .sort({ name: 1 })
+      .skip(startIndex)
+      .limit(limitNum)
+      .lean();
+    console.timeEnd('[Perf] findPaginated');
+
+    // Attach open jobs and offices ONLY for the paginated slice
+    const companyIds = paginatedCompanies.map(c => c._id);
+    console.time('[Perf] attachOfficesAndJobs');
     const [allOffices, allOpenJobs] = await Promise.all([
       Office.find({ companyId: { $in: companyIds } }).populate('cityId', 'name slug state').lean(),
       Job.find({ companyId: { $in: companyIds }, status: 'open' })
         .select('title city state country workMode applyUrl companyId')
         .lean()
     ]);
+    console.timeEnd('[Perf] attachOfficesAndJobs');
+
 
     // Group offices and jobs by companyId
     const officesMap = {};
@@ -145,7 +205,7 @@ exports.getCompanies = async (req, res) => {
     }
 
     // Assemble company cards with strictly verified hiring status
-    let processed = rawCompanies.map(comp => {
+    const processed = paginatedCompanies.map(comp => {
       const cId = comp._id.toString();
       const openJobs = jobsMap[cId] || [];
       const offices = officesMap[cId] || [];
@@ -157,27 +217,15 @@ exports.getCompanies = async (req, res) => {
         openJobs,
         openJobsCount: openJobs.length,
         isHiring,
-        // Rule: A company is NEVER labelled "hiring" unless a verified open Job exists. Otherwise "No known vacancy"
         hiringStatusLabel: isHiring
           ? `Hiring (${openJobs.length} opening${openJobs.length > 1 ? 's' : ''})`
           : 'No known vacancy'
       };
     });
 
-    // Filter by hiring status
-    if (hiring === 'hiring') {
-      processed = processed.filter(c => c.isHiring);
-    } else if (hiring === 'no_vacancy') {
-      processed = processed.filter(c => !c.isHiring);
-    }
-
-    const total = processed.length;
-    const startIndex = (pageNum - 1) * limitNum;
-    const paginated = processed.slice(startIndex, startIndex + limitNum);
-
     res.status(200).json({
       success: true,
-      companies: paginated,
+      companies: processed,
       total,
       page: pageNum,
       totalPages: Math.ceil(total / limitNum) || 1
@@ -188,15 +236,23 @@ exports.getCompanies = async (req, res) => {
   }
 };
 
+
 /**
  * GET /api/directory/reach-out
  * Lists companies with outreach channels for cold/direct outreach
  */
 exports.getReachOutCompanies = async (req, res) => {
   try {
-    const { city, q } = req.query;
+    const { city, q, status } = req.query;
 
     const companyQuery = {};
+
+    // Filter by outreach pipeline stage
+    if (status && status !== 'all') {
+      companyQuery.followUpStatus = status;
+    } else {
+      companyQuery.followUpStatus = { $in: ['to_contact', 'contacted', 'replied', 'not_interested'] };
+    }
 
     if (city && city !== 'all') {
       const cityRecord = await City.findOne({ slug: city.toLowerCase() });
@@ -212,14 +268,6 @@ exports.getReachOutCompanies = async (req, res) => {
         }, 'companyId');
         companyQuery._id = { $in: matchingOffices.map(o => o.companyId) };
       }
-    } else {
-      companyQuery.$or = [
-        { 'contact.emails.0': { $exists: true } },
-        { 'contact.phones.0': { $exists: true } },
-        { followUpStatus: { $in: ['contacted', 'to_contact', 'replied'] } },
-        { website: { $ne: null } },
-        { careersUrl: { $ne: null } }
-      ];
     }
 
     if (q && q.trim()) {
@@ -227,7 +275,40 @@ exports.getReachOutCompanies = async (req, res) => {
       companyQuery.name = new RegExp(escaped, 'i');
     }
 
-    const companies = await Company.find(companyQuery).sort({ name: 1 }).lean();
+    // Pipeline stage counts aggregation (respecting city and search if present)
+    const stageMatch = {
+      followUpStatus: { $in: ['to_contact', 'contacted', 'replied', 'not_interested'] }
+    };
+    if (companyQuery._id) {
+      stageMatch._id = companyQuery._id;
+    }
+    if (companyQuery.name) {
+      stageMatch.name = companyQuery.name;
+    }
+
+    const [companies, stageAggregation] = await Promise.all([
+      Company.find(companyQuery).sort({ updatedAt: -1, name: 1 }).lean(),
+      Company.aggregate([
+        { $match: stageMatch },
+        { $group: { _id: '$followUpStatus', count: { $sum: 1 } } }
+      ])
+    ]);
+
+    const stageCounts = {
+      all: 0,
+      to_contact: 0,
+      contacted: 0,
+      replied: 0,
+      not_interested: 0
+    };
+
+    stageAggregation.forEach(item => {
+      if (item._id && stageCounts.hasOwnProperty(item._id)) {
+        stageCounts[item._id] = item.count;
+      }
+      stageCounts.all += item.count;
+    });
+
     const companyIds = companies.map(c => c._id);
 
     // Attach offices and check jobs
@@ -288,7 +369,8 @@ exports.getReachOutCompanies = async (req, res) => {
     res.status(200).json({
       success: true,
       companies: result,
-      total: result.length
+      total: result.length,
+      stageCounts
     });
   } catch (err) {
     console.error('Error fetching reach out companies:', err);
@@ -397,3 +479,280 @@ exports.resolveUncertainMerge = async (req, res) => {
     res.status(500).json({ success: false, error: 'Failed to resolve uncertain merge' });
   }
 };
+
+// Discovery state tracker
+let discoveryState = {
+  isRunning: false,
+  citySlug: null,
+  cityName: null,
+  startedAt: null,
+  finishedAt: null,
+  lastSummary: null,
+  error: null
+};
+
+/**
+ * POST /api/directory/discover-city
+ * Triggers an OpenStreetMap scan for startups & companies in a specific city.
+ * Body: { citySlug: string, forceRefresh?: boolean }
+ */
+exports.discoverCity = async (req, res) => {
+  try {
+    const { citySlug, forceRefresh = false } = req.body;
+    if (!citySlug || typeof citySlug !== 'string') {
+      return res.status(400).json({ success: false, error: 'Valid citySlug is required' });
+    }
+
+    const cleanSlug = citySlug.trim().toLowerCase();
+
+    if (discoveryState.isRunning) {
+      return res.status(409).json({
+        success: false,
+        message: `An OSM scan is already in progress for ${discoveryState.cityName || discoveryState.citySlug}.`,
+        discoveryState
+      });
+    }
+
+    let city = await City.findOne({ slug: cleanSlug });
+
+    // If city is not yet seeded, check if it exists in INITIAL_CITIES from seedCities
+    if (!city) {
+      const { INITIAL_CITIES } = require('../scripts/seedCities');
+      const preset = INITIAL_CITIES.find(c => c.slug === cleanSlug);
+      if (preset) {
+        city = await City.create(preset);
+      } else {
+        return res.status(404).json({
+          success: false,
+          error: `City "${cleanSlug}" is not configured. Please add its bounding box first.`
+        });
+      }
+    }
+
+    discoveryState.isRunning = true;
+    discoveryState.citySlug = city.slug;
+    discoveryState.cityName = city.name;
+    discoveryState.startedAt = new Date();
+    discoveryState.finishedAt = null;
+    discoveryState.lastSummary = null;
+    discoveryState.error = null;
+
+    const { importOsmForCity } = require('../scripts/importOsm');
+
+    // Run asynchronously so HTTP response is returned immediately
+    importOsmForCity(city.slug, Boolean(forceRefresh))
+      .then((summary) => {
+        discoveryState.isRunning = false;
+        discoveryState.finishedAt = new Date();
+        discoveryState.lastSummary = summary;
+        console.log(`[Discovery] OSM scan for ${city.name} completed successfully:`, summary);
+      })
+      .catch((err) => {
+        discoveryState.isRunning = false;
+        discoveryState.finishedAt = new Date();
+        discoveryState.error = err.message || 'Error occurred during OSM scan';
+        console.error(`[Discovery] OSM scan for ${city.name} failed:`, err);
+      });
+
+    return res.status(202).json({
+      success: true,
+      message: `OSM scan started for ${city.name} in background.`,
+      discoveryState
+    });
+  } catch (err) {
+    console.error('Error starting city discovery:', err);
+    discoveryState.isRunning = false;
+    return res.status(500).json({ success: false, error: err.message });
+  }
+};
+
+/**
+ * POST /api/directory/scan-google-places
+ * Triggers a Google Places map-wise scan for a target city
+ */
+exports.scanGooglePlaces = async (req, res) => {
+  try {
+    const { citySlug = 'kolkata', customApiKey, radius = 25000, keywords } = req.body;
+    const { scanGooglePlacesCity, getScanState } = require('../services/googlePlacesService');
+
+    const state = getScanState();
+    if (state.isRunning) {
+      return res.status(409).json({
+        success: false,
+        message: `A scan is already in progress for ${state.cityName || state.citySlug}.`,
+        scanState: state
+      });
+    }
+
+    // Launch scan asynchronously in background
+    scanGooglePlacesCity({
+      citySlug,
+      customApiKey,
+      radius: parseInt(radius, 10) || 25000,
+      keywords
+    }).catch(err => {
+      console.error('[GooglePlaces Controller] Background scan error:', err);
+    });
+
+    return res.status(202).json({
+      success: true,
+      message: `Google Places map-wise scan initiated for ${citySlug}.`,
+      scanState: getScanState()
+    });
+  } catch (err) {
+    console.error('Error starting Google Places scan:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+};
+
+/**
+ * GET /api/directory/scan-google-places/status
+ * Returns the current Google Places map-wise scan status and discovered preview
+ */
+exports.getGooglePlacesScanStatus = async (req, res) => {
+  const { getScanState } = require('../services/googlePlacesService');
+  return res.status(200).json({
+    success: true,
+    scanState: getScanState()
+  });
+};
+
+/**
+ * GET /api/directory/discover-city/status
+ * Returns the current OSM discovery process status and latest results.
+ */
+exports.getDiscoveryStatus = async (req, res) => {
+  return res.status(200).json({
+    success: true,
+    discoveryState
+  });
+};
+
+/**
+ * POST /api/directory/cities
+ * Add a new city or enable an existing preset city
+ */
+exports.addCity = async (req, res) => {
+  try {
+    const { slug, name, state, bbox } = req.body;
+    if (!slug || !name || !state || !Array.isArray(bbox) || bbox.length !== 4) {
+      return res.status(400).json({
+        success: false,
+        error: 'name, state, slug, and bbox: [south, west, north, east] are required'
+      });
+    }
+
+    const city = await City.findOneAndUpdate(
+      { slug: slug.trim().toLowerCase() },
+      {
+        $set: {
+          slug: slug.trim().toLowerCase(),
+          name: name.trim(),
+          state: state.trim(),
+          bbox,
+          active: true
+        }
+      },
+      { upsert: true, new: true }
+    );
+
+    return res.status(201).json({ success: true, city });
+  } catch (err) {
+    console.error('Error adding city:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+};
+
+/**
+ * POST /api/directory/companies
+ * Add / import a company directly into the directory
+ */
+exports.createCompany = async (req, res) => {
+  try {
+    const { name, website, city: cityInput, address, category, notes, contact } = req.body;
+    if (!name || typeof name !== 'string' || !name.trim()) {
+      return res.status(400).json({ success: false, error: 'Company name is required' });
+    }
+
+    const { extractDomain, slugify } = require('../utils/companyUtils');
+    const domain = extractDomain(website);
+    let baseSlug = slugify(name) || 'company';
+    let slug = baseSlug;
+    let counter = 1;
+    while (await Company.findOne({ slug })) {
+      counter++;
+      slug = `${baseSlug}-${counter}`;
+    }
+
+    // Check if company already exists by domain or slug
+    let company = null;
+    if (domain) {
+      company = await Company.findOne({ domain });
+    }
+    if (!company) {
+      company = await Company.findOne({ name: new RegExp(`^${name.trim()}$`, 'i') });
+    }
+
+    if (!company) {
+      const emailList = [];
+      if (contact?.emails) {
+        for (const em of contact.emails) {
+          const val = typeof em === 'string' ? em : em.value;
+          if (val) emailList.push({ value: val.trim(), sourceUrl: website || 'manual' });
+        }
+      }
+      const phoneList = [];
+      if (contact?.phones) {
+        for (const ph of contact.phones) {
+          const val = typeof ph === 'string' ? ph : ph.value;
+          if (val) phoneList.push({ value: val.trim(), sourceUrl: website || 'manual' });
+        }
+      }
+
+      company = await Company.create({
+        name: name.trim(),
+        slug,
+        domain: domain || null,
+        website: website ? website.trim() : null,
+        category: category || 'Software & IT Services',
+        isTech: true,
+        followUpStatus: 'to_contact',
+        notes: notes || '',
+        contact: {
+          emails: emailList,
+          phones: phoneList,
+          contactPageUrl: website ? `${website.replace(/\/+$/, '')}/contact` : null
+        },
+        sources: ['user_manual_add']
+      });
+    }
+
+    // Attach office if city is specified
+    let office = null;
+    if (cityInput) {
+      const cityClean = cityInput.trim().toLowerCase();
+      let cityRecord = await City.findOne({ slug: cityClean }) || await City.findOne({ name: new RegExp(`^${cityInput}$`, 'i') });
+      if (cityRecord) {
+        office = await Office.findOne({ companyId: company._id, cityId: cityRecord._id });
+        if (!office) {
+          office = await Office.create({
+            companyId: company._id,
+            cityId: cityRecord._id,
+            address: address || `${company.name}, ${cityRecord.name}`,
+            locality: address ? address.split(',')[0].trim() : cityRecord.name,
+            addressSource: 'user_manual_add',
+            addressType: 'development',
+            verified: true
+          });
+        }
+      }
+    }
+
+    return res.status(201).json({ success: true, company, office });
+  } catch (err) {
+    console.error('Error creating company:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+};
+
+

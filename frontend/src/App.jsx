@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import CompanyDirectory from './components/CompanyDirectory';
 import ReachOutView from './components/ReachOutView';
 
@@ -17,17 +17,21 @@ export default function App() {
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCountry, setSelectedCountry] = useState('India');
+  const [countries, setCountries] = useState([]);
   const [selectedCity, setSelectedCity] = useState('all');
   const [workModeFilter, setWorkModeFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('open');
   const [companyFilter, setCompanyFilter] = useState('all');
-  const [indiaOnly, setIndiaOnly] = useState(true);
+  const [techOnlyJobs, setTechOnlyJobs] = useState(false);
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(25);
 
   // Status
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncToast, setSyncToast] = useState(null);
 
   // Sync theme attribute on document root
   useEffect(() => {
@@ -50,11 +54,28 @@ export default function App() {
     }
   };
 
-  // Fetch cities list with job counts
+  // Fetch countries list with job counts
+  const fetchCountries = async () => {
+    try {
+      const res = await fetch('/api/countries');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          setCountries(data.countries || []);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load countries:', err);
+    }
+  };
+
+  // Fetch cities list with job counts (cascades by selectedCountry)
   const fetchCities = useCallback(async () => {
     try {
       const params = new URLSearchParams();
-      if (indiaOnly) params.append('country', 'India');
+      if (selectedCountry && selectedCountry !== 'all') {
+        params.append('country', selectedCountry);
+      }
       if (statusFilter !== 'all') params.append('status', statusFilter);
 
       const res = await fetch(`/api/cities?${params.toString()}`);
@@ -67,20 +88,21 @@ export default function App() {
     } catch (err) {
       console.error('Failed to load cities:', err);
     }
-  }, [indiaOnly, statusFilter]);
+  }, [selectedCountry, statusFilter]);
 
-  // Fetch jobs with comprehensive filters
+  // Fetch jobs with comprehensive filters including selectedCountry
   const fetchJobs = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const params = new URLSearchParams();
       if (searchQuery.trim()) params.append('q', searchQuery.trim());
+      if (selectedCountry && selectedCountry !== 'all') params.append('country', selectedCountry);
       if (selectedCity !== 'all') params.append('city', selectedCity);
       if (workModeFilter !== 'all') params.append('workMode', workModeFilter);
       if (statusFilter !== 'all') params.append('status', statusFilter);
       if (companyFilter !== 'all') params.append('company', companyFilter);
-      if (indiaOnly) params.append('country', 'India');
+      if (techOnlyJobs) params.append('techOnly', 'true');
       params.append('page', String(page));
       params.append('limit', String(limit));
 
@@ -104,7 +126,7 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, [searchQuery, selectedCity, workModeFilter, statusFilter, companyFilter, indiaOnly, page, limit]);
+  }, [searchQuery, selectedCountry, selectedCity, workModeFilter, statusFilter, companyFilter, techOnlyJobs, page, limit]);
 
   const fetchDirectoryMeta = async () => {
     try {
@@ -130,14 +152,94 @@ export default function App() {
     }
   };
 
+  const pollSyncStatus = useCallback(() => {
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch('/api/jobs/sync/status');
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!data.syncState?.isRunning) {
+          clearInterval(interval);
+          setIsSyncing(false);
+          const summary = data.syncState?.lastSummary;
+          if (summary) {
+            setSyncToast({
+              message: `Sync complete: ${summary.totalUpserted} jobs updated (${summary.totalFetched} fetched) in ${summary.durationSeconds}s`,
+              type: 'success'
+            });
+          } else if (data.syncState?.error) {
+            setSyncToast({
+              message: `Sync error: ${data.syncState.error}`,
+              type: 'error'
+            });
+          } else {
+            setSyncToast({
+              message: 'Job collection finished successfully.',
+              type: 'success'
+            });
+          }
+          fetchStats();
+          fetchJobs();
+          fetchCities();
+          fetchCountries();
+          fetchDirectoryMeta();
+          setTimeout(() => setSyncToast(null), 6000);
+        }
+      } catch (_) {
+        clearInterval(interval);
+        setIsSyncing(false);
+      }
+    }, 2500);
+  }, [fetchCities, fetchJobs]);
+
+  const handleTriggerSync = async () => {
+    if (isSyncing) return;
+    try {
+      setIsSyncing(true);
+      setSyncToast({ message: 'Starting job collection across ATS boards...', type: 'info' });
+      const res = await fetch('/api/jobs/sync', { method: 'POST' });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setSyncToast({ message: 'Syncing live ATS boards in background...', type: 'info' });
+        pollSyncStatus();
+      } else {
+        setIsSyncing(false);
+        setSyncToast({ message: data.message || 'Failed to start sync', type: 'error' });
+      }
+    } catch (err) {
+      setIsSyncing(false);
+      setSyncToast({ message: `Failed to trigger sync: ${err.message}`, type: 'error' });
+    }
+  };
+
+  // Check sync status on initial load
+  useEffect(() => {
+    async function checkInitialSyncStatus() {
+      try {
+        const res = await fetch('/api/jobs/sync/status');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.syncState?.isRunning) {
+            setIsSyncing(true);
+            setSyncToast({ message: 'A sync run is actively running in background...', type: 'info' });
+            pollSyncStatus();
+          }
+        }
+      } catch (_) {}
+    }
+    checkInitialSyncStatus();
+  }, [pollSyncStatus]);
+
   useEffect(() => {
     fetchStats();
     fetchDirectoryMeta();
+    fetchCountries();
   }, []);
 
   useEffect(() => {
     fetchCities();
   }, [fetchCities]);
+
 
   // Debounced fetch on filter changes
   useEffect(() => {
@@ -150,13 +252,108 @@ export default function App() {
 
   const handleResetFilters = () => {
     setSearchQuery('');
+    setSelectedCountry('India');
     setSelectedCity('all');
     setWorkModeFilter('all');
     setStatusFilter('open');
     setCompanyFilter('all');
-    setIndiaOnly(true);
+    setTechOnlyJobs(false);
     setPage(1);
   };
+
+  // Helper for country flags
+  const getCountryFlag = (country) => {
+    const flags = {
+      'India': '🇮🇳',
+      'United States': '🇺🇸',
+      'United Kingdom': '🇬🇧',
+      'Canada': '🇨🇦',
+      'Germany': '🇩🇪',
+      'Ireland': '🇮🇪',
+      'Singapore': '🇸🇬',
+      'Japan': '🇯🇵',
+      'France': '🇫🇷',
+      'Australia': '🇦🇺',
+      'Mexico': '🇲🇽',
+      'Brazil': '🇧🇷',
+      'Spain': '🇪🇸',
+      'Netherlands': '🇳🇱',
+      'Poland': '🇵🇱',
+      'Switzerland': '🇨🇭',
+      'Israel': '🇮🇱',
+      'Romania': '🇷🇴',
+      'Italy': '🇮🇹',
+      'Taiwan': '🇹🇼',
+      'Turkey': '🇹🇷',
+      'Philippines': '🇵🇭',
+      'Remote / Global': '🌐'
+    };
+    return flags[country] || '📍';
+  };
+
+  // Memoize city counts & structured groups for clear, classy dropdowns
+  const totalCityJobs = useMemo(() => {
+    return cities.reduce((sum, c) => sum + (c.count || 0), 0);
+  }, [cities]);
+
+  const cityGroups = useMemo(() => {
+    if (!cities || cities.length === 0) return { major: [], remote: [], other: [] };
+
+    const MAJOR_NAMES = new Set([
+      'bengaluru', 'bangalore', 'hyderabad', 'pune', 'mumbai', 'delhi', 'delhi ncr',
+      'gurgaon', 'gurugram', 'noida', 'chennai', 'kolkata', 'ahmedabad', 'kochi',
+      'jaipur', 'indore', 'chandigarh',
+      'san francisco', 'san jose', 'new york', 'seattle', 'austin', 'sunnyvale',
+      'los angeles', 'chicago', 'boston', 'london', 'toronto', 'vancouver', 'berlin',
+      'munich', 'dublin', 'sydney', 'paris', 'singapore', 'amsterdam', 'tokyo'
+    ]);
+
+    const major = [];
+    const remote = [];
+    const other = [];
+
+    const sorted = [...cities].sort((a, b) => (b.count || 0) - (a.count || 0));
+
+    for (const c of sorted) {
+      const lower = (c.city || '').toLowerCase().trim();
+      if (lower.includes('remote') || lower.includes('anywhere')) {
+        remote.push(c);
+      } else if (MAJOR_NAMES.has(lower) || MAJOR_NAMES.has(lower.replace(/\s+/g, ''))) {
+        major.push(c);
+      } else {
+        other.push(c);
+      }
+    }
+
+    return { major, remote, other };
+  }, [cities]);
+
+  const companyGroups = useMemo(() => {
+    if (!stats || !stats.companies) return { tier1: [], other: [] };
+
+    const TIER1_SET = new Set([
+      'Google', 'Amazon', 'Twitter / X (xAI)', 'Netflix', 'Salesforce', 'Adobe',
+      'Visa', 'Mastercard', 'OpenAI', 'Anthropic', 'Stripe', 'Figma', 'DoorDash',
+      'Datadog', 'Coinbase', 'Spotify', 'Swiggy', 'Razorpay', 'PhonePe', 'Freshworks',
+      'Groww', 'CRED', 'Uber', 'Cloudflare', 'GitLab', 'MongoDB', 'Elastic'
+    ]);
+
+    const tier1 = [];
+    const other = [];
+
+    for (const comp of stats.companies) {
+      if (TIER1_SET.has(comp)) {
+        tier1.push(comp);
+      } else {
+        other.push(comp);
+      }
+    }
+
+    tier1.sort((a, b) => a.localeCompare(b));
+    other.sort((a, b) => a.localeCompare(b));
+
+    return { tier1, other };
+  }, [stats]);
 
   const formatDate = (isoString) => {
     if (!isoString) return '—';
@@ -178,6 +375,10 @@ export default function App() {
       case 'lever': return 'badge-lever';
       case 'ashby': return 'badge-ashby';
       case 'smartrecruiters': return 'badge-smartrecruiters';
+      case 'workday': return 'badge-workday';
+      case 'amazon': return 'badge-amazon';
+      case 'google': return 'badge-google';
+      case 'eightfold': return 'badge-eightfold';
       case 'adzuna': return 'badge-adzuna';
       default: return 'badge-default';
     }
@@ -262,18 +463,31 @@ export default function App() {
           </div>
 
           <div className="topbar-actions">
-            <label className="india-toggle-pill" htmlFor="india-only-toggle" title="Filter for jobs based in India or remote in India">
+            <label className="india-toggle-pill" htmlFor="india-only-toggle" title="Toggle between India and Worldwide jobs">
               <input
                 id="india-only-toggle"
                 type="checkbox"
-                checked={indiaOnly}
+                checked={selectedCountry === 'India'}
                 onChange={(e) => {
-                  setIndiaOnly(e.target.checked);
+                  const nextCountry = e.target.checked ? 'India' : 'all';
+                  setSelectedCountry(nextCountry);
+                  setSelectedCity('all');
                   setPage(1);
                 }}
               />
-              <span>🇮🇳 India Only</span>
+              <span>{selectedCountry === 'India' ? '🇮🇳 India Only' : '🌐 All Countries'}</span>
             </label>
+
+            <button
+              className={`sync-action-btn ${isSyncing ? 'is-syncing' : ''}`}
+              onClick={handleTriggerSync}
+              disabled={isSyncing}
+              title={isSyncing ? "Sync in progress..." : "Fetch latest jobs from ATS boards"}
+              id="sync-jobs-btn"
+            >
+              <span className={`sync-icon ${isSyncing ? 'spin-animation' : ''}`}>🔄</span>
+              <span className="sync-text">{isSyncing ? 'Syncing...' : 'Sync Jobs'}</span>
+            </button>
 
             <button
               className="theme-switch-btn"
@@ -300,10 +514,21 @@ export default function App() {
           </div>
         </header>
 
+        {syncToast && (
+          <div className={`sync-toast-banner ${syncToast.type}`} role="status">
+            <span className="toast-icon">
+              {syncToast.type === 'success' ? '✅' : syncToast.type === 'error' ? '⚠️' : 'ℹ️'}
+            </span>
+            <span className="toast-text">{syncToast.message}</span>
+            <button className="toast-close" onClick={() => setSyncToast(null)} aria-label="Close notification">×</button>
+          </div>
+        )}
+
         <div className="main-content-body">
+
           {/* View 1: Company Directory */}
           {activeTab === 'directory' && (
-            <CompanyDirectory cities={directoryCities} />
+            <CompanyDirectory cities={directoryCities} onRefreshMeta={fetchDirectoryMeta} />
           )}
 
           {/* View 2: Reach Out View */}
@@ -333,7 +558,9 @@ export default function App() {
                   <span className="stat-value text-purple">
                     {cities.length}
                   </span>
-                  <span className="stat-subtext">{indiaOnly ? 'Across India' : 'Worldwide'}</span>
+                  <span className="stat-subtext">
+                    {selectedCountry === 'India' ? 'Across India' : (selectedCountry !== 'all' ? `In ${selectedCountry}` : 'Worldwide')}
+                  </span>
                 </div>
                 <div className="stat-card">
                   <span className="stat-label">Matching Current View</span>
@@ -367,9 +594,41 @@ export default function App() {
                     </div>
                   </div>
 
+                  {/* Country Dropdown */}
+                  <div className="input-group">
+                    <label htmlFor="filter-country-select" className="input-label">Country</label>
+                    <select
+                      id="filter-country-select"
+                      className="custom-select"
+                      value={selectedCountry}
+                      onChange={(e) => {
+                        const nextCountry = e.target.value;
+                        setSelectedCountry(nextCountry);
+                        setSelectedCity('all');
+                        setPage(1);
+                      }}
+                    >
+                      <option value="all">🌐 All Countries (Global)</option>
+                      <option value="India">
+                        🇮🇳 India ({countries.find(c => c.country === 'India')?.count || 0} jobs)
+                      </option>
+                      <optgroup label="🌍 International Countries">
+                        {countries
+                          .filter(c => c.country && c.country !== 'India')
+                          .map(c => (
+                            <option key={c.country} value={c.country}>
+                              {getCountryFlag(c.country)} {c.country} ({c.count} {c.count === 1 ? 'job' : 'jobs'})
+                            </option>
+                          ))}
+                      </optgroup>
+                    </select>
+                  </div>
+
                   {/* City Dropdown */}
                   <div className="input-group">
-                    <label htmlFor="filter-city-select" className="input-label">City</label>
+                    <label htmlFor="filter-city-select" className="input-label">
+                      {selectedCountry === 'India' ? 'Indian City' : (selectedCountry !== 'all' ? `${selectedCountry} City` : 'City')}
+                    </label>
                     <select
                       id="filter-city-select"
                       className="custom-select"
@@ -379,12 +638,40 @@ export default function App() {
                         setPage(1);
                       }}
                     >
-                      <option value="all">All Cities ({cities.reduce((sum, c) => sum + c.count, 0)})</option>
-                      {cities.map((c) => (
-                        <option key={c.city} value={c.city}>
-                          {c.city} {c.state ? `(${c.state})` : ''} — {c.count} {c.count === 1 ? 'job' : 'jobs'}
-                        </option>
-                      ))}
+                      <option value="all">
+                        {selectedCountry === 'India'
+                          ? `🌐 All Indian Cities (${totalCityJobs} jobs)`
+                          : selectedCountry !== 'all'
+                            ? `🌐 All Cities in ${selectedCountry} (${totalCityJobs} jobs)`
+                            : `🌐 All Cities Worldwide (${totalCityJobs} jobs)`}
+                      </option>
+                      {cityGroups.remote.length > 0 && (
+                        <optgroup label="💻 Remote & Distributed">
+                          {cityGroups.remote.map((c) => (
+                            <option key={c.city} value={c.city}>
+                              {c.city} ({c.count} {c.count === 1 ? 'job' : 'jobs'})
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
+                      {cityGroups.major.length > 0 && (
+                        <optgroup label={selectedCountry === 'India' ? '🏢 Major Indian Tech Hubs' : (selectedCountry !== 'all' ? `🏢 Major Tech Hubs in ${selectedCountry}` : '🏢 Major Hubs')}>
+                          {cityGroups.major.map((c) => (
+                            <option key={c.city} value={c.city}>
+                              {c.city} {c.state ? `(${c.state})` : ''} — {c.count} {c.count === 1 ? 'job' : 'jobs'}
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
+                      {cityGroups.other.length > 0 && (
+                        <optgroup label={selectedCountry === 'India' ? '📍 Other Cities & Tech Clusters' : '📍 Other Locations'}>
+                          {cityGroups.other.slice(0, 100).map((c) => (
+                            <option key={c.city} value={c.city}>
+                              {c.city} — {c.count} {c.count === 1 ? 'job' : 'jobs'}
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
                     </select>
                   </div>
 
@@ -400,11 +687,11 @@ export default function App() {
                         setPage(1);
                       }}
                     >
-                      <option value="all">All Work Modes</option>
-                      <option value="onsite">🏢 On-site Only</option>
-                      <option value="hybrid">🔄 Hybrid Only</option>
-                      <option value="remote">🌐 Remote Only</option>
-                      <option value="unknown">❓ Unspecified</option>
+                      <option value="all">🌐 All Work Modes</option>
+                      <option value="onsite">🏢 On-site Work</option>
+                      <option value="hybrid">🔄 Hybrid (Office + WFH)</option>
+                      <option value="remote">💻 100% Remote / WFH</option>
+                      <option value="unknown">❓ Unspecified Location</option>
                     </select>
                   </div>
 
@@ -421,10 +708,21 @@ export default function App() {
                           setPage(1);
                         }}
                       >
-                        <option value="all">All Companies ({stats.companies.length})</option>
-                        {stats.companies.map((comp) => (
-                          <option key={comp} value={comp}>{comp}</option>
-                        ))}
+                        <option value="all">🏢 All Companies ({stats.companies.length})</option>
+                        {companyGroups.tier1.length > 0 && (
+                          <optgroup label="🔥 Big Tech & Tier-1 Product Giants">
+                            {companyGroups.tier1.map((comp) => (
+                              <option key={comp} value={comp}>{comp}</option>
+                            ))}
+                          </optgroup>
+                        )}
+                        {companyGroups.other.length > 0 && (
+                          <optgroup label="💼 All Other Tech Companies">
+                            {companyGroups.other.map((comp) => (
+                              <option key={comp} value={comp}>{comp}</option>
+                            ))}
+                          </optgroup>
+                        )}
                       </select>
                     </div>
                   )}
@@ -441,9 +739,9 @@ export default function App() {
                         setPage(1);
                       }}
                     >
-                      <option value="all">All Postings</option>
-                      <option value="open">Active / Open Only</option>
-                      <option value="closed">Closed Only</option>
+                      <option value="open">🟢 Active & Open Postings Only</option>
+                      <option value="all">⚪ All Postings (Active + Archived)</option>
+                      <option value="closed">🔴 Closed Postings Only</option>
                     </select>
                   </div>
 
@@ -459,6 +757,28 @@ export default function App() {
                     </button>
                   </div>
                 </div>
+
+                {/* Secondary Filter Row: Tech & Coding Roles Toggle */}
+                <div className="filter-row-secondary" style={{ marginTop: '14px', paddingTop: '12px', borderTop: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <label className="tech-checkbox-label" htmlFor="tech-jobs-toggle" style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '8px', fontWeight: 600, fontSize: '13.5px', color: 'var(--text-primary)' }}>
+                    <input
+                      id="tech-jobs-toggle"
+                      type="checkbox"
+                      checked={techOnlyJobs}
+                      onChange={(e) => {
+                        setTechOnlyJobs(e.target.checked);
+                        setPage(1);
+                      }}
+                      style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: 'var(--primary)' }}
+                    />
+                    <span>⚡ Tech & Coding Roles Only (Software, Engineering, AI, Data, DevOps, Fullstack)</span>
+                  </label>
+                  {techOnlyJobs && (
+                    <span style={{ fontSize: '12px', color: 'var(--success)', fontWeight: 600 }}>
+                      ✓ Filtering out non-technical roles (accounting, sales, HR, operations)
+                    </span>
+                  )}
+                </div>
               </section>
 
               {/* Results Container */}
@@ -466,7 +786,12 @@ export default function App() {
                 <div className="results-header">
                   <div className="results-count" id="results-count-text">
                     Showing <strong>{jobs.length}</strong> of <strong>{meta.total}</strong> matching jobs
-                    {indiaOnly && <span className="active-tag">🇮🇳 India Focus</span>}
+                    {selectedCountry !== 'all' ? (
+                      <span className="active-tag">{getCountryFlag(selectedCountry)} {selectedCountry}</span>
+                    ) : (
+                      <span className="active-tag">🌐 Global / All Countries</span>
+                    )}
+                    {techOnlyJobs && <span className="active-tag" style={{ background: 'rgba(16, 185, 129, 0.12)', color: '#059669', borderColor: 'rgba(16, 185, 129, 0.3)' }}>⚡ Tech Roles Only</span>}
                     {selectedCity !== 'all' && <span className="active-tag">📍 {selectedCity}</span>}
                     {workModeFilter !== 'all' && <span className="active-tag">💼 {workModeFilter}</span>}
                   </div>
@@ -525,7 +850,12 @@ export default function App() {
                         <tbody>
                           {jobs.map((job) => {
                             const rawLoc = job.locationRaw || job.location || 'Unspecified';
-                            const displayCity = job.city ? `${job.city}${job.state ? `, ${job.state}` : ''}` : (job.workMode === 'remote' ? 'Remote, India' : rawLoc);
+                            const countryTag = job.country && job.country !== 'India' ? ` (${job.country})` : '';
+                            const displayCity = job.city
+                              ? `${job.city}${job.state ? `, ${job.state}` : ''}${countryTag}`
+                              : (job.workMode === 'remote'
+                                ? (job.country ? `Remote (${job.country})` : 'Remote / Global')
+                                : `${rawLoc}${countryTag && !rawLoc.toLowerCase().includes(job.country.toLowerCase()) ? countryTag : ''}`);
 
                             return (
                               <tr key={job._id || `${job.source}-${job.sourceJobId}`}>
