@@ -32,19 +32,44 @@ const Job = require('../models/Job');
 const SourceRun = require('../models/SourceRun');
 
 /**
- * Connect to MongoDB with timeout settings.
+ * Connect to MongoDB with timeout settings and CI environment detection.
  */
 async function connectDB() {
-  const uri = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/jobradar';
+  const isCI = process.env.CI === 'true' || !!process.env.GITHUB_ACTIONS;
+  const rawUri = process.env.MONGODB_URI ? process.env.MONGODB_URI.trim() : '';
+
+  if (!rawUri && isCI) {
+    const errorMsg =
+      'MONGODB_URI secret is missing in GitHub Actions! Please add MONGODB_URI to your GitHub repository secrets (Settings -> Secrets and variables -> Actions).';
+    console.error(`::error::${errorMsg}`);
+    throw new Error(errorMsg);
+  }
+
+  const uri = rawUri || 'mongodb://127.0.0.1:27017/jobradar';
   if (mongoose.connection.readyState === 1) {
     return;
   }
   const maskedUri = uri.replace(/\/\/([^:]+):([^@]+)@/, '//***:***@');
   console.log(`[Collect] Connecting to database: ${maskedUri}`);
-  await mongoose.connect(uri, {
-    serverSelectionTimeoutMS: 5000
-  });
-  console.log('[Collect] MongoDB connected successfully.');
+
+  try {
+    await mongoose.connect(uri, {
+      serverSelectionTimeoutMS: isCI ? 15000 : 5000
+    });
+    console.log('[Collect] MongoDB connected successfully.');
+  } catch (err) {
+    if (isCI) {
+      console.error('\n' + '='.repeat(60));
+      console.error('[Collect] DATABASE CONNECTION FAILED IN GITHUB ACTIONS!');
+      console.error('Possible Causes:');
+      console.error('1. MONGODB_URI secret is missing or invalid in GitHub Secrets.');
+      console.error('2. MongoDB Atlas Network Access: GitHub Actions runners have dynamic cloud IPs.');
+      console.error('   In MongoDB Atlas -> Network Access, add IP Address "0.0.0.0/0" (Allow access from anywhere).');
+      console.error('3. Check username/password credentials in MONGODB_URI.');
+      console.error('='.repeat(60) + '\n');
+    }
+    throw err;
+  }
 }
 
 /**
