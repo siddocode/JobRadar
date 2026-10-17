@@ -10,6 +10,11 @@
  * - Logs a SourceRun record per company run.
  */
 
+const dns = require('dns');
+try {
+  dns.setDefaultResultOrder('ipv4first');
+} catch (_) {}
+
 const path = require('path');
 const dotenv = require('dotenv');
 
@@ -32,7 +37,7 @@ const Job = require('../models/Job');
 const SourceRun = require('../models/SourceRun');
 
 /**
- * Connect to MongoDB with timeout settings and CI environment detection.
+ * Connect to MongoDB with timeout settings, retry logic, and CI environment detection.
  */
 async function connectDB() {
   const isCI = process.env.CI === 'true' || !!process.env.GITHUB_ACTIONS;
@@ -52,24 +57,41 @@ async function connectDB() {
   const maskedUri = uri.replace(/\/\/([^:]+):([^@]+)@/, '//***:***@');
   console.log(`[Collect] Connecting to database: ${maskedUri}`);
 
-  try {
-    await mongoose.connect(uri, {
-      serverSelectionTimeoutMS: isCI ? 15000 : 5000
-    });
-    console.log('[Collect] MongoDB connected successfully.');
-  } catch (err) {
-    if (isCI) {
-      console.error('\n' + '='.repeat(60));
-      console.error('[Collect] DATABASE CONNECTION FAILED IN GITHUB ACTIONS!');
-      console.error('Possible Causes:');
-      console.error('1. MONGODB_URI secret is missing or invalid in GitHub Secrets.');
-      console.error('2. MongoDB Atlas Network Access: GitHub Actions runners have dynamic cloud IPs.');
-      console.error('   In MongoDB Atlas -> Network Access, add IP Address "0.0.0.0/0" (Allow access from anywhere).');
-      console.error('3. Check username/password credentials in MONGODB_URI.');
-      console.error('='.repeat(60) + '\n');
+  const options = {
+    serverSelectionTimeoutMS: isCI ? 25000 : 5000,
+    connectTimeoutMS: isCI ? 25000 : 10000,
+    family: 4
+  };
+
+  let lastErr = null;
+  const maxAttempts = isCI ? 3 : 1;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      if (attempt > 1) {
+        console.log(`[Collect] Retrying database connection (attempt ${attempt}/${maxAttempts})...`);
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+      }
+      await mongoose.connect(uri, options);
+      console.log('[Collect] MongoDB connected successfully.');
+      return;
+    } catch (err) {
+      lastErr = err;
+      console.warn(`[Collect] DB connection attempt ${attempt} failed: ${err.message}`);
     }
-    throw err;
   }
+
+  if (isCI) {
+    console.error('\n' + '='.repeat(60));
+    console.error('[Collect] DATABASE CONNECTION FAILED IN GITHUB ACTIONS!');
+    console.error('Possible Causes:');
+    console.error('1. MONGODB_URI secret is missing or invalid in GitHub Secrets.');
+    console.error('2. MongoDB Atlas Network Access: GitHub Actions runners have dynamic cloud IPs.');
+    console.error('   In MongoDB Atlas -> Network Access, add IP Address "0.0.0.0/0" (Allow access from anywhere).');
+    console.error('3. Check username/password credentials in MONGODB_URI.');
+    console.error('='.repeat(60) + '\n');
+  }
+  throw lastErr;
 }
 
 /**
@@ -167,83 +189,126 @@ async function collectForCompany(company) {
   const now = new Date();
   const activeIds = [];
 
-  if (jobs.length > 0) {
-    const bulkOps = jobs.map((job) => {
-      activeIds.push(job.sourceJobId);
-      return {
-        updateOne: {
-          filter: { source: job.source, sourceJobId: job.sourceJobId },
-          update: {
-            $set: {
-              company: job.company,
-              title: job.title,
-              location: job.location,
-              locationRaw: job.locationRaw,
-              city: job.city,
-              state: job.state,
-              country: job.country,
-              workMode: job.workMode,
-              fingerprint: job.fingerprint,
-              descriptionHtml: job.descriptionHtml,
-              applyUrl: job.applyUrl,
-              updatedAt: job.updatedAt,
-              lastSeenAt: now,
-              status: 'open'
-            },
-            $setOnInsert: {
-              firstSeenAt: now
-            }
-          },
-          upsert: true
+  try {
+    if (jobs.length > 0) {
+      // Deduplicate jobs by sourceJobId to prevent MongoBulkWriteError (E11000 duplicate key error)
+      const seenIds = new Set();
+      const uniqueJobs = [];
+      for (const job of jobs) {
+        if (job && job.sourceJobId && !seenIds.has(job.sourceJobId)) {
+          seenIds.add(job.sourceJobId);
+          uniqueJobs.push(job);
         }
-      };
-    });
+      }
 
-    await Job.bulkWrite(bulkOps, { ordered: false });
-  }
+      const bulkOps = uniqueJobs.map((job) => {
+        activeIds.push(job.sourceJobId);
+        return {
+          updateOne: {
+            filter: { source: job.source, sourceJobId: job.sourceJobId },
+            update: {
+              $set: {
+                company: job.company,
+                title: job.title,
+                location: job.location,
+                locationRaw: job.locationRaw,
+                city: job.city,
+                state: job.state,
+                country: job.country,
+                workMode: job.workMode,
+                fingerprint: job.fingerprint,
+                descriptionHtml: job.descriptionHtml,
+                applyUrl: job.applyUrl,
+                updatedAt: job.updatedAt,
+                lastSeenAt: now,
+                status: 'open'
+              },
+              $setOnInsert: {
+                firstSeenAt: now
+              }
+            },
+            upsert: true
+          }
+        };
+      });
 
-  // Mark jobs that were previously open for this company but missing from latest feed as closed
-  const closeResult = await Job.updateMany(
-    {
+      if (bulkOps.length > 0) {
+        await Job.bulkWrite(bulkOps, { ordered: false });
+      }
+    }
+
+    // Mark jobs that were previously open for this company but missing from latest feed as closed
+    const closeResult = await Job.updateMany(
+      {
+        source: ats,
+        company: company.name,
+        status: 'open',
+        sourceJobId: { $nin: activeIds }
+      },
+      {
+        $set: { status: 'closed' }
+      }
+    );
+
+    const jobsClosed = closeResult.modifiedCount || 0;
+    const durationMs = Date.now() - startTime;
+
+    console.log(`[Collect] Successfully processed "${company.name}":`);
+    console.log(`          Fetched: ${jobs.length} | Upserted: ${jobs.length} | Closed: ${jobsClosed} (${durationMs}ms)`);
+
+    await SourceRun.create({
       source: ats,
       company: company.name,
-      status: 'open',
-      sourceJobId: { $nin: activeIds }
-    },
-    {
-      $set: { status: 'closed' }
-    }
-  );
+      slug,
+      greenhouseSlug: ats === 'greenhouse' ? slug : '',
+      status: 'success',
+      jobsFetched: jobs.length,
+      jobsUpserted: jobs.length,
+      jobsClosed: jobsClosed,
+      durationMs,
+      errorMessage: null
+    });
 
-  const jobsClosed = closeResult.modifiedCount || 0;
-  const durationMs = Date.now() - startTime;
+    return {
+      company: company.name,
+      ats,
+      slug,
+      status: 'success',
+      fetched: jobs.length,
+      upserted: jobs.length,
+      closed: jobsClosed,
+      error: null
+    };
+  } catch (dbErr) {
+    const durationMs = Date.now() - startTime;
+    console.error(`[Collect] Database error for "${company.name}": ${dbErr.message}`);
 
-  console.log(`[Collect] Successfully processed "${company.name}":`);
-  console.log(`          Fetched: ${jobs.length} | Upserted: ${jobs.length} | Closed: ${jobsClosed} (${durationMs}ms)`);
+    try {
+      await SourceRun.create({
+        source: ats,
+        company: company.name,
+        slug,
+        greenhouseSlug: ats === 'greenhouse' ? slug : '',
+        status: 'failed',
+        jobsFetched: jobs.length,
+        jobsUpserted: 0,
+        jobsClosed: 0,
+        durationMs,
+        errorMessage: dbErr.message
+      });
+    } catch (_) {}
 
-  await SourceRun.create({
-    source: ats,
-    company: company.name,
-    slug,
-    greenhouseSlug: ats === 'greenhouse' ? slug : '',
-    status: 'success',
-    jobsFetched: jobs.length,
-    jobsUpserted: jobs.length,
-    jobsClosed: jobsClosed,
-    durationMs,
-    errorMessage: null
-  });
-
-  return {
-    company: company.name,
-    ats,
-    slug,
-    status: 'success',
-    fetched: jobs.length,
-    upserted: jobs.length,
-    closed: jobsClosed,
-    error: null
-  };
+    return {
+      company: company.name,
+      ats,
+      slug,
+      status: 'failed',
+      fetched: jobs.length,
+      upserted: 0,
+      closed: 0,
+      error: dbErr.message
+    };
+  }
 }
 
 /**
@@ -267,49 +332,73 @@ async function collectAdzuna() {
   const jobs = adzunaResult.jobs || [];
   const now = new Date();
 
-  if (jobs.length > 0) {
-    const bulkOps = jobs.map((job) => ({
-      updateOne: {
-        filter: { source: 'adzuna', sourceJobId: job.sourceJobId },
-        update: {
-          $set: {
-            company: job.company,
-            title: job.title,
-            location: job.location,
-            locationRaw: job.locationRaw,
-            city: job.city,
-            state: job.state,
-            country: job.country,
-            workMode: job.workMode,
-            fingerprint: job.fingerprint,
-            descriptionHtml: job.descriptionHtml,
-            applyUrl: job.applyUrl,
-            updatedAt: job.updatedAt,
-            lastSeenAt: now,
-            status: 'open'
-          },
-          $setOnInsert: {
-            firstSeenAt: now
-          }
-        },
-        upsert: true
+  try {
+    if (jobs.length > 0) {
+      const seenIds = new Set();
+      const uniqueJobs = [];
+      for (const job of jobs) {
+        if (job && job.sourceJobId && !seenIds.has(job.sourceJobId)) {
+          seenIds.add(job.sourceJobId);
+          uniqueJobs.push(job);
+        }
       }
-    }));
 
-    await Job.bulkWrite(bulkOps, { ordered: false });
+      const bulkOps = uniqueJobs.map((job) => ({
+        updateOne: {
+          filter: { source: 'adzuna', sourceJobId: job.sourceJobId },
+          update: {
+            $set: {
+              company: job.company,
+              title: job.title,
+              location: job.location,
+              locationRaw: job.locationRaw,
+              city: job.city,
+              state: job.state,
+              country: job.country,
+              workMode: job.workMode,
+              fingerprint: job.fingerprint,
+              descriptionHtml: job.descriptionHtml,
+              applyUrl: job.applyUrl,
+              updatedAt: job.updatedAt,
+              lastSeenAt: now,
+              status: 'open'
+            },
+            $setOnInsert: {
+              firstSeenAt: now
+            }
+          },
+          upsert: true
+        }
+      }));
+
+      if (bulkOps.length > 0) {
+        await Job.bulkWrite(bulkOps, { ordered: false });
+      }
+    }
+
+    const durationMs = Date.now() - startTime;
+    console.log(`[Collect] Adzuna processed: Fetched: ${jobs.length} | Upserted: ${jobs.length} (${durationMs}ms)`);
+
+    return {
+      company: 'Adzuna Aggregator',
+      ats: 'adzuna',
+      status: 'success',
+      fetched: jobs.length,
+      upserted: jobs.length,
+      closed: 0
+    };
+  } catch (err) {
+    console.error(`[Collect] Adzuna database error: ${err.message}`);
+    return {
+      company: 'Adzuna Aggregator',
+      ats: 'adzuna',
+      status: 'failed',
+      fetched: jobs.length,
+      upserted: 0,
+      closed: 0,
+      error: err.message
+    };
   }
-
-  const durationMs = Date.now() - startTime;
-  console.log(`[Collect] Adzuna processed: Fetched: ${jobs.length} | Upserted: ${jobs.length} (${durationMs}ms)`);
-
-  return {
-    company: 'Adzuna Aggregator',
-    ats: 'adzuna',
-    status: 'success',
-    fetched: jobs.length,
-    upserted: jobs.length,
-    closed: 0
-  };
 }
 
 /**

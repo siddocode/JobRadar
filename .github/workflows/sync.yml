@@ -26,22 +26,64 @@ jobs:
 
       - name: Verify Database Secret
         env:
-          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          MONGODB_URI: ${{ secrets.MONGODB_URI || secrets.MONGO_URI || secrets.MONGODB_URL || secrets.DATABASE_URL || vars.MONGODB_URI }}
         run: |
           if [ -z "$MONGODB_URI" ]; then
-            echo "::error title=Missing Secret::MONGODB_URI secret is missing in GitHub repository secrets! Go to Settings -> Secrets and variables -> Actions and add MONGODB_URI."
+            echo "::error title=Missing Secret::Neither MONGODB_URI nor MONGO_URI was found in GitHub Secrets! Please go to your repository Settings -> Secrets and variables -> Actions and add 'MONGODB_URI'."
+            echo ""
+            echo "================================================================="
+            echo "ACTION REQUIRED: How to configure MONGODB_URI in GitHub Actions:"
+            echo "1. Go to repository Settings -> Secrets and variables -> Actions"
+            echo "2. Under 'Repository secrets', click 'New repository secret'"
+            echo "3. Name: MONGODB_URI"
+            echo "4. Value: Paste your mongodb+srv:// connection string from backend/.env"
+            echo "================================================================="
             exit 1
           fi
-          echo "Database configuration secret detected."
+          echo "Database configuration secret detected (${#MONGODB_URI} chars)."
 
       - name: Install backend dependencies
         run: |
           cd backend
           npm ci
 
+      - name: Test Database Connectivity
+        env:
+          MONGODB_URI: ${{ secrets.MONGODB_URI || secrets.MONGO_URI || secrets.MONGODB_URL || secrets.DATABASE_URL || vars.MONGODB_URI }}
+        run: |
+          cd backend
+          node -e "
+            const dns = require('dns');
+            try { dns.setDefaultResultOrder('ipv4first'); } catch (_) {}
+            const mongoose = require('mongoose');
+            const uri = process.env.MONGODB_URI;
+            const masked = uri.replace(/\/\/([^:]+):([^@]+)@/, '//***:***@');
+            console.log('[Test DB] Connecting to ' + masked + '...');
+            mongoose.connect(uri, { serverSelectionTimeoutMS: 20000, family: 4 })
+              .then(async () => {
+                console.log('[Test DB] Successfully connected to MongoDB Atlas!');
+                await mongoose.disconnect();
+                process.exit(0);
+              })
+              .catch(err => {
+                console.error('::error title=MongoDB Atlas Connection Failed::' + err.message);
+                console.error('');
+                console.error('=================================================================');
+                console.error('CRITICAL: MongoDB Atlas blocked this GitHub Actions runner IP!');
+                console.error('GitHub Actions runners use dynamic cloud IPs.');
+                console.error('Fix in MongoDB Atlas:');
+                console.error('1. Go to https://cloud.mongodb.com/');
+                console.error('2. Navigate to Security -> Network Access');
+                console.error('3. Click Add IP Address -> Select \"Allow Access From Anywhere\" (0.0.0.0/0)');
+                console.error('4. Click Confirm');
+                console.error('=================================================================');
+                process.exit(1);
+              });
+          "
+
       - name: Run JobRadar Collection
         env:
-          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          MONGODB_URI: ${{ secrets.MONGODB_URI || secrets.MONGO_URI || secrets.MONGODB_URL || secrets.DATABASE_URL || vars.MONGODB_URI }}
           ADZUNA_APP_ID: ${{ secrets.ADZUNA_APP_ID }}
           ADZUNA_APP_KEY: ${{ secrets.ADZUNA_APP_KEY }}
         run: |
