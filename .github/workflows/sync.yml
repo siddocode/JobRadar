@@ -12,6 +12,8 @@ jobs:
     name: Collect & Sync Jobs
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      MONGODB_URI: ${{ secrets.MONGODB_URI || secrets.MONGO_URI || secrets.MONGO_DB_URI || secrets.MONGODB_URL || secrets.DATABASE_URL || secrets.DATABASE_URI || secrets.MONGODB_CONNECTION_STRING || vars.MONGODB_URI || vars.MONGO_URI || vars.MONGO_DB_URI || vars.MONGODB_URL || vars.DATABASE_URL }}
 
     steps:
       - name: Check out repository
@@ -25,18 +27,23 @@ jobs:
           cache-dependency-path: 'backend/package-lock.json'
 
       - name: Verify Database Secret
-        env:
-          MONGODB_URI: ${{ secrets.MONGODB_URI || secrets.MONGO_URI || secrets.MONGODB_URL || secrets.DATABASE_URL || vars.MONGODB_URI }}
         run: |
           if [ -z "$MONGODB_URI" ]; then
-            echo "::error title=Missing Secret::Neither MONGODB_URI nor MONGO_URI was found in GitHub Secrets! Please go to your repository Settings -> Secrets and variables -> Actions and add 'MONGODB_URI'."
+            echo "::error title=Missing Secret::MongoDB connection URI is missing from GitHub Secrets! Go to Settings -> Secrets and variables -> Actions and add 'MONGODB_URI' under 'Repository secrets'."
             echo ""
             echo "================================================================="
-            echo "ACTION REQUIRED: How to configure MONGODB_URI in GitHub Actions:"
-            echo "1. Go to repository Settings -> Secrets and variables -> Actions"
-            echo "2. Under 'Repository secrets', click 'New repository secret'"
-            echo "3. Name: MONGODB_URI"
-            echo "4. Value: Paste your mongodb+srv:// connection string from backend/.env"
+            echo "CRITICAL: Why this failed even if you already added it:"
+            echo "1. ENVIRONMENT SECRETS vs REPOSITORY SECRETS:"
+            echo "   If you added the secret inside an 'Environment' (e.g. production),"
+            echo "   GitHub blocks it because this workflow is not linked to an environment."
+            echo "   -> It MUST be under 'Repository secrets' at the bottom of the page!"
+            echo "2. URL TO ADD SECRET:"
+            echo "   https://github.com/siddocode/JobRadar/settings/secrets/actions"
+            echo "3. CLICK 'New repository secret':"
+            echo "   Name:  MONGODB_URI"
+            echo "   Value: mongodb+srv://... (from backend/.env)"
+            echo "4. RUN WORKFLOW:"
+            echo "   After saving, you must click 'Run workflow' in the Actions tab!"
             echo "================================================================="
             exit 1
           fi
@@ -48,8 +55,6 @@ jobs:
           npm ci
 
       - name: Test Database Connectivity
-        env:
-          MONGODB_URI: ${{ secrets.MONGODB_URI || secrets.MONGO_URI || secrets.MONGODB_URL || secrets.DATABASE_URL || vars.MONGODB_URI }}
         run: |
           cd backend
           node -e "
@@ -83,7 +88,6 @@ jobs:
 
       - name: Run JobRadar Collection
         env:
-          MONGODB_URI: ${{ secrets.MONGODB_URI || secrets.MONGO_URI || secrets.MONGODB_URL || secrets.DATABASE_URL || vars.MONGODB_URI }}
           ADZUNA_APP_ID: ${{ secrets.ADZUNA_APP_ID }}
           ADZUNA_APP_KEY: ${{ secrets.ADZUNA_APP_KEY }}
         run: |
