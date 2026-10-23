@@ -13,8 +13,11 @@ const {
   normalizeCompanyName,
   slugify,
   stringSimilarity,
-  linkJobsForCompany
+  linkJobsForCompany,
+  isGovernmentOrNonTechEntity,
+  classifyTechCompany
 } = require('../utils/companyUtils');
+const { getTechHubSeedsForCity } = require('../data/seeds/techHubSeeds');
 
 const CACHE_DIR = path.join(__dirname, '../data/cache');
 if (!fs.existsSync(CACHE_DIR)) {
@@ -30,45 +33,39 @@ const OVERPASS_ENDPOINTS = [
 
 async function fetchOverpassWithFallback(query) {
   let lastError = null;
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    for (const endpoint of OVERPASS_ENDPOINTS) {
-      try {
-        console.log(`[Overpass] Attempt ${attempt}: Querying ${endpoint}...`);
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 95000);
+  for (const endpoint of OVERPASS_ENDPOINTS) {
+    try {
+      console.log(`[Overpass] Querying ${endpoint}...`);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
 
-        const response = await fetch(endpoint, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'text/plain',
-            'User-Agent': 'JobRadar/1.0 (contact: sid@jobradar.local)'
-          },
-          body: query,
-          signal: controller.signal
-        });
-        clearTimeout(timeoutId);
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'text/plain',
+          'User-Agent': 'JobRadar/1.0 (contact: sid@jobradar.local)'
+        },
+        body: query,
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
 
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status} ${response.statusText}`);
-        }
-
-        const json = await response.json();
-        if (json && Array.isArray(json.elements)) {
-          console.log(`[Overpass] Successfully received ${json.elements.length} elements from ${endpoint}`);
-          return json;
-        }
-      } catch (err) {
-        console.warn(`[Overpass] Warning on ${endpoint}: ${err.message}`);
-        lastError = err;
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status} ${response.statusText}`);
       }
-    }
-    // Wait before next round
-    if (attempt < 3) {
-      console.log(`[Overpass] Waiting 3s before retry round ${attempt + 1}...`);
-      await new Promise(r => setTimeout(r, 3000));
+
+      const json = await response.json();
+      if (json && Array.isArray(json.elements) && json.elements.length > 0) {
+        console.log(`[Overpass] Successfully received ${json.elements.length} elements from ${endpoint}`);
+        return json;
+      }
+    } catch (err) {
+      console.warn(`[Overpass] Warning on ${endpoint}: ${err.message}`);
+      lastError = err;
     }
   }
-  throw new Error(`All Overpass endpoints failed: ${lastError?.message}`);
+  console.warn(`[Overpass] All live mirrors timed out or failed (${lastError?.message}). Gracefully falling back to seed data.`);
+  return { elements: [] };
 }
 
 function constructAddress(tags, cityName) {
@@ -133,22 +130,48 @@ async function importOsmForCity(citySlug, forceRefresh = false) {
   } else {
     console.log(`[Cache] Cache miss or expired. Querying Overpass API...`);
     const [south, west, north, east] = city.bbox;
-    const query = `[out:json][timeout:90];
+    const query = `[out:json][timeout:25];
 (
-  node["office"](${south},${west},${north},${east});
-  way["office"](${south},${west},${north},${east});
-  node["name"~"Software|Tech|Technologies|Solutions|Infotech|Labs|Digital|Consultancy",i](${south},${west},${north},${east});
-  way["name"~"Software|Tech|Technologies|Solutions|Infotech|Labs|Digital|Consultancy",i](${south},${west},${north},${east});
+  node["office"~"it|software|telecommunication|coworking|research|company|consulting"](${south},${west},${north},${east});
+  way["office"~"it|software|telecommunication|coworking|research|company|consulting"](${south},${west},${north},${east});
   node["amenity"="coworking_space"](${south},${west},${north},${east});
   way["amenity"="coworking_space"](${south},${west},${north},${east});
+  node["office"]["name"~"Software|Tech|Technologies|Solutions|Infotech|Labs|Digital|Consultancy|Cloud|Systems|AI|Analytics",i](${south},${west},${north},${east});
+  way["office"]["name"~"Software|Tech|Technologies|Solutions|Infotech|Labs|Digital|Consultancy|Cloud|Systems|AI|Analytics",i](${south},${west},${north},${east});
+  node["building"="office"]["name"~"Software|Tech|Technologies|Solutions|Infotech|Labs|Digital|Consultancy|Cloud|Systems|AI|Analytics",i](${south},${west},${north},${east});
+  way["building"="office"]["name"~"Software|Tech|Technologies|Solutions|Infotech|Labs|Digital|Consultancy|Cloud|Systems|AI|Analytics",i](${south},${west},${north},${east});
 );
 out center;`;
 
-
     const data = await fetchOverpassWithFallback(query);
     elements = data.elements || [];
-    fs.writeFileSync(cacheFile, JSON.stringify(data, null, 2), 'utf8');
-    console.log(`[Cache] Cached ${elements.length} elements to ${cacheFile}`);
+
+    // Fall back to guaranteed tech hub seeds if Overpass mirrors fail or return empty
+    if (elements.length === 0) {
+      const seeds = getTechHubSeedsForCity(city.slug, city.name, city.bbox);
+      if (seeds && seeds.length > 0) {
+        console.log(`[OSM Discovery] Falling back to tech hub seeds for ${city.name} (${seeds.length} verified companies)`);
+        elements = seeds.map((s, idx) => ({
+          type: 'node',
+          id: 9900000000 + idx,
+          lat: s.lat,
+          lon: s.lng,
+          tags: {
+            name: s.name,
+            'addr:full': s.formatted_address,
+            'addr:suburb': s.locality,
+            website: s.website,
+            phone: s.phone,
+            office: 'it'
+          }
+        }));
+      }
+    }
+
+    if (elements.length > 0) {
+      fs.writeFileSync(cacheFile, JSON.stringify({ elements }, null, 2), 'utf8');
+      console.log(`[Cache] Cached ${elements.length} elements to ${cacheFile}`);
+    }
   }
 
   console.log(`[Processing] Analyzing ${elements.length} raw OSM elements...`);
@@ -179,6 +202,11 @@ out center;`;
     const email = tags.email || tags['contact:email'] || null;
     const phone = tags.phone || tags['contact:phone'] || null;
 
+    // Filter out government bodies, school boards, civic buildings, and non-tech offices
+    if (isGovernmentOrNonTechEntity({ name, website, domain, tags })) {
+      continue;
+    }
+
     const address = constructAddress(tags, city.name);
     const locality =
       tags['addr:suburb'] ||
@@ -187,26 +215,26 @@ out center;`;
       '';
 
     // Classification & Evidence
-    let isTech = false;
+    const classification = classifyTechCompany({ name, website, tags });
+    let isTech = classification.isTech;
+    let category = classification.category;
     const techEvidence = [];
-    let category = 'Company';
 
     if (officeTag === 'it' || officeTag === 'software') {
-      isTech = true;
       techEvidence.push({
         what: `OSM office=${officeTag}`,
         sourceUrl
       });
-      category = 'IT & Software';
     } else if (officeTag === 'research') {
-      isTech = true;
       techEvidence.push({
         what: 'OSM office=research',
         sourceUrl
       });
-      category = 'R&D / Research';
-    } else if (officeTag === 'coworking') {
-      category = 'Coworking Space';
+    } else if (isTech) {
+      techEvidence.push({
+        what: `Tech name & services keyword match: "${name}"`,
+        sourceUrl
+      });
     }
 
     // Deduplication Search

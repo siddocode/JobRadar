@@ -33,3 +33,7 @@ Thumbs.db
 .vscode/
 *.swp
 *.swo
+
+# Data caches (OSM / map scanner dumps)
+backend/data/cache/*.json
+!backend/data/cache/.gitkeep

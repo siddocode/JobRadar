@@ -23,7 +23,7 @@ export default function App() {
   const [workModeFilter, setWorkModeFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('open');
   const [companyFilter, setCompanyFilter] = useState('all');
-  const [techOnlyJobs, setTechOnlyJobs] = useState(false);
+  const [techOnlyJobs, setTechOnlyJobs] = useState(true);
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(25);
 
@@ -257,7 +257,7 @@ export default function App() {
     setWorkModeFilter('all');
     setStatusFilter('open');
     setCompanyFilter('all');
-    setTechOnlyJobs(false);
+    setTechOnlyJobs(true);
     setPage(1);
   };
 

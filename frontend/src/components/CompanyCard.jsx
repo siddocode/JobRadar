@@ -236,12 +236,24 @@ export default function CompanyCard({ company, onUpdate }) {
             <div className="detail-text-col">
               <div className="detail-primary-row">
                 <span className="detail-primary-text">{displayLocation}</span>
+                {primaryOffice?.lat != null && primaryOffice?.lng != null && (
+                  <a
+                    href={`https://www.google.com/maps/search/?api=1&query=${primaryOffice.lat},${primaryOffice.lng}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="office-map-pin-link"
+                    title="View office location on Google Maps"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    📍 Map Pin
+                  </a>
+                )}
                 {primaryOffice?.verified && (
                   <span className="verified-badge-mini" title="Verified office address">✓ Verified</span>
                 )}
               </div>
               <span className="detail-secondary-text" title={primaryOffice?.address || 'India'}>
-                {primaryOffice?.address && primaryOffice.address !== cityName ? primaryOffice.address : (company.category || 'Office Address')}
+                {primaryOffice?.address && primaryOffice.address !== cityName ? primaryOffice.address : (primaryOffice?.locality || company.category || 'Office Address')}
               </span>
             </div>
           </div>
@@ -321,16 +333,39 @@ export default function CompanyCard({ company, onUpdate }) {
               ))}
             </div>
           ) : (
-            <div className="no-contacts-row">
-              <span className="no-contact-text">
-                {websiteUrl ? (
-                  <a href={websiteUrl} target="_blank" rel="noopener noreferrer" className="inquire-site-link">
-                    🌐 Direct outreach via company website ↗
-                  </a>
-                ) : (
-                  'No public phone/email listed'
-                )}
-              </span>
+            <div className="outreach-discovery-row">
+              {websiteUrl && (
+                <a
+                  href={websiteUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="outreach-quick-chip web-chip"
+                  onClick={(e) => e.stopPropagation()}
+                  title={`Visit ${company.name}'s official website`}
+                >
+                  🌐 Website ↗
+                </a>
+              )}
+              <a
+                href={`https://www.google.com/search?q=${encodeURIComponent(company.name + ' ' + (primaryOffice?.locality || cityName || '') + ' contact phone email official')}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="outreach-quick-chip search-chip"
+                onClick={(e) => e.stopPropagation()}
+                title={`Search Google for ${company.name} office contact & phone`}
+              >
+                🔍 Search Info ↗
+              </a>
+              <a
+                href={`https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(company.name + ' hr recruiter talent acquisition')}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="outreach-quick-chip linkedin-chip"
+                onClick={(e) => e.stopPropagation()}
+                title={`Find HR recruiters at ${company.name} on LinkedIn`}
+              >
+                💼 Find HR on LinkedIn ↗
+              </a>
             </div>
           )}
         </div>

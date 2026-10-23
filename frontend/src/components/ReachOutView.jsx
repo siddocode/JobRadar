@@ -225,16 +225,39 @@ function ReachOutCard({ comp, onUpdateFollowUp, copyToClipboard, copiedItem }) {
               ))}
             </div>
           ) : (
-            <div className="no-contacts-row">
-              <span className="no-contact-text">
-                {websiteUrl ? (
-                  <a href={websiteUrl} target="_blank" rel="noopener noreferrer" className="inquire-site-link">
-                    🌐 Direct outreach via company website ↗
-                  </a>
-                ) : (
-                  'No public phone/email listed'
-                )}
-              </span>
+            <div className="outreach-discovery-row">
+              {websiteUrl && (
+                <a
+                  href={websiteUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="outreach-quick-chip web-chip"
+                  onClick={(e) => e.stopPropagation()}
+                  title={`Visit ${comp.name}'s official website`}
+                >
+                  🌐 Website ↗
+                </a>
+              )}
+              <a
+                href={`https://www.google.com/search?q=${encodeURIComponent(comp.name + ' ' + (primaryOffice?.locality || cityName || '') + ' contact phone email official')}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="outreach-quick-chip search-chip"
+                onClick={(e) => e.stopPropagation()}
+                title={`Search Google for ${comp.name} office contact & phone`}
+              >
+                🔍 Search Info ↗
+              </a>
+              <a
+                href={`https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(comp.name + ' hr recruiter talent acquisition')}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="outreach-quick-chip linkedin-chip"
+                onClick={(e) => e.stopPropagation()}
+                title={`Find HR recruiters at ${comp.name} on LinkedIn`}
+              >
+                💼 Find HR on LinkedIn ↗
+              </a>
             </div>
           )}
         </div>

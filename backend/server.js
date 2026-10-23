@@ -4,6 +4,11 @@ const dotenv = require('dotenv');
 // Load environment variables
 dotenv.config({ path: path.join(__dirname, '.env') });
 
+const dns = require('dns');
+try {
+  dns.setDefaultResultOrder('ipv4first');
+} catch (_) {}
+
 const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
@@ -38,15 +43,32 @@ app.get('/api/health', (req, res) => {
 });
 
 // Database connection & Server initialization
+async function connectWithRetry(maxAttempts = 3) {
+  const maskedUri = MONGODB_URI.replace(/\/\/([^:]+):([^@]+)@/, '//***:***@');
+  console.log(`[Server] Connecting to MongoDB: ${maskedUri}`);
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      if (attempt > 1) {
+        console.log(`[Server] Retrying MongoDB connection (attempt ${attempt}/${maxAttempts})...`);
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+      }
+      await mongoose.connect(MONGODB_URI, {
+        serverSelectionTimeoutMS: 20000,
+        family: 4
+      });
+      console.log('[Server] MongoDB connected successfully.');
+      return true;
+    } catch (err) {
+      console.warn(`[Server] Connection attempt ${attempt} failed: ${err.message}`);
+      if (attempt === maxAttempts) throw err;
+    }
+  }
+}
+
 async function startServer() {
   try {
-    const maskedUri = MONGODB_URI.replace(/\/\/([^:]+):([^@]+)@/, '//***:***@');
-    console.log(`[Server] Connecting to MongoDB: ${maskedUri}`);
-
-    await mongoose.connect(MONGODB_URI, {
-      serverSelectionTimeoutMS: 5000
-    });
-    console.log('[Server] MongoDB connected successfully.');
+    await connectWithRetry(3);
 
     app.listen(PORT, () => {
       console.log(`[Server] JobRadar API running on http://localhost:${PORT}`);

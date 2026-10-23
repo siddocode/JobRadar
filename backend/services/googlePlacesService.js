@@ -12,9 +12,13 @@ const {
   normalizeCompanyName,
   slugify,
   stringSimilarity,
-  linkJobsForCompany
+  linkJobsForCompany,
+  isGovernmentOrNonTechEntity,
+  classifyTechCompany,
+  detectLocalityFromCoords
 } = require('../utils/companyUtils');
 const { INITIAL_CITIES } = require('../scripts/seedCities');
+const { getTechHubSeedsForCity } = require('../data/seeds/techHubSeeds');
 
 // Active scanning state for Google Places
 const googlePlacesScanState = {
@@ -102,8 +106,17 @@ async function fetchFallbackPlaces(city) {
       const raw = fs.readFileSync(cacheFile, 'utf8');
       const cached = JSON.parse(raw);
       if (cached && Array.isArray(cached.elements) && cached.elements.length > 0) {
-        console.log(`[GooglePlaces Fallback] Loaded ${cached.elements.length} cached local map entities from ${cacheFile}`);
-        elements = cached.elements;
+        // Strict filter: Exclude all government, educational boards, municipal, or non-tech offices
+        elements = cached.elements.filter(el => {
+          const tags = el.tags || {};
+          if (!tags.name) return false;
+          return !isGovernmentOrNonTechEntity({
+            name: tags.name,
+            website: tags.website || tags['contact:website'] || tags.url,
+            tags
+          });
+        });
+        console.log(`[GooglePlaces Fallback] Loaded ${elements.length} verified non-gov entities from cache (${cacheFile})`);
       }
     } catch (e) {
       console.warn(`[GooglePlaces Fallback] Could not read cache:`, e.message);
@@ -114,26 +127,28 @@ async function fetchFallbackPlaces(city) {
     const [south, west, north, east] = city.bbox;
     const OVERPASS_ENDPOINTS = [
       'https://overpass-api.de/api/interpreter',
-      'https://lz4.overpass-api.de/api/interpreter',
-      'https://z.overpass-api.de/api/interpreter',
-      'https://overpass.kumi.systems/api/interpreter'
+      'https://overpass.kumi.systems/api/interpreter',
+      'https://lz4.overpass-api.de/api/interpreter'
     ];
 
-    const query = `[out:json][timeout:90];
+    // Fast, structured query targeting real tech offices & coworking spaces
+    const query = `[out:json][timeout:15];
 (
-  node["office"](${south},${west},${north},${east});
-  way["office"](${south},${west},${north},${east});
-  node["name"~"Software|Tech|Technologies|Solutions|Infotech|Labs|Digital|Consultancy",i](${south},${west},${north},${east});
-  way["name"~"Software|Tech|Technologies|Solutions|Infotech|Labs|Digital|Consultancy",i](${south},${west},${north},${east});
+  node["office"~"it|software|telecommunication|coworking|research|company|consulting"](${south},${west},${north},${east});
+  way["office"~"it|software|telecommunication|coworking|research|company|consulting"](${south},${west},${north},${east});
   node["amenity"="coworking_space"](${south},${west},${north},${east});
   way["amenity"="coworking_space"](${south},${west},${north},${east});
+  node["office"]["name"~"Software|Tech|Technologies|Solutions|Infotech|Labs|Digital|Consultancy|Cloud|Systems|AI|Analytics",i](${south},${west},${north},${east});
+  way["office"]["name"~"Software|Tech|Technologies|Solutions|Infotech|Labs|Digital|Consultancy|Cloud|Systems|AI|Analytics",i](${south},${west},${north},${east});
+  node["building"="office"]["name"~"Software|Tech|Technologies|Solutions|Infotech|Labs|Digital|Consultancy|Cloud|Systems|AI|Analytics",i](${south},${west},${north},${east});
+  way["building"="office"]["name"~"Software|Tech|Technologies|Solutions|Infotech|Labs|Digital|Consultancy|Cloud|Systems|AI|Analytics",i](${south},${west},${north},${east});
 );
 out center;`;
 
     for (const endpoint of OVERPASS_ENDPOINTS) {
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 35000);
+        const timeoutId = setTimeout(() => controller.abort(), 6000);
         const response = await fetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'text/plain', 'User-Agent': 'JobRadar/1.0 (contact: sid@jobradar.local)' },
@@ -144,9 +159,17 @@ out center;`;
         if (response.ok) {
           const json = await response.json();
           if (json && Array.isArray(json.elements) && json.elements.length > 0) {
-            elements = json.elements;
+            elements = json.elements.filter(el => {
+              const tags = el.tags || {};
+              if (!tags.name) return false;
+              return !isGovernmentOrNonTechEntity({
+                name: tags.name,
+                website: tags.website || tags['contact:website'] || tags.url,
+                tags
+              });
+            });
             try {
-              fs.writeFileSync(cacheFile, JSON.stringify(json, null, 2), 'utf8');
+              fs.writeFileSync(cacheFile, JSON.stringify({ elements }, null, 2), 'utf8');
             } catch (_) {}
             break;
           }
@@ -157,32 +180,120 @@ out center;`;
     }
   }
 
-  return elements.map(el => {
-    const tags = el.tags || {};
-    const lat = el.lat != null ? el.lat : el.center?.lat;
-    const lng = el.lon != null ? el.lon : el.center?.lon;
-    const parts = [];
-    if (tags['addr:housenumber']) parts.push(tags['addr:housenumber']);
-    if (tags['addr:street']) parts.push(tags['addr:street']);
-    if (tags['addr:suburb']) parts.push(tags['addr:suburb']);
-    if (tags['addr:city']) parts.push(tags['addr:city']);
-    else if (city.name) parts.push(city.name);
-    const address = parts.length > 0 ? parts.join(', ') : (tags['addr:full'] || `${tags.name}, ${city.name}`);
-    return {
-      name: tags.name,
-      formatted_address: address,
-      locality: tags['addr:suburb'] || tags['addr:district'] || city.name,
-      lat,
-      lng,
-      website: tags.website || tags['contact:website'] || tags.url || null,
-      phone: tags.phone || tags['contact:phone'] || null,
-      email: tags.email || tags['contact:email'] || null,
-      source: `https://www.openstreetmap.org/${el.type}/${el.id}`,
-      rating: 4.6,
-      user_ratings_total: 15,
-      isFallback: true
-    };
-  }).filter(p => p.name && p.lat && p.lng);
+  // If Overpass failed or timed out, fall back to curated tech hub seed data for tech hubs
+  if (elements.length === 0) {
+    const seeds = getTechHubSeedsForCity(city.slug, city.name, city.bbox);
+    if (seeds && seeds.length > 0) {
+      console.log(`[GooglePlaces Fallback] Falling back to curated tech hub seeds for ${city.name} (${seeds.length} verified companies)`);
+      try {
+        const seedElements = seeds.map((s, idx) => ({
+          type: 'node',
+          id: 9900000000 + idx,
+          lat: s.lat,
+          lon: s.lng,
+          tags: {
+            name: s.name,
+            'addr:full': s.formatted_address,
+            'addr:suburb': s.locality,
+            website: s.website,
+            phone: s.phone,
+            office: 'it'
+          }
+        }));
+        fs.writeFileSync(cacheFile, JSON.stringify({ elements: seedElements }, null, 2), 'utf8');
+      } catch (_) {}
+
+      return seeds.map(s => ({
+        name: s.name,
+        formatted_address: s.formatted_address,
+        locality: s.locality || city.name,
+        lat: s.lat,
+        lng: s.lng,
+        website: s.website,
+        phone: s.phone,
+        rating: s.rating,
+        user_ratings_total: s.user_ratings_total,
+        category: s.category,
+        isTech: s.isTech,
+        source: s.website || `https://maps.google.com/?q=${encodeURIComponent(s.name + ' ' + city.name)}`,
+        isFallback: true
+      }));
+    }
+
+    throw new Error(`Map discovery service timed out while scanning "${city.name}". Please retry in a few moments or provide a Google Places API key.`);
+  }
+
+  return elements
+    .filter(el => {
+      const tags = el.tags || {};
+      if (!tags.name) return false;
+      return !isGovernmentOrNonTechEntity({
+        name: tags.name,
+        website: tags.website || tags['contact:website'] || tags.url,
+        tags
+      });
+    })
+    .map(el => {
+      const tags = el.tags || {};
+      const lat = el.lat != null ? el.lat : el.center?.lat;
+      const lng = el.lon != null ? el.lon : el.center?.lon;
+
+      const parts = [];
+      if (tags['addr:housename']) parts.push(tags['addr:housename']);
+      if (tags['addr:floor']) parts.push(`Floor ${tags['addr:floor']}`);
+      if (tags['addr:unit']) parts.push(`Unit ${tags['addr:unit']}`);
+      if (tags['addr:block']) parts.push(`Block ${tags['addr:block']}`);
+      if (tags['addr:housenumber']) parts.push(tags['addr:housenumber']);
+      if (tags['addr:street']) parts.push(tags['addr:street']);
+      if (tags['addr:place']) parts.push(tags['addr:place']);
+      if (tags['addr:suburb']) parts.push(tags['addr:suburb']);
+      if (tags['addr:district']) parts.push(tags['addr:district']);
+      if (tags['loc_name']) parts.push(tags['loc_name']);
+
+      let address = '';
+      if (tags['addr:full'] && tags['addr:full'].length > 10) {
+        address = tags['addr:full'];
+      } else if (parts.length > 0) {
+        if (tags['addr:postcode']) parts.push(tags['addr:postcode']);
+        if (city.name && !parts.some(p => p.toLowerCase().includes(city.name.toLowerCase()))) {
+          parts.push(city.name);
+        }
+        address = parts.join(', ');
+      }
+
+      // If address is still missing street details, detect tech corridor from GPS
+      const detectedLocality = detectLocalityFromCoords(lat, lng, city.slug);
+      const locality = tags['addr:suburb'] || tags['addr:district'] || tags['addr:place'] || detectedLocality || city.name;
+      if (!address || address === city.name) {
+        address = detectedLocality
+          ? `${tags.name}, ${detectedLocality}, ${city.name}`
+          : `${tags.name}, ${city.name}`;
+      }
+
+      const website = tags.website || tags['contact:website'] || tags.url || null;
+      const phone = tags.phone || tags['contact:phone'] || tags['contact:mobile'] || tags.mobile || tags['contact:whatsapp'] || null;
+      const email = tags.email || tags['contact:email'] || null;
+      const classification = classifyTechCompany({ name: tags.name, website, tags });
+
+      return {
+        name: tags.name,
+        formatted_address: address,
+        locality,
+        lat,
+        lng,
+        website,
+        phone,
+        email,
+        source: `https://www.openstreetmap.org/${el.type}/${el.id}`,
+        rating: 4.6,
+        user_ratings_total: 15,
+        category: classification.category,
+        isTech: classification.isTech,
+        tags,
+        isFallback: true
+      };
+    })
+    .filter(p => p.name && p.lat && p.lng);
 }
 
 /**
@@ -257,6 +368,15 @@ async function scanGooglePlacesCity({ citySlug, customApiKey = null, radius = 25
           const details = await fetchPlaceDetails(place.place_id, apiKey);
           const fullPlace = details || place;
 
+          // Exclude any government or civic offices
+          if (isGovernmentOrNonTechEntity({
+            name: fullPlace.name || place.name,
+            website: fullPlace.website,
+            tags: { types: fullPlace.types }
+          })) {
+            continue;
+          }
+
           rawPlacesList.push({
             name: fullPlace.name || place.name,
             placeId: place.place_id,
@@ -282,10 +402,16 @@ async function scanGooglePlacesCity({ citySlug, customApiKey = null, radius = 25
       rawPlacesList = await fetchFallbackPlaces(city);
     }
 
-    // Sort discovered places by data richness (phones, websites, and review ratings first)
+    // Sort discovered places: prioritize verified Tech/IT companies first, then rich contact info & street addresses
     rawPlacesList.sort((a, b) => {
-      const scoreA = (a.phone ? 3 : 0) + (a.website ? 2 : 0) + (a.rating ? 1 : 0);
-      const scoreB = (b.phone ? 3 : 0) + (b.website ? 2 : 0) + (b.rating ? 1 : 0);
+      const techScoreA = (a.isTech || a.category === 'Software & IT Services' || a.category === 'AI & Data Solutions' || a.category === 'IT Consulting & Services' || a.category === 'Tech / Product Company') ? 50 : 0;
+      const techScoreB = (b.isTech || b.category === 'Software & IT Services' || b.category === 'AI & Data Solutions' || b.category === 'IT Consulting & Services' || b.category === 'Tech / Product Company') ? 50 : 0;
+      const contactScoreA = (a.phone ? 30 : 0) + (a.website ? 25 : 0) + (a.email ? 20 : 0);
+      const contactScoreB = (b.phone ? 30 : 0) + (b.website ? 25 : 0) + (b.email ? 20 : 0);
+      const addrScoreA = (a.formatted_address && a.formatted_address !== city.name && !a.formatted_address.endsWith(`, ${city.name}`) ? 10 : 0);
+      const addrScoreB = (b.formatted_address && b.formatted_address !== city.name && !b.formatted_address.endsWith(`, ${city.name}`) ? 10 : 0);
+      const scoreA = techScoreA + contactScoreA + addrScoreA + (a.rating ? 1 : 0);
+      const scoreB = techScoreB + contactScoreB + addrScoreB + (b.rating ? 1 : 0);
       return scoreB - scoreA;
     });
 
@@ -330,7 +456,16 @@ async function scanGooglePlacesCity({ citySlug, customApiKey = null, radius = 25
       const address = place.formatted_address || `${name}, ${city.name}`;
       const locality = place.locality || extractLocality(address, city.name);
       const phone = place.phone ? place.phone.trim() : null;
+      const email = place.email ? place.email.trim() : null;
       const sourceUrl = place.source || `https://maps.google.com/?q=${encodeURIComponent(name + ' ' + city.name)}`;
+      const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${place.lat},${place.lng}`;
+      const searchLoc = locality && locality !== city.name ? `${locality}, ${city.name}` : city.name;
+      const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(name + ' ' + searchLoc + ' contact phone website official')}`;
+      const linkedinUrl = `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(name + ' hr recruiter talent acquisition')}`;
+
+      const classification = (place.category && place.isTech !== undefined)
+        ? { category: place.category, isTech: place.isTech }
+        : classifyTechCompany({ name, website, tags: place.tags });
 
       previewList.push({
         name,
@@ -340,8 +475,14 @@ async function scanGooglePlacesCity({ citySlug, customApiKey = null, radius = 25
         lng: place.lng,
         website,
         phone,
+        email,
+        mapsUrl,
+        searchUrl,
+        linkedinUrl,
         rating: place.rating,
-        reviewsCount: place.user_ratings_total
+        reviewsCount: place.user_ratings_total,
+        category: classification.category,
+        isTech: classification.isTech
       });
 
       // --- High-Speed In-Memory Deduplication Search ---
@@ -355,13 +496,26 @@ async function scanGooglePlacesCity({ citySlug, customApiKey = null, radius = 25
       } else if (nameMap.has(cleanNameKey)) {
         matchedCompany = nameMap.get(cleanNameKey);
       } else {
-        // Fast coordinate proximity check against in-memory office cache
+        // Coordinate proximity check: only match if nearby AND names are similar
         const nearby = existingOffices.find(o =>
           Math.abs(o.lat - place.lat) < 0.0006 && Math.abs(o.lng - place.lng) < 0.0006
         );
         if (nearby) {
-          matchedCompany = existingCompanies.find(c => c._id.toString() === nearby.companyId.toString());
+          const cand = existingCompanies.find(c => c._id.toString() === nearby.companyId.toString());
+          if (cand && (cand.name.toLowerCase().includes(cleanNameKey) || cleanNameKey.includes(cand.name.toLowerCase()))) {
+            matchedCompany = cand;
+          }
         }
+      }
+
+      // If not in in-memory cache, check database by indexed domain / exact name
+      if (!matchedCompany) {
+        matchedCompany = await Company.findOne({
+          $or: [
+            domain ? { domain: domain.toLowerCase().trim() } : null,
+            { name: { $regex: new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } }
+          ].filter(Boolean)
+        });
       }
 
       // --- Database Upsert ---
@@ -370,12 +524,15 @@ async function scanGooglePlacesCity({ citySlug, customApiKey = null, radius = 25
         const updateOps = { $addToSet: { sources: sourceUrl } };
         const setOps = {};
 
-        // Populate website/domain if missing
+        // Populate website/domain if missing and not already claimed
         if (!matchedCompany.website && website) {
           matchedCompany.website = website;
-          matchedCompany.domain = domain;
           setOps.website = website;
-          setOps.domain = domain;
+          if (!matchedCompany.domain && domain && !domainMap.has(domain.toLowerCase().trim())) {
+            matchedCompany.domain = domain;
+            setOps.domain = domain;
+            domainMap.set(domain.toLowerCase().trim(), matchedCompany);
+          }
           changed = true;
         }
 
@@ -404,8 +561,13 @@ async function scanGooglePlacesCity({ citySlug, customApiKey = null, radius = 25
         }
 
         if (changed) {
-          await Company.updateOne({ _id: matchedCompany._id }, updateOps);
-          updatedCompanies++;
+          try {
+            await Company.updateOne({ _id: matchedCompany._id }, updateOps);
+            updatedCompanies++;
+          } catch (upErr) {
+            console.warn(`[GooglePlaces] Soft-handled update error for ${matchedCompany.name}:`, upErr.message);
+            skippedDuplicates++;
+          }
         } else {
           skippedDuplicates++;
         }
@@ -442,45 +604,73 @@ async function scanGooglePlacesCity({ citySlug, customApiKey = null, radius = 25
           ? `Google Places rating: ${place.rating}★ (${place.user_ratings_total || 0} reviews). ${address}`
           : `Discovered via map-wise scan in ${city.name}. ${address}`;
 
-        const newComp = await Company.create({
-          name,
-          slug,
-          domain: domain || null,
-          website: website || null,
-          category: 'Software & IT Services',
-          isTech: true,
-          followUpStatus: 'to_contact',
-          notes: notesText,
-          contact: {
-            emails: emailsList,
-            phones: phonesList,
-            contactPageUrl: website ? `${website.replace(/\/+$/, '')}/contact` : null
-          },
-          sources: [sourceUrl]
-        });
+        let newComp = null;
+        try {
+          newComp = await Company.create({
+            name,
+            slug,
+            domain: domain || null,
+            website: website || null,
+            category: classification.category,
+            isTech: classification.isTech,
+            followUpStatus: 'to_contact',
+            notes: notesText,
+            contact: {
+              emails: emailsList,
+              phones: phonesList,
+              contactPageUrl: website ? `${website.replace(/\/+$/, '')}/contact` : null
+            },
+            sources: [sourceUrl]
+          });
+        } catch (createErr) {
+          const isDup = createErr.code === 11000 ||
+            createErr.errorResponse?.code === 11000 ||
+            (createErr.message && createErr.message.includes('E11000'));
+          if (isDup) {
+            newComp = await Company.findOne({
+              $or: [
+                domain ? { domain: domain.toLowerCase().trim() } : null,
+                { name: { $regex: new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } }
+              ].filter(Boolean)
+            });
+            if (newComp) {
+              await Company.updateOne({ _id: newComp._id }, { $addToSet: { sources: sourceUrl } });
+              updatedCompanies++;
+            }
+          }
+          if (!newComp) throw createErr;
+        }
 
         // Add to in-memory lookup cache so same-batch duplicates are handled seamlessly
         nameMap.set(cleanNameKey, newComp);
         if (domain) domainMap.set(domain.toLowerCase().trim(), newComp);
         sourceMap.set(sourceUrl, newComp);
 
-        // Create verified Office
-        const newOffice = await Office.create({
-          companyId: newComp._id,
-          cityId: city._id,
-          address,
-          locality,
-          lat: place.lat,
-          lng: place.lng,
-          addressSource: isRealGoogleApi ? 'google_places' : 'google_places_fallback',
-          addressType: 'development',
-          verified: true
-        });
-        existingOffices.push(newOffice);
+        // Create or update verified Office
+        let office = existingOffices.find(o => o.companyId && o.companyId.toString() === newComp._id.toString());
+        if (!office) {
+          office = await Office.findOne({ companyId: newComp._id, cityId: city._id });
+        }
+        if (!office) {
+          office = await Office.create({
+            companyId: newComp._id,
+            cityId: city._id,
+            address,
+            locality,
+            lat: place.lat,
+            lng: place.lng,
+            addressSource: isRealGoogleApi ? 'google_places' : 'google_places_fallback',
+            addressType: 'development',
+            verified: true
+          });
+          existingOffices.push(office);
+          createdOffices++;
+        } else if (office.lat == null && place.lat != null) {
+          await Office.updateOne({ _id: office._id }, { $set: { lat: place.lat, lng: place.lng, address } });
+        }
 
         // Link any matching open jobs
         await linkJobsForCompany(newComp);
-
         createdCompanies++;
         createdOffices++;
       }
