@@ -1,0 +1,15 @@
+const express = require('express');
+const router = express.Router();
+const authController = require('../controllers/authController');
+const { requireAuth } = require('../middleware/authMiddleware');
+
+// Public auth endpoints
+router.post('/send-otp', authController.sendOtp);
+router.post('/register', authController.register);
+router.post('/login', authController.login);
+router.post('/login-otp', authController.loginWithOtp);
+
+// Protected auth endpoints
+router.get('/me', requireAuth, authController.getMe);
+
+module.exports = router;

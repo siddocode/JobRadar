@@ -15,6 +15,7 @@ const mongoose = require('mongoose');
 
 const jobRoutes = require('./routes/jobRoutes');
 const directoryRoutes = require('./routes/directoryRoutes');
+const authRoutes = require('./routes/authRoutes');
 const jobController = require('./controllers/jobController');
 
 const app = express();
@@ -26,6 +27,7 @@ app.use(cors());
 app.use(express.json());
 
 // Mount API routes
+app.use('/api/auth', authRoutes);
 app.use('/api/jobs', jobRoutes);
 app.use('/api/directory', directoryRoutes);
 app.get('/api/cities', jobController.getCities);

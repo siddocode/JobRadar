@@ -1,5 +1,6 @@
 const Job = require('../models/Job');
 const SourceRun = require('../models/SourceRun');
+const { analyzeJobEligibility } = require('../services/eligibilityAnalyzer');
 
 /**
  * GET /api/jobs
@@ -390,12 +391,51 @@ async function getSyncStatus(req, res) {
   });
 }
 
+/**
+ * GET /api/jobs/:id/eligibility
+ * Returns detailed eligibility metrics, freshers fit, skills, and work authorization.
+ */
+async function getJobEligibility(req, res) {
+  try {
+    const { id } = req.params;
+    if (!id || typeof id !== 'string') {
+      return res.status(400).json({ success: false, error: 'Job ID parameter is required' });
+    }
+
+    let job = null;
+    if (id.match(/^[0-9a-fA-F]{24}$/)) {
+      job = await Job.findById(id).lean();
+    }
+    if (!job) {
+      job = await Job.findOne({ sourceJobId: id }).lean();
+    }
+    if (!job) {
+      return res.status(404).json({ success: false, error: 'Job not found' });
+    }
+
+    const eligibility = analyzeJobEligibility(job);
+
+    return res.status(200).json({
+      success: true,
+      eligibility
+    });
+  } catch (error) {
+    console.error('[jobController:getJobEligibility] Error:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to analyze job eligibility',
+      message: error.message
+    });
+  }
+}
+
 module.exports = {
   getJobs,
   getCities,
   getCountries,
   getJobStats,
   triggerSync,
-  getSyncStatus
+  getSyncStatus,
+  getJobEligibility
 };
 

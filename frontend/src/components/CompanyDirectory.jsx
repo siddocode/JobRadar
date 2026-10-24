@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import CompanyCard from './CompanyCard';
+import PersonalizeModal from './PersonalizeModal';
+import { useAuth } from '../context/AuthContext';
 
 const AVAILABLE_INDIAN_HUBS = [
   { slug: 'kolkata', name: 'Kolkata', state: 'West Bengal', tier: 1 },
@@ -44,6 +46,10 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
   const [companies, setCompanies] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  // Auth & Personalize modal
+  const { authFetch } = useAuth();
+  const [personalizeCompany, setPersonalizeCompany] = useState(null);
 
   // Filters
   const [selectedCity, setSelectedCity] = useState('all');
@@ -173,7 +179,7 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
       params.append('page', String(page));
       params.append('limit', '30');
 
-      const res = await fetch(`/api/directory/companies?${params.toString()}`);
+      const res = await authFetch(`/api/directory/companies?${params.toString()}`);
       if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
 
       const data = await res.json();
@@ -367,13 +373,13 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
   };
 
   const handleCompanyUpdate = (id, updatedFields) => {
-
     setCompanies(prev =>
       prev.map(c => (c._id === id ? { ...c, ...updatedFields } : c))
     );
-    // Refresh aggregate stats if follow-up changed
+    // Refresh aggregate stats and app meta if follow-up changed
     if (updatedFields.followUpStatus) {
       fetchAggregateMetrics();
+      if (onRefreshMeta) onRefreshMeta();
     }
   };
 
@@ -457,8 +463,9 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
                 className="clear-search-btn"
                 onClick={() => { setSearchQuery(''); setPage(1); }}
                 title="Clear search"
+                aria-label="Clear search"
               >
-                ✕
+                Clear
               </button>
             )}
           </div>
@@ -478,21 +485,21 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
                 setPage(1);
               }}
             >
-              <option value="all">🌐 All Indian Cities ({groupedDirectoryCities.totalOffices} offices)</option>
+              <option value="all">All Indian Cities ({groupedDirectoryCities.totalOffices} offices)</option>
               {groupedDirectoryCities.tier1.length > 0 && (
-                <optgroup label="🏢 Major Indian Tech Hubs">
+                <optgroup label="Major Indian Tech Hubs">
                   {groupedDirectoryCities.tier1.map((c) => (
                     <option key={c.slug} value={c.slug}>
-                      {c.name}{c.state ? `, ${c.state}` : ''} {c.officeCount > 0 ? `— ✓ ${c.officeCount} saved` : '— ⚡ Ready to scan'}
+                      {c.name}{c.state ? `, ${c.state}` : ''} {c.officeCount > 0 ? `(${c.officeCount} saved)` : '(Ready to scan)'}
                     </option>
                   ))}
                 </optgroup>
               )}
               {groupedDirectoryCities.others.length > 0 && (
-                <optgroup label="📍 Regional IT Clusters & Cities">
+                <optgroup label="Regional IT Clusters and Cities">
                   {groupedDirectoryCities.others.map((c) => (
                     <option key={c.slug} value={c.slug}>
-                      {c.name}{c.state ? `, ${c.state}` : ''} {c.officeCount > 0 ? `— ✓ ${c.officeCount} saved` : '— ⚡ Ready to scan'}
+                      {c.name}{c.state ? `, ${c.state}` : ''} {c.officeCount > 0 ? `(${c.officeCount} saved)` : '(Ready to scan)'}
                     </option>
                   ))}
                 </optgroup>
@@ -509,10 +516,16 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
               }
               setShowDiscoveryModal(true);
             }}
-            title="Scan Google Places or OpenStreetMap map-wise for local startups & consultancies"
+            title="Scan Google Places or OpenStreetMap map-wise for local startups and consultancies"
             id="open-city-scanner-btn"
           >
-            <span className="osm-scan-icon">🗺️</span>
+            <span className="osm-scan-icon">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2">
+                <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6" />
+                <line x1="8" y1="2" x2="8" y2="18" />
+                <line x1="16" y1="6" x2="16" y2="22" />
+              </svg>
+            </span>
             <span className="osm-scan-text">
               {selectedCity !== 'all' 
                 ? `Scan ${cities.find(c => c.slug === selectedCity)?.name || selectedCity} (Google / Map)` 
@@ -528,7 +541,7 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
             title="Add a company or startup directly"
             id="open-add-company-btn"
           >
-            <span className="add-icon">➕</span>
+            <span className="add-icon">+</span>
             <span className="add-text">Add Company</span>
           </button>
           */}
@@ -583,7 +596,7 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
 
         {hasActiveFilters && (
           <button className="reset-filters-inline-btn" onClick={handleResetFilters}>
-            Reset Filters ✕
+            Reset Filters
           </button>
         )}
       </div>
@@ -596,7 +609,7 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
         </div>
       ) : error ? (
         <div className="error-banner">
-          <span>⚠️ {error}</span>
+          <span>{error}</span>
           <button className="retry-btn" onClick={fetchCompanies}>Retry</button>
         </div>
       ) : companies.length === 0 ? (
@@ -619,6 +632,7 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
                 key={comp._id}
                 company={comp}
                 onUpdate={handleCompanyUpdate}
+                onPersonalize={setPersonalizeCompany}
               />
             ))}
           </div>
@@ -635,14 +649,14 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
                   disabled={page <= 1}
                   onClick={() => setPage(p => Math.max(1, p - 1))}
                 >
-                  ← Previous
+                  Previous
                 </button>
                 <button
                   className="page-btn"
                   disabled={page >= totalPages}
                   onClick={() => setPage(p => Math.min(totalPages, p + 1))}
                 >
-                  Next →
+                  Next
                 </button>
               </div>
             </div>
@@ -655,28 +669,34 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
         <div className="modal-backdrop" onClick={() => !isScanning && setShowDiscoveryModal(false)}>
           <div className="discovery-modal-card" onClick={(e) => e.stopPropagation()}>
             <div className="discovery-modal-header">
-              <div className="discovery-modal-title-group">
+              <div className="discovery-header-top-row">
                 <div className="discovery-modal-badge">
-                  {scannerEngine === 'google_places' ? 'Google Places Map-Wise Engine' : 'OpenStreetMap Overpass Engine'}
+                  <span className="live-pulse-dot" />
+                  <span>{scannerEngine === 'google_places' ? 'Google Places Radar' : 'OpenStreetMap Engine'}</span>
                 </div>
-                <h3 className="discovery-modal-title">
-                  {scannerEngine === 'google_places' ? 'Google Places Startup & Office Scanner' : 'Discover City Startups & Offices'}
-                </h3>
-                <p className="discovery-modal-subtitle">
-                  {scannerEngine === 'google_places'
-                    ? 'Scans map coordinates for local software consultancies, agencies, IT startups, contact phones & Google review ratings.'
-                    : 'Extracts physical IT campuses, registered tech offices & co-working spaces directly from OpenStreetMap.'}
-                </p>
-              </div>
-              {!isScanning && (
                 <button
+                  type="button"
                   className="modal-close-btn"
                   onClick={() => setShowDiscoveryModal(false)}
                   aria-label="Close modal"
+                  title="Close scanner (scan continues in background)"
                 >
-                  ✕
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
                 </button>
-              )}
+              </div>
+              <div className="discovery-modal-title-group">
+                <h3 className="discovery-modal-title">
+                  {scannerEngine === 'google_places' ? 'Startup & Tech Office Scanner' : 'City Startup & Office Discovery'}
+                </h3>
+                <p className="discovery-modal-subtitle">
+                  {scannerEngine === 'google_places'
+                    ? 'Discovers verified software companies, IT consultancies, dev agencies, and local tech hubs via Google Places coordinates.'
+                    : 'Extracts physical IT campuses, registered tech offices & co-working spaces directly from OpenStreetMap.'}
+                </p>
+              </div>
             </div>
 
             <div className="discovery-modal-body">
@@ -695,7 +715,11 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
                     }}
                     disabled={isScanning}
                   >
-                    <span>🌐 Google Places</span>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
+                      <circle cx="12" cy="9" r="2.5"/>
+                    </svg>
+                    <span>Google Places</span>
                     <span className="tab-badge">Map-Wise</span>
                   </button>
                   <button
@@ -709,7 +733,13 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
                     }}
                     disabled={isScanning}
                   >
-                    <span>⚡ OpenStreetMap</span>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="10"/>
+                      <line x1="2" y1="12" x2="22" y2="12"/>
+                      <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                    </svg>
+                    <span>OpenStreetMap</span>
+                    <span className="tab-badge free">Free OSM</span>
                   </button>
                 </div>
               </div>
@@ -717,12 +747,18 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
               {/* City Selector */}
               <div className="discovery-form-group">
                 <label className="discovery-label" htmlFor="scanner-city-select">
-                  Select Target City
+                  Target City Hub
                 </label>
                 <div className="discovery-select-wrapper">
+                  <div className="discovery-select-icon">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
+                      <circle cx="12" cy="9" r="2.5"/>
+                    </svg>
+                  </div>
                   <select
                     id="scanner-city-select"
-                    className="discovery-city-select"
+                    className="discovery-city-select with-left-icon"
                     value={discoveryCitySlug}
                     onChange={(e) => {
                       setDiscoveryCitySlug(e.target.value);
@@ -730,35 +766,35 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
                     }}
                     disabled={isScanning}
                   >
-                    <optgroup label="🏢 Tier-1 IT & Tech Capitals">
+                    <optgroup label="Tier 1 Tech Capitals">
                       {AVAILABLE_INDIAN_HUBS.filter(h => h.tier === 1).map((h) => {
                         const matched = cities.find(c => c.slug === h.slug);
                         const count = matched?.officeCount || 0;
                         return (
                           <option key={h.slug} value={h.slug}>
-                            {h.name}, {h.state} — {count > 0 ? `✓ ${count} saved in db` : '⚡ Ready to scan'}
+                            {h.name}, {h.state} {count > 0 ? `(${count} saved in db)` : '(Ready to scan)'}
                           </option>
                         );
                       })}
                     </optgroup>
-                    <optgroup label="🚀 Tier-2 Tech Hubs & IT Corridors">
+                    <optgroup label="Tier 2 Tech Hubs and IT Corridors">
                       {AVAILABLE_INDIAN_HUBS.filter(h => h.tier === 2).map((h) => {
                         const matched = cities.find(c => c.slug === h.slug);
                         const count = matched?.officeCount || 0;
                         return (
                           <option key={h.slug} value={h.slug}>
-                            {h.name}, {h.state} — {count > 0 ? `✓ ${count} saved in db` : '⚡ Ready to scan'}
+                            {h.name}, {h.state} {count > 0 ? `(${count} saved in db)` : '(Ready to scan)'}
                           </option>
                         );
                       })}
                     </optgroup>
-                    <optgroup label="📍 Tier-3 & Emerging Tech Centers">
+                    <optgroup label="Tier 3 and Emerging Tech Centers">
                       {AVAILABLE_INDIAN_HUBS.filter(h => h.tier === 3).map((h) => {
                         const matched = cities.find(c => c.slug === h.slug);
                         const count = matched?.officeCount || 0;
                         return (
                           <option key={h.slug} value={h.slug}>
-                            {h.name}, {h.state} — {count > 0 ? `✓ ${count} saved in db` : '⚡ Ready to scan'}
+                            {h.name}, {h.state} {count > 0 ? `(${count} saved in db)` : '(Ready to scan)'}
                           </option>
                         );
                       })}
@@ -780,7 +816,8 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
                         onClick={() => setScanRadius(15000)}
                         disabled={isScanning}
                       >
-                        15 km (Core City)
+                        <span className="radius-val">15 km</span>
+                        <span className="radius-lbl">Core City</span>
                       </button>
                       <button
                         type="button"
@@ -788,7 +825,8 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
                         onClick={() => setScanRadius(25000)}
                         disabled={isScanning}
                       >
-                        25 km (IT Corridors)
+                        <span className="radius-val">25 km</span>
+                        <span className="radius-lbl">IT Corridors</span>
                       </button>
                       <button
                         type="button"
@@ -796,41 +834,63 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
                         onClick={() => setScanRadius(50000)}
                         disabled={isScanning}
                       >
-                        50 km (Greater Metro)
+                        <span className="radius-val">50 km</span>
+                        <span className="radius-lbl">Greater Metro</span>
                       </button>
                     </div>
                   </div>
 
-                  {/* Coverage Info Pill */}
-                  <div className="discovery-city-info-pill">
-                    <span className="info-icon">📍</span>
-                    <span>
-                      Scanning map radius in{' '}
-                      <strong>{AVAILABLE_INDIAN_HUBS.find(h => h.slug === discoveryCitySlug)?.name || discoveryCitySlug}</strong>{' '}
-                      for software agencies, IT consultancies, app developers & tech startups.
-                    </span>
-                  </div>
-
-                  <div className="discovery-city-info-pill" style={{ marginTop: '8px', background: 'rgba(16, 185, 129, 0.08)', borderColor: 'rgba(16, 185, 129, 0.25)', color: '#059669' }}>
-                    <span className="info-icon">🛡️</span>
-                    <span>
-                      <strong>Tech Roles & Software Only:</strong> All government offices, school/exam boards, municipal buildings, and non-tech administrative places are filtered out.
-                    </span>
+                  {/* Unified Scope Card */}
+                  <div className="discovery-scope-card">
+                    <div className="scope-row">
+                      <div className="scope-icon-wrap info">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="12" cy="12" r="10" />
+                          <line x1="12" y1="16" x2="12" y2="12" />
+                          <line x1="12" y1="8" x2="12.01" y2="8" />
+                        </svg>
+                      </div>
+                      <div className="scope-text-wrap">
+                        Scanning map radius in{' '}
+                        <strong>{AVAILABLE_INDIAN_HUBS.find(h => h.slug === discoveryCitySlug)?.name || discoveryCitySlug}</strong>{' '}
+                        for software agencies, IT consultancies, app developers & tech startups.
+                      </div>
+                    </div>
                   </div>
 
                   {/* Optional Custom Google API Key Accordion */}
-                  <div className="discovery-form-group">
+                  <div className="api-key-accordion-section">
                     <button
                       type="button"
-                      className="api-key-accordion-toggle"
+                      className={`api-key-accordion-toggle ${showApiKeyInput ? 'is-expanded' : ''}`}
                       onClick={() => setShowApiKeyInput(!showApiKeyInput)}
                     >
-                      <span>🔑 {showApiKeyInput ? 'Hide API Key Settings' : 'Have a Google Places API Key? (Optional)'}</span>
+                      <div className="api-key-toggle-left">
+                        <svg className="api-key-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M21 2l-2 2m-1.5 1.5L16 7l-1.5-1.5-4 4 1.5 1.5L9 14l-1.5-1.5-4 4A3 3 0 1 0 7.8 20.8l4-4 1.5 1.5 3-3-1.5-1.5 1.5-1.5 2-2z" />
+                        </svg>
+                        <span>Have a Google Places API Key?</span>
+                        <span className="api-key-optional-tag">Optional</span>
+                      </div>
+                      <svg
+                        className={`accordion-chevron ${showApiKeyInput ? 'is-open' : ''}`}
+                        width="13"
+                        height="13"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <polyline points="6 9 12 15 18 9" />
+                      </svg>
                     </button>
                     {showApiKeyInput && (
                       <div className="api-key-input-box">
-                        <label className="discovery-label">Google Places API Key</label>
+                        <label className="discovery-label" htmlFor="custom-api-key-input">Custom API Key</label>
                         <input
+                          id="custom-api-key-input"
                           type="password"
                           className="discovery-input"
                           placeholder="AIzaSy... (leave blank to use system key / free local engine)"
@@ -848,16 +908,24 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
               ) : (
                 <>
                   {/* City Coverage Info Pill for OSM */}
-                  <div className="discovery-city-info-pill">
-                    <span className="info-icon">📍</span>
-                    <span>
-                      Targeting registered IT offices & software tech corridors in{' '}
-                      <strong>{AVAILABLE_INDIAN_HUBS.find(h => h.slug === discoveryCitySlug)?.name || discoveryCitySlug}</strong>.
-                    </span>
+                  <div className="discovery-scope-card">
+                    <div className="scope-row">
+                      <div className="scope-icon-wrap info">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="12" cy="12" r="10" />
+                          <line x1="12" y1="16" x2="12" y2="12" />
+                          <line x1="12" y1="8" x2="12.01" y2="8" />
+                        </svg>
+                      </div>
+                      <div className="scope-text-wrap">
+                        Targeting registered IT offices & software tech corridors in{' '}
+                        <strong>{AVAILABLE_INDIAN_HUBS.find(h => h.slug === discoveryCitySlug)?.name || discoveryCitySlug}</strong> via OpenStreetMap.
+                      </div>
+                    </div>
                   </div>
 
                   {/* Advanced Options for OSM */}
-                  <div className="discovery-options-row">
+                  <div className="discovery-options-row" style={{ marginTop: '6px' }}>
                     <label className="discovery-checkbox-label">
                       <input
                         type="checkbox"
@@ -875,12 +943,18 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
               {isScanning && (
                 <div className="discovery-scanning-box">
                   <div className="scanner-radar-visual">
-                    <div className="radar-circle-outer" />
-                    <div className="radar-circle-inner" />
-                    <span className="radar-ping-icon">📡</span>
+                    <div className="radar-sweep-ring ring-1" />
+                    <div className="radar-sweep-ring ring-2" />
+                    <div className="radar-sweep-ring ring-3" />
+                    <div className="radar-center-beacon">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
+                        <circle cx="12" cy="9" r="2.5"/>
+                      </svg>
+                    </div>
                   </div>
                   <div className="scanner-status-text">
-                    {scanStatus?.progress || `Scanning ${AVAILABLE_INDIAN_HUBS.find(h => h.slug === discoveryCitySlug)?.name || discoveryCitySlug}...`}
+                    {scanStatus?.progress || `Scanning ${AVAILABLE_INDIAN_HUBS.find(h => h.slug === discoveryCitySlug)?.name || discoveryCitySlug} for tech offices...`}
                   </div>
                   <div className="scanner-steps-list">
                     <div className="scanner-step active">
@@ -903,7 +977,6 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
               {!isScanning && scanStatus?.lastSummary && (
                 <div className="discovery-results-card">
                   <div className="results-header">
-                    <span className="success-icon">✅</span>
                     <h4>Scan Completed for {scanStatus.lastSummary.city}</h4>
                   </div>
                   <div className="results-grid">
@@ -949,8 +1022,7 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
                                 </h5>
                                 {place.rating && (
                                   <div className="place-card-rating" title={`Google rating: ${place.rating} (${place.reviewsCount || 0} reviews)`}>
-                                    <span className="rating-star">⭐</span>
-                                    <span className="rating-num">{place.rating}</span>
+                                    <span className="rating-num">Rating: {place.rating}</span>
                                     {place.reviewsCount ? <span className="rating-count">({place.reviewsCount})</span> : null}
                                   </div>
                                 )}
@@ -964,7 +1036,7 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
                                 )}
                                 {place.isTech && (
                                   <span style={{ fontSize: '11px', padding: '1px 7px', borderRadius: '10px', background: 'rgba(16, 185, 129, 0.12)', color: '#059669', fontWeight: 600 }}>
-                                    ⚡ Verified Tech
+                                    Verified Tech
                                   </span>
                                 )}
                               </div>
@@ -1023,7 +1095,7 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
                                       className="action-pill-link"
                                       title={`Visit ${place.website}`}
                                     >
-                                      {formatDomain(place.website)} ↗
+                                      {formatDomain(place.website)}
                                     </a>
                                     <button
                                       type="button"
@@ -1088,7 +1160,7 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
                                       <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
                                       <circle cx="12" cy="10" r="3" />
                                     </svg>
-                                    <span className="action-pill-link">Map Pin ↗</span>
+                                    <span className="action-pill-link">Map Pin</span>
                                   </a>
                                 )}
 
@@ -1103,7 +1175,7 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
                                     <circle cx="11" cy="11" r="8" />
                                     <line x1="21" y1="21" x2="16.65" y2="16.65" />
                                   </svg>
-                                  <span className="action-pill-link">Search Info ↗</span>
+                                  <span className="action-pill-link">Search Info</span>
                                 </a>
 
                                 <a
@@ -1118,7 +1190,7 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
                                     <rect x="2" y="9" width="4" height="12" />
                                     <circle cx="4" cy="4" r="2" />
                                   </svg>
-                                  <span className="action-pill-link">Find HR on LinkedIn ↗</span>
+                                  <span className="action-pill-link">Find HR on LinkedIn</span>
                                 </a>
                               </div>
                             </div>
@@ -1133,7 +1205,6 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
               {/* Scan Error */}
               {!isScanning && scanStatus?.error && (
                 <div className="discovery-error-box">
-                  <span className="error-icon">⚠️</span>
                   <span>{scanStatus.error}</span>
                 </div>
               )}
@@ -1141,15 +1212,16 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
 
             <div className="discovery-modal-footer">
               <button
+                type="button"
                 className="btn-modal-secondary"
                 onClick={() => setShowDiscoveryModal(false)}
-                disabled={isScanning}
               >
-                Close
+                {isScanning ? 'Run in Background' : 'Close'}
               </button>
 
               {!isScanning && scanStatus?.lastSummary ? (
                 <button
+                  type="button"
                   className="btn-modal-primary"
                   onClick={() => {
                     setSelectedCity(discoveryCitySlug);
@@ -1157,10 +1229,15 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
                     setShowDiscoveryModal(false);
                   }}
                 >
-                  View {scanStatus.lastSummary.city} Companies
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                    <circle cx="12" cy="12" r="3" />
+                  </svg>
+                  <span>View {scanStatus.lastSummary.city} Companies</span>
                 </button>
               ) : (
                 <button
+                  type="button"
                   className="btn-modal-primary"
                   onClick={handleStartScan}
                   disabled={isScanning}
@@ -1173,7 +1250,11 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
                     </>
                   ) : (
                     <>
-                      <span>{scannerEngine === 'google_places' ? '🚀 Start Google Places Scan' : '🚀 Start OSM Scan'}</span>
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="11" cy="11" r="8" />
+                        <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                      </svg>
+                      <span>{scannerEngine === 'google_places' ? 'Start Google Places Scan' : 'Start OSM Scan'}</span>
                     </>
                   )}
                 </button>
@@ -1201,7 +1282,7 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
                   onClick={() => setShowAddModal(false)}
                   aria-label="Close modal"
                 >
-                  ✕
+                  ×
                 </button>
               )}
             </div>
@@ -1210,7 +1291,6 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
               <div className="discovery-modal-body">
                 {addError && (
                   <div className="discovery-error-box">
-                    <span className="error-icon">⚠️</span>
                     <span>{addError}</span>
                   </div>
                 )}
@@ -1321,12 +1401,23 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
                   className="btn-modal-primary"
                   disabled={isAddingCompany}
                 >
-                  {isAddingCompany ? 'Saving...' : '💾 Save to Directory'}
+                  {isAddingCompany ? 'Saving...' : 'Save to Directory'}
                 </button>
               </div>
             </form>
           </div>
         </div>
+      )}
+
+      {/* Personalize Pitch Modal */}
+      {personalizeCompany && (
+        <PersonalizeModal
+          company={personalizeCompany}
+          onClose={() => setPersonalizeCompany(null)}
+          onSaveToNotes={(id, note, nextStatus) => {
+            handleCompanyUpdate(id, { notes: note, followUpStatus: nextStatus || 'to_contact' });
+          }}
+        />
       )}
     </div>
   );

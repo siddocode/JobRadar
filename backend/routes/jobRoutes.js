@@ -20,5 +20,8 @@ router.post('/sync', jobController.triggerSync);
 // GET /api/jobs/sync/status - Check ongoing sync status
 router.get('/sync/status', jobController.getSyncStatus);
 
+// GET /api/jobs/:id/eligibility - Analyze job eligibility, freshers suitability, skills & work auth
+router.get('/:id/eligibility', jobController.getJobEligibility);
+
 module.exports = router;
 

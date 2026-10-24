@@ -1,22 +1,44 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '../context/AuthContext';
 
-export default function CompanyCard({ company, onUpdate }) {
-  const [followUpStatus, setFollowUpStatus] = useState(company.followUpStatus || 'to_contact');
-  const [notes] = useState(company.notes || '');
+export default function CompanyCard({ company, onUpdate, onPersonalize }) {
+  const { isAuthenticated, openAuthModal, authFetch } = useAuth();
+  const [followUpStatus, setFollowUpStatus] = useState(company.followUpStatus || 'none');
+  const [notes, setNotes] = useState(company.notes || '');
   const [isSaving, setIsSaving] = useState(false);
   const [showJobs, setShowJobs] = useState(false);
   const [showEvidence, setShowEvidence] = useState(false);
   const [showAllContacts, setShowAllContacts] = useState(false);
   const [copiedItem, setCopiedItem] = useState(null);
+  const [isHoveredRemove, setIsHoveredRemove] = useState(false);
+
+  useEffect(() => {
+    setFollowUpStatus(company.followUpStatus || 'none');
+    setNotes(company.notes || '');
+  }, [company.followUpStatus, company.notes]);
 
   const isInPipeline = Boolean(followUpStatus && followUpStatus !== 'none');
 
+  const getStageLabel = (status) => {
+    switch (status) {
+      case 'to_contact': return 'To Contact';
+      case 'contacted': return 'Contacted';
+      case 'replied': return 'Replied';
+      case 'not_interested': return 'Not Interested';
+      default: return 'Tracked';
+    }
+  };
+
   const handleTogglePipeline = async () => {
+    if (!isAuthenticated) {
+      openAuthModal('Sign up or log in to track companies in your personal outreach pipeline.');
+      return;
+    }
     const nextStatus = isInPipeline ? 'none' : 'to_contact';
     setFollowUpStatus(nextStatus);
     setIsSaving(true);
     try {
-      const res = await fetch(`/api/directory/companies/${company._id}/follow-up`, {
+      const res = await authFetch(`/api/directory/companies/${company._id}/follow-up`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -31,6 +53,16 @@ export default function CompanyCard({ company, onUpdate }) {
       console.error('Failed to update follow-up:', err);
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handlePersonalizeClick = () => {
+    if (!isAuthenticated) {
+      openAuthModal('Sign up to generate personalized outreach pitches and tailored recruiter emails.');
+      return;
+    }
+    if (onPersonalize) {
+      onPersonalize(company);
     }
   };
 
@@ -178,7 +210,7 @@ export default function CompanyCard({ company, onUpdate }) {
                     onClick={() => setShowEvidence(!showEvidence)}
                     title="Click to toggle verified tech evidence"
                   >
-                    ⚡ Tech {company.techEvidence?.length > 0 && `(${company.techEvidence.length})`}
+                    Tech {company.techEvidence?.length > 0 && `(${company.techEvidence.length})`}
                   </button>
                 )}
               </div>
@@ -196,7 +228,7 @@ export default function CompanyCard({ company, onUpdate }) {
               >
                 <span className="green-pulse-dot"></span>
                 <span>{company.hiringStatusLabel || `Hiring (${company.openJobs?.length || 0})`}</span>
-                <span className="expand-indicator">{showJobs ? '▲' : '▼'}</span>
+                <span className="expand-indicator">{showJobs ? 'Less' : 'Jobs'}</span>
               </button>
             ) : (
               <span className="hiring-tag no-vacancy">
@@ -217,7 +249,7 @@ export default function CompanyCard({ company, onUpdate }) {
                   <span>{ev.what}</span>
                   {ev.sourceUrl && (
                     <a href={ev.sourceUrl} target="_blank" rel="noopener noreferrer" className="source-mini-anchor">
-                      [Source ↗]
+                      [Source]
                     </a>
                   )}
                 </li>
@@ -245,11 +277,11 @@ export default function CompanyCard({ company, onUpdate }) {
                     title="View office location on Google Maps"
                     onClick={(e) => e.stopPropagation()}
                   >
-                    📍 Map Pin
+                    Map
                   </a>
                 )}
                 {primaryOffice?.verified && (
-                  <span className="verified-badge-mini" title="Verified office address">✓ Verified</span>
+                  <span className="verified-badge-mini" title="Verified office address">Verified</span>
                 )}
               </div>
               <span className="detail-secondary-text" title={primaryOffice?.address || 'India'}>
@@ -270,7 +302,7 @@ export default function CompanyCard({ company, onUpdate }) {
                 onClick={() => setShowAllContacts(!showAllContacts)}
                 title={showAllContacts ? 'Collapse contacts list' : `Show ${hiddenContactsCount} more contacts`}
               >
-                {showAllContacts ? 'Show less ▲' : `+ ${hiddenContactsCount} more ▼`}
+                {showAllContacts ? 'Show less' : `+ ${hiddenContactsCount} more`}
               </button>
             )}
           </div>
@@ -343,7 +375,7 @@ export default function CompanyCard({ company, onUpdate }) {
                   onClick={(e) => e.stopPropagation()}
                   title={`Visit ${company.name}'s official website`}
                 >
-                  🌐 Website ↗
+                  Website
                 </a>
               )}
               <a
@@ -354,7 +386,7 @@ export default function CompanyCard({ company, onUpdate }) {
                 onClick={(e) => e.stopPropagation()}
                 title={`Search Google for ${company.name} office contact & phone`}
               >
-                🔍 Search Info ↗
+                Search company
               </a>
               <a
                 href={`https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(company.name + ' hr recruiter talent acquisition')}`}
@@ -364,7 +396,7 @@ export default function CompanyCard({ company, onUpdate }) {
                 onClick={(e) => e.stopPropagation()}
                 title={`Find HR recruiters at ${company.name} on LinkedIn`}
               >
-                💼 Find HR on LinkedIn ↗
+                Find HR on LinkedIn
               </a>
             </div>
           )}
@@ -380,7 +412,7 @@ export default function CompanyCard({ company, onUpdate }) {
                   <div className="job-row-info">
                     <span className="job-row-title">{j.title}</span>
                     <span className="job-row-meta">
-                      📍 {j.city || 'India'} • {j.workMode || 'onsite'}
+                      {j.city || 'India'} | {j.workMode || 'onsite'}
                     </span>
                   </div>
                   <a
@@ -389,7 +421,7 @@ export default function CompanyCard({ company, onUpdate }) {
                     rel="noopener noreferrer"
                     className="job-apply-link"
                   >
-                    Apply ↗
+                    Apply
                   </a>
                 </div>
               ))}
@@ -418,30 +450,84 @@ export default function CompanyCard({ company, onUpdate }) {
         )}
       </div>
 
-      {/* Card Pinned Footer: Clean Pipeline Indicator & Action */}
+      {/* Card Pinned Footer: Structured Two-Row Layout */}
       <div className="card-pinned-footer">
         <div className="card-hairline-divider"></div>
 
-        <div className="dir-action-footer">
+        {/* Row 1: Pipeline Status & Pitch Badge */}
+        <div className="card-pipeline-status-strip">
           {isInPipeline ? (
-            <div className="pipeline-indicator active">
-              <span className="dot dot-green"></span>
-              <span className="pipeline-indicator-text">
-                In Outreach Pipeline {followUpStatus !== 'to_contact' ? `(${followUpStatus.replace('_', ' ')})` : ''}
+            <div className={`pipeline-pill-indicator stage-${followUpStatus}`} title={`Stage: ${getStageLabel(followUpStatus)}`}>
+              <span className={`pill-dot dot-${followUpStatus}`}></span>
+              <span className="pill-text">
+                Pipeline: <strong>{getStageLabel(followUpStatus)}</strong>
               </span>
             </div>
           ) : (
-            <span className="pipeline-indicator-empty">Not in outreach pipeline</span>
+            <span className="pipeline-pill-indicator idle">
+              <span className="pill-dot dot-idle"></span>
+              <span className="pill-text">Not in pipeline</span>
+            </span>
           )}
+
+          {notes && notes.startsWith('Pitch drafted') && (
+            <span className="pitch-drafted-tag" title="Cold outreach pitch drafted">
+              ✨ Pitch drafted
+            </span>
+          )}
+        </div>
+
+        {/* Row 2: Action Buttons */}
+        <div className="card-action-buttons-row">
+          <button
+            type="button"
+            className="btn-card-personalize"
+            onClick={handlePersonalizeClick}
+            title="Draft or edit personalized cold outreach pitch"
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2L14.39 8.26L21 9.27L16.27 13.88L17.82 20.46L12 17.07L6.18 20.46L7.73 13.88L3 9.27L9.61 8.26L12 2Z" />
+            </svg>
+            <span>{notes ? 'Edit Pitch' : 'Personalize'}</span>
+          </button>
 
           <button
             type="button"
-            className={`pipeline-action-btn ${isInPipeline ? 'remove' : 'add'}`}
+            className={`btn-card-pipeline ${isInPipeline ? (isHoveredRemove ? 'remove-hover' : 'tracked') : 'untracked'}`}
             onClick={handleTogglePipeline}
+            onMouseEnter={() => setIsHoveredRemove(true)}
+            onMouseLeave={() => setIsHoveredRemove(false)}
             disabled={isSaving}
-            title={isInPipeline ? 'Remove from outreach pipeline' : 'Track in your outreach pipeline'}
+            title={isInPipeline ? 'Click to remove from your Outreach Pipeline' : 'Add company to your Outreach Pipeline'}
           >
-            {isSaving ? '...' : (isInPipeline ? '✕ Remove' : '🎯 + Add to Pipeline')}
+            {isSaving ? (
+              <span>Saving...</span>
+            ) : isInPipeline ? (
+              isHoveredRemove ? (
+                <>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                  <span>Remove</span>
+                </>
+              ) : (
+                <>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                  <span>In Pipeline</span>
+                </>
+              )
+            ) : (
+              <>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                  <line x1="12" y1="5" x2="12" y2="19" />
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+                <span>Pipeline</span>
+              </>
+            )}
           </button>
         </div>
       </div>

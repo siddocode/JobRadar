@@ -1,0 +1,518 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { useAuth } from '../context/AuthContext';
+
+export default function AuthModal() {
+  const {
+    authModalOpen,
+    authModalReason,
+    authModalTab,
+    closeAuthModal,
+    setAuthModalTab,
+    requestOtp,
+    register,
+    login,
+    loginWithOtp
+  } = useAuth();
+
+  const [tab, setTab] = useState(authModalTab || 'signup');
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [otp, setOtp] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+
+  // OTP state & Dev banner
+  const [devOtp, setDevOtp] = useState(null);
+  const [isSendingOtp, setIsSendingOtp] = useState(false);
+  const [otpSentMessage, setOtpSentMessage] = useState('');
+  const [otpCooldown, setOtpCooldown] = useState(0);
+  const [copiedOtp, setCopiedOtp] = useState(false);
+
+  // Sign in mode: 'password' | 'otp'
+  const [signInMode, setSignInMode] = useState('password');
+
+  // Submit states
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [successMsg, setSuccessMsg] = useState(null);
+
+  const modalRef = useRef(null);
+
+  useEffect(() => {
+    if (authModalTab) {
+      setTab(authModalTab);
+    }
+  }, [authModalTab]);
+
+  useEffect(() => {
+    // Reset fields on modal open/close
+    if (authModalOpen) {
+      setError(null);
+      setSuccessMsg(null);
+    } else {
+      setDevOtp(null);
+      setOtpSentMessage('');
+      setOtp('');
+      setError(null);
+      setSuccessMsg(null);
+    }
+  }, [authModalOpen]);
+
+  // Handle countdown timer for OTP resend
+  useEffect(() => {
+    let timer;
+    if (otpCooldown > 0) {
+      timer = setTimeout(() => setOtpCooldown(c => c - 1), 1000);
+    }
+    return () => clearTimeout(timer);
+  }, [otpCooldown]);
+
+  // Close on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && authModalOpen) {
+        closeAuthModal();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [authModalOpen, closeAuthModal]);
+
+  if (!authModalOpen) return null;
+
+  // Helper to send OTP
+  const handleSendOtp = async (targetEmail = email) => {
+    if (!targetEmail || !targetEmail.includes('@')) {
+      setError('Please enter a valid email address first');
+      return;
+    }
+    setIsSendingOtp(true);
+    setError(null);
+    try {
+      const data = await requestOtp(targetEmail);
+      if (data.devOtp) {
+        setDevOtp(data.devOtp);
+      }
+      setOtpSentMessage('Verification code generated!');
+      setOtpCooldown(30);
+    } catch (err) {
+      setError(err.message || 'Failed to send verification code');
+    } finally {
+      setIsSendingOtp(false);
+    }
+  };
+
+  const handleCopyOtp = () => {
+    if (!devOtp) return;
+    navigator.clipboard.writeText(devOtp);
+    setCopiedOtp(true);
+    setTimeout(() => setCopiedOtp(false), 1600);
+  };
+
+  const handleAutoFillOtp = () => {
+    if (devOtp) {
+      setOtp(devOtp);
+    }
+  };
+
+  // Submit Handler
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
+
+    try {
+      if (tab === 'signup') {
+        if (!email.trim() || !password || !otp.trim()) {
+          throw new Error('Please fill in email, password, and the 6-digit verification code');
+        }
+        if (password.length < 6) {
+          throw new Error('Password must be at least 6 characters');
+        }
+        await register({ email: email.trim(), password, name: name.trim(), otp: otp.trim() });
+      } else {
+        // Sign In
+        if (signInMode === 'password') {
+          if (!email.trim() || !password) {
+            throw new Error('Please provide your email and password');
+          }
+          await login({ email: email.trim(), password });
+        } else {
+          // Sign In with OTP
+          if (!email.trim() || !otp.trim()) {
+            throw new Error('Please enter your email and the 6-digit OTP code');
+          }
+          await loginWithOtp({ email: email.trim(), otp: otp.trim() });
+        }
+      }
+    } catch (err) {
+      setError(err.message || 'Authentication failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="auth-modal-overlay" onClick={closeAuthModal} role="dialog" aria-modal="true">
+      <div
+        className="auth-modal-content"
+        ref={modalRef}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Close Button */}
+        <button
+          className="auth-modal-close"
+          onClick={closeAuthModal}
+          title="Close (Esc)"
+          aria-label="Close modal"
+        >
+          ×
+        </button>
+
+        {/* Modal Header */}
+        <div className="auth-modal-header">
+          <div className="auth-brand-badge">
+            <span>JobRadar Auth</span>
+          </div>
+          <h2 className="auth-modal-title">
+            {tab === 'signup' ? 'Create your account' : 'Sign in to JobRadar'}
+          </h2>
+          <p className="auth-modal-subtitle">
+            {tab === 'signup'
+              ? 'Access your outreach pipeline, track target companies, and draft tailored recruiter emails.'
+              : 'Sign in to access your personal outreach pipeline, tracked companies, and notes.'}
+          </p>
+        </div>
+
+        {/* Reason Banner (if triggered by protected action) */}
+        {authModalReason && (
+          <div className="auth-reason-banner">
+            <span className="auth-reason-text">{authModalReason}</span>
+          </div>
+        )}
+
+        {/* PROMINENT DEV / DEMO OTP BANNER ON TOP (as requested by user) */}
+        {devOtp && (
+          <div className="auth-dev-otp-banner" id="auth-otp-top-banner">
+            <div className="otp-banner-header">
+              <div className="otp-live-indicator">
+                <span className="otp-live-dot"></span>
+                <span className="otp-banner-title">Verification Code (Demo Mode)</span>
+              </div>
+              <span className="otp-simulated-tag">Simulated SMTP</span>
+            </div>
+
+            <div className="otp-code-display-row">
+              <span className="otp-digits-box" title="Verification code">{devOtp}</span>
+              <div className="otp-action-btns">
+                <button
+                  type="button"
+                  className="otp-autofill-btn"
+                  onClick={handleAutoFillOtp}
+                  title="Auto-fill code into verification input"
+                >
+                  Auto-Fill
+                </button>
+                <button
+                  type="button"
+                  className="otp-copy-btn"
+                  onClick={handleCopyOtp}
+                  title="Copy code to clipboard"
+                >
+                  {copiedOtp ? 'Copied' : 'Copy'}
+                </button>
+              </div>
+            </div>
+
+            <p className="otp-banner-note">
+              Email verification code for <strong>{email || 'your email'}</strong>. Real SMTP will be configured for production.
+            </p>
+          </div>
+        )}
+
+        {/* Tab Switcher */}
+        <div className="auth-tab-bar">
+          <button
+            type="button"
+            className={`auth-tab-btn ${tab === 'signup' ? 'active' : ''}`}
+            onClick={() => {
+              setTab('signup');
+              setError(null);
+            }}
+          >
+            Create Account
+          </button>
+          <button
+            type="button"
+            className={`auth-tab-btn ${tab === 'login' ? 'active' : ''}`}
+            onClick={() => {
+              setTab('login');
+              setError(null);
+            }}
+          >
+            Sign In
+          </button>
+        </div>
+
+        {/* Form Body */}
+        <form onSubmit={handleSubmit} className="auth-form-body">
+          {error && (
+            <div className="auth-error-alert">
+              <span>{error}</span>
+            </div>
+          )}
+
+          {successMsg && (
+            <div className="auth-success-alert">
+              <span>{successMsg}</span>
+            </div>
+          )}
+
+          {/* SIGN UP FIELDS */}
+          {tab === 'signup' && (
+            <>
+              <div className="auth-field-group">
+                <label className="auth-label" htmlFor="auth-name-input">Your Name (Optional)</label>
+                <input
+                  type="text"
+                  id="auth-name-input"
+                  className="auth-input"
+                  placeholder="e.g. Aditi Sharma"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                />
+              </div>
+
+              <div className="auth-field-group">
+                <div className="auth-label-row">
+                  <label className="auth-label" htmlFor="auth-email-input">Email Address</label>
+                  {otpCooldown > 0 ? (
+                    <span className="otp-cooldown-text">Resend in {otpCooldown}s</span>
+                  ) : (
+                    <button
+                      type="button"
+                      className="auth-text-action-btn"
+                      onClick={() => handleSendOtp(email)}
+                      disabled={isSendingOtp || !email.includes('@')}
+                    >
+                      {isSendingOtp ? 'Sending...' : (devOtp ? 'Resend Code' : 'Get Verification Code')}
+                    </button>
+                  )}
+                </div>
+                <input
+                  type="email"
+                  id="auth-email-input"
+                  className="auth-input"
+                  placeholder="name@company.com or personal email"
+                  required
+                  value={email}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    if (error) setError(null);
+                  }}
+                  onBlur={() => {
+                    // Auto-request OTP on entering valid email if not requested yet
+                    if (email.includes('@') && email.length > 5 && !devOtp && !isSendingOtp) {
+                      handleSendOtp(email);
+                    }
+                  }}
+                />
+              </div>
+
+              {/* 6-Digit OTP Input */}
+              <div className="auth-field-group">
+                <div className="auth-label-row">
+                  <label className="auth-label" htmlFor="auth-otp-input">
+                    6-Digit Verification Code
+                  </label>
+                  {!devOtp && (
+                    <span className="auth-hint-text">Click "Get Verification Code" above</span>
+                  )}
+                </div>
+                <div className="auth-otp-input-wrapper">
+                  <input
+                    type="text"
+                    id="auth-otp-input"
+                    className="auth-input otp-input"
+                    placeholder="Enter 6-digit OTP code"
+                    maxLength={6}
+                    required
+                    value={otp}
+                    onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
+                  />
+                  {devOtp && otp !== devOtp && (
+                    <button
+                      type="button"
+                      className="otp-inline-fill-btn"
+                      onClick={handleAutoFillOtp}
+                    >
+                      Fill {devOtp}
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Password */}
+              <div className="auth-field-group">
+                <div className="auth-label-row">
+                  <label className="auth-label" htmlFor="auth-password-input">Password (min 6 characters)</label>
+                  <button
+                    type="button"
+                    className="auth-text-action-btn"
+                    onClick={() => setShowPassword(!showPassword)}
+                  >
+                    {showPassword ? 'Hide' : 'Show'}
+                  </button>
+                </div>
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  id="auth-password-input"
+                  className="auth-input"
+                  placeholder="Choose a secure password"
+                  required
+                  minLength={6}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+              </div>
+
+              <button
+                type="submit"
+                className="auth-submit-btn"
+                disabled={loading}
+                id="auth-signup-submit"
+              >
+                {loading ? 'Creating Account...' : 'Create Account & Verify'}
+              </button>
+            </>
+          )}
+
+          {/* SIGN IN FIELDS */}
+          {tab === 'login' && (
+            <>
+              <div className="auth-field-group">
+                <label className="auth-label" htmlFor="login-email-input">Email Address</label>
+                <input
+                  type="email"
+                  id="login-email-input"
+                  className="auth-input"
+                  placeholder="Your registered email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+              </div>
+
+              {signInMode === 'password' ? (
+                <div className="auth-field-group">
+                  <div className="auth-label-row">
+                    <label className="auth-label" htmlFor="login-password-input">Password</label>
+                    <button
+                      type="button"
+                      className="auth-text-action-btn"
+                      onClick={() => setSignInMode('otp')}
+                    >
+                      Sign in with OTP instead
+                    </button>
+                  </div>
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    id="login-password-input"
+                    className="auth-input"
+                    placeholder="Enter your password"
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                  />
+                </div>
+              ) : (
+                <div className="auth-field-group">
+                  <div className="auth-label-row">
+                    <label className="auth-label" htmlFor="login-otp-input">6-Digit Verification Code</label>
+                    {otpCooldown > 0 ? (
+                      <span className="otp-cooldown-text">Resend in {otpCooldown}s</span>
+                    ) : (
+                      <button
+                        type="button"
+                        className="auth-text-action-btn"
+                        onClick={() => handleSendOtp(email)}
+                        disabled={isSendingOtp || !email.includes('@')}
+                      >
+                        {isSendingOtp ? 'Sending...' : 'Get Code'}
+                      </button>
+                    )}
+                  </div>
+                  <div className="auth-otp-input-wrapper">
+                    <input
+                      type="text"
+                      id="login-otp-input"
+                      className="auth-input otp-input"
+                      placeholder="Enter 6-digit OTP code"
+                      maxLength={6}
+                      required
+                      value={otp}
+                      onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
+                    />
+                  </div>
+                  <div style={{ marginTop: '6px', textAlign: 'right' }}>
+                    <button
+                      type="button"
+                      className="auth-text-action-btn"
+                      onClick={() => setSignInMode('password')}
+                    >
+                      Use Password instead
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                className="auth-submit-btn"
+                disabled={loading}
+                id="auth-login-submit"
+              >
+                {loading ? 'Signing in...' : 'Sign In'}
+              </button>
+            </>
+          )}
+        </form>
+
+        {/* Modal Footer */}
+        <div className="auth-modal-footer">
+          <p className="auth-footer-text">
+            {tab === 'signup' ? (
+              <>
+                Already have an account?{' '}
+                <button
+                  type="button"
+                  className="auth-switch-link"
+                  onClick={() => {
+                    setTab('login');
+                    setError(null);
+                  }}
+                >
+                  Sign In
+                </button>
+              </>
+            ) : (
+              <>
+                Need an account?{' '}
+                <button
+                  type="button"
+                  className="auth-switch-link"
+                  onClick={() => {
+                    setTab('signup');
+                    setError(null);
+                  }}
+                >
+                  Create free account
+                </button>
+              </>
+            )}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}

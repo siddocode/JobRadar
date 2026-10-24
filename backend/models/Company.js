@@ -92,7 +92,7 @@ const companySchema = new mongoose.Schema(
     followUpStatus: {
       type: String,
       enum: ['to_contact', 'contacted', 'replied', 'not_interested', 'none'],
-      default: 'to_contact'
+      default: 'none'
     },
     notes: {
       type: String,

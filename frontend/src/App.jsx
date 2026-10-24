@@ -1,14 +1,19 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import CompanyDirectory from './components/CompanyDirectory';
 import ReachOutView from './components/ReachOutView';
+import AuthModal from './components/AuthModal';
+import JobEligibilityModal from './components/JobEligibilityModal';
+import { useAuth } from './context/AuthContext';
 
 export default function App() {
+  const { user, isAuthenticated, logout, openAuthModal, authFetch } = useAuth();
   const [activeTab, setActiveTab] = useState('directory'); // 'directory' | 'jobs' | 'reachout'
   const [theme, setTheme] = useState(() => localStorage.getItem('jobradar_theme') || 'light');
 
   const [directoryCities, setDirectoryCities] = useState([]);
   const [companyCount, setCompanyCount] = useState(0);
   const [reachOutCount, setReachOutCount] = useState(0);
+  const [eligibilityJob, setEligibilityJob] = useState(null);
 
   const [jobs, setJobs] = useState([]);
   const [cities, setCities] = useState([]);
@@ -128,12 +133,12 @@ export default function App() {
     }
   }, [searchQuery, selectedCountry, selectedCity, workModeFilter, statusFilter, companyFilter, techOnlyJobs, page, limit]);
 
-  const fetchDirectoryMeta = async () => {
+  const fetchDirectoryMeta = useCallback(async () => {
     try {
       const [citiesRes, compRes, reachRes] = await Promise.all([
         fetch('/api/directory/cities'),
         fetch('/api/directory/companies?limit=1'),
-        fetch('/api/directory/reach-out')
+        authFetch('/api/directory/reach-out')
       ]);
       if (citiesRes.ok) {
         const data = await citiesRes.json();
@@ -150,7 +155,7 @@ export default function App() {
     } catch (err) {
       console.error('Failed to load directory metadata:', err);
     }
-  };
+  }, [authFetch]);
 
   const pollSyncStatus = useCallback(() => {
     const interval = setInterval(async () => {
@@ -225,16 +230,19 @@ export default function App() {
             pollSyncStatus();
           }
         }
-      } catch (_) {}
+      } catch (_) { }
     }
     checkInitialSyncStatus();
   }, [pollSyncStatus]);
 
   useEffect(() => {
     fetchStats();
-    fetchDirectoryMeta();
     fetchCountries();
   }, []);
+
+  useEffect(() => {
+    fetchDirectoryMeta();
+  }, [fetchDirectoryMeta, isAuthenticated]);
 
   useEffect(() => {
     fetchCities();
@@ -259,36 +267,6 @@ export default function App() {
     setCompanyFilter('all');
     setTechOnlyJobs(true);
     setPage(1);
-  };
-
-  // Helper for country flags
-  const getCountryFlag = (country) => {
-    const flags = {
-      'India': '🇮🇳',
-      'United States': '🇺🇸',
-      'United Kingdom': '🇬🇧',
-      'Canada': '🇨🇦',
-      'Germany': '🇩🇪',
-      'Ireland': '🇮🇪',
-      'Singapore': '🇸🇬',
-      'Japan': '🇯🇵',
-      'France': '🇫🇷',
-      'Australia': '🇦🇺',
-      'Mexico': '🇲🇽',
-      'Brazil': '🇧🇷',
-      'Spain': '🇪🇸',
-      'Netherlands': '🇳🇱',
-      'Poland': '🇵🇱',
-      'Switzerland': '🇨🇭',
-      'Israel': '🇮🇱',
-      'Romania': '🇷🇴',
-      'Italy': '🇮🇹',
-      'Taiwan': '🇹🇼',
-      'Turkey': '🇹🇷',
-      'Philippines': '🇵🇭',
-      'Remote / Global': '🌐'
-    };
-    return flags[country] || '📍';
   };
 
   // Memoize city counts & structured groups for clear, classy dropdowns
@@ -355,8 +333,118 @@ export default function App() {
     return { tier1, other };
   }, [stats]);
 
+  // Derive all active filters for transparent display and individual dismissals
+  const activeFilters = useMemo(() => {
+    const list = [];
+
+    if (searchQuery.trim()) {
+      list.push({
+        id: 'q',
+        label: 'Keyword',
+        value: `"${searchQuery.trim()}"`,
+        onRemove: () => {
+          setSearchQuery('');
+          setPage(1);
+        }
+      });
+    }
+
+    if (selectedCountry && selectedCountry !== 'all') {
+      list.push({
+        id: 'country',
+        label: 'Country',
+        value: selectedCountry,
+        onRemove: () => {
+          setSelectedCountry('all');
+          setSelectedCity('all');
+          setPage(1);
+        }
+      });
+    }
+
+    if (selectedCity && selectedCity !== 'all') {
+      list.push({
+        id: 'city',
+        label: 'City',
+        value: selectedCity,
+        onRemove: () => {
+          setSelectedCity('all');
+          setPage(1);
+        }
+      });
+    }
+
+    if (workModeFilter && workModeFilter !== 'all') {
+      const modeLabels = {
+        onsite: 'On-site',
+        hybrid: 'Hybrid',
+        remote: 'Remote',
+        unknown: 'Unspecified'
+      };
+      list.push({
+        id: 'workMode',
+        label: 'Work Mode',
+        value: modeLabels[workModeFilter] || workModeFilter,
+        onRemove: () => {
+          setWorkModeFilter('all');
+          setPage(1);
+        }
+      });
+    }
+
+    if (companyFilter && companyFilter !== 'all') {
+      list.push({
+        id: 'company',
+        label: 'Company',
+        value: companyFilter,
+        onRemove: () => {
+          setCompanyFilter('all');
+          setPage(1);
+        }
+      });
+    }
+
+    if (statusFilter && statusFilter !== 'open') {
+      list.push({
+        id: 'status',
+        label: 'Status',
+        value: statusFilter === 'all' ? 'All (Open + Closed)' : 'Closed Only',
+        onRemove: () => {
+          setStatusFilter('open');
+          setPage(1);
+        }
+      });
+    }
+
+    if (techOnlyJobs) {
+      list.push({
+        id: 'techOnly',
+        label: 'Domain',
+        value: 'Tech Roles Only',
+        onRemove: () => {
+          setTechOnlyJobs(false);
+          setPage(1);
+        }
+      });
+    }
+
+    return list;
+  }, [searchQuery, selectedCountry, selectedCity, workModeFilter, companyFilter, statusFilter, techOnlyJobs]);
+
+  const hasNonDefaultFilters = useMemo(() => {
+    return Boolean(
+      searchQuery.trim() ||
+      selectedCity !== 'all' ||
+      workModeFilter !== 'all' ||
+      companyFilter !== 'all' ||
+      statusFilter !== 'open' ||
+      selectedCountry !== 'India' ||
+      !techOnlyJobs
+    );
+  }, [searchQuery, selectedCity, workModeFilter, companyFilter, statusFilter, selectedCountry, techOnlyJobs]);
+
   const formatDate = (isoString) => {
-    if (!isoString) return '—';
+    if (!isoString) return 'N/A';
     try {
       const date = new Date(isoString);
       return date.toLocaleDateString(undefined, {
@@ -419,7 +507,21 @@ export default function App() {
             onClick={() => setActiveTab('directory')}
             id="tab-directory"
           >
-            <span className="nav-item-icon">🏢</span>
+            <span className="nav-item-icon">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="4" y="2" width="16" height="20" rx="2" ry="2" />
+                <line x1="9" y1="22" x2="9" y2="22.01" />
+                <line x1="15" y1="22" x2="15" y2="22.01" />
+                <line x1="9" y1="6" x2="9" y2="6.01" />
+                <line x1="15" y1="6" x2="15" y2="6.01" />
+                <line x1="9" y1="10" x2="9" y2="10.01" />
+                <line x1="15" y1="10" x2="15" y2="10.01" />
+                <line x1="9" y1="14" x2="9" y2="14.01" />
+                <line x1="15" y1="14" x2="15" y2="14.01" />
+                <line x1="9" y1="18" x2="9" y2="18.01" />
+                <line x1="15" y1="18" x2="15" y2="18.01" />
+              </svg>
+            </span>
             <span className="nav-item-text">Company directory</span>
             {companyCount > 0 && <span className="nav-item-badge">{companyCount}</span>}
           </button>
@@ -429,7 +531,12 @@ export default function App() {
             onClick={() => setActiveTab('jobs')}
             id="tab-jobs"
           >
-            <span className="nav-item-icon">💼</span>
+            <span className="nav-item-icon">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
+                <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
+              </svg>
+            </span>
             <span className="nav-item-text">Live jobs</span>
             {meta.totalInDb > 0 && <span className="nav-item-badge">{meta.totalInDb.toLocaleString()}</span>}
           </button>
@@ -439,7 +546,13 @@ export default function App() {
             onClick={() => setActiveTab('reachout')}
             id="tab-reachout"
           >
-            <span className="nav-item-icon">🎯</span>
+            <span className="nav-item-icon">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10" />
+                <circle cx="12" cy="12" r="6" />
+                <circle cx="12" cy="12" r="2" />
+              </svg>
+            </span>
             <span className="nav-item-text">Outreach pipeline</span>
             {reachOutCount > 0 && <span className="nav-item-badge">{reachOutCount}</span>}
           </button>
@@ -463,20 +576,41 @@ export default function App() {
           </div>
 
           <div className="topbar-actions">
-            <label className="india-toggle-pill" htmlFor="india-only-toggle" title="Toggle between India and Worldwide jobs">
-              <input
-                id="india-only-toggle"
-                type="checkbox"
-                checked={selectedCountry === 'India'}
-                onChange={(e) => {
-                  const nextCountry = e.target.checked ? 'India' : 'all';
-                  setSelectedCountry(nextCountry);
-                  setSelectedCity('all');
-                  setPage(1);
-                }}
-              />
-              <span>{selectedCountry === 'India' ? '🇮🇳 India Only' : '🌐 All Countries'}</span>
-            </label>
+            {/* Contextual Region Scope Switcher (Live Jobs View) */}
+            {activeTab === 'jobs' && (
+              <div className="topbar-scope-switch" role="group" aria-label="Job region filter">
+                <button
+                  type="button"
+                  id="scope-india-btn"
+                  className={`scope-switch-btn ${selectedCountry === 'India' ? 'is-active' : ''}`}
+                  onClick={() => {
+                    setSelectedCountry('India');
+                    setSelectedCity('all');
+                    setPage(1);
+                  }}
+                  title="Filter jobs located in India"
+                >
+                  <span className="scope-flag">🇮🇳</span>
+                  <span className="scope-label">India</span>
+                </button>
+                <button
+                  type="button"
+                  id="scope-worldwide-btn"
+                  className={`scope-switch-btn ${selectedCountry !== 'India' ? 'is-active' : ''}`}
+                  onClick={() => {
+                    setSelectedCountry('all');
+                    setSelectedCity('all');
+                    setPage(1);
+                  }}
+                  title="Show all verified jobs worldwide across all countries"
+                >
+                  <span className="scope-flag">🌐</span>
+                  <span className="scope-label">
+                    {selectedCountry !== 'all' && selectedCountry !== 'India' ? selectedCountry : 'Worldwide'}
+                  </span>
+                </button>
+              </div>
+            )}
 
             <button
               className={`sync-action-btn ${isSyncing ? 'is-syncing' : ''}`}
@@ -485,40 +619,89 @@ export default function App() {
               title={isSyncing ? "Sync in progress..." : "Fetch latest jobs from ATS boards"}
               id="sync-jobs-btn"
             >
-              <span className={`sync-icon ${isSyncing ? 'spin-animation' : ''}`}>🔄</span>
+              <span className={`sync-icon ${isSyncing ? 'spin-animation' : ''}`}>
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <polyline points="23 4 23 10 17 10" />
+                  <polyline points="1 20 1 14 7 14" />
+                  <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+                </svg>
+              </span>
               <span className="sync-text">{isSyncing ? 'Syncing...' : 'Sync Jobs'}</span>
             </button>
+
+            <div className="topbar-divider" />
 
             <button
               className="theme-switch-btn"
               onClick={() => setTheme(t => t === 'light' ? 'dark' : 'light')}
               title={`Switch to ${theme === 'light' ? 'Dark' : 'Light'} Mode`}
+              id="theme-toggle-btn"
+              aria-label="Toggle color theme"
             >
               {theme === 'light' ? (
-                <>
-                  <span className="theme-icon">🌙</span>
-                  <span className="theme-text">Dark</span>
-                </>
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+                </svg>
               ) : (
-                <>
-                  <span className="theme-icon">☀️</span>
-                  <span className="theme-text">Light</span>
-                </>
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="5" />
+                  <line x1="12" y1="1" x2="12" y2="3" />
+                  <line x1="12" y1="21" x2="12" y2="23" />
+                  <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+                  <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+                  <line x1="1" y1="12" x2="3" y2="12" />
+                  <line x1="21" y1="12" x2="23" y2="12" />
+                  <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+                  <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+                </svg>
               )}
             </button>
 
-            <div className="ats-live-pill" id="source-indicator">
+            <div className="ats-live-pill" id="source-indicator" title="Connected to ATS boards with real-time verification">
               <span className="live-dot" />
               <span>Live ATS Verified</span>
             </div>
+
+            {/* User Profile or Sign In Button */}
+            {isAuthenticated ? (
+              <div className="user-profile-badge" title={`Signed in as ${user?.email || 'User'}`}>
+                <div className="user-avatar-monogram">
+                  {user?.name ? user.name.slice(0, 2).toUpperCase() : (user?.email ? user.email.slice(0, 2).toUpperCase() : 'UR')}
+                </div>
+                <div className="user-meta-col">
+                  <span className="user-display-name">{user?.name || user?.email?.split('@')[0]}</span>
+                </div>
+                <button
+                  type="button"
+                  className="user-logout-btn"
+                  onClick={logout}
+                  title="Sign out of JobRadar"
+                  id="header-logout-btn"
+                >
+                  <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                    <polyline points="16 17 21 12 16 7" />
+                    <line x1="21" y1="12" x2="9" y2="12" />
+                  </svg>
+                  <span>Sign Out</span>
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                className="auth-topbar-btn"
+                onClick={() => openAuthModal()}
+                title="Sign in or create free account"
+                id="header-signin-btn"
+              >
+                <span className="auth-btn-text">Sign In</span>
+              </button>
+            )}
           </div>
         </header>
 
         {syncToast && (
           <div className={`sync-toast-banner ${syncToast.type}`} role="status">
-            <span className="toast-icon">
-              {syncToast.type === 'success' ? '✅' : syncToast.type === 'error' ? '⚠️' : 'ℹ️'}
-            </span>
             <span className="toast-text">{syncToast.message}</span>
             <button className="toast-close" onClick={() => setSyncToast(null)} aria-label="Close notification">×</button>
           </div>
@@ -533,7 +716,11 @@ export default function App() {
 
           {/* View 2: Reach Out View */}
           {activeTab === 'reachout' && (
-            <ReachOutView cities={directoryCities} />
+            <ReachOutView
+              cities={directoryCities}
+              onNavigateToDirectory={() => setActiveTab('directory')}
+              onPipelineChange={fetchDirectoryMeta}
+            />
           )}
 
           {/* View 3: Live Jobs View */}
@@ -544,7 +731,7 @@ export default function App() {
                 <div className="stat-card">
                   <span className="stat-label">Total Tracked Jobs</span>
                   <span className="stat-value">{stats ? stats.total.toLocaleString() : meta.totalInDb.toLocaleString()}</span>
-                  <span className="stat-subtext">Across {stats ? stats.companiesCount : '—'} companies</span>
+                  <span className="stat-subtext">Across {stats ? stats.companiesCount : 0} companies</span>
                 </div>
                 <div className="stat-card">
                   <span className="stat-label">Currently Open</span>
@@ -571,6 +758,33 @@ export default function App() {
 
               {/* Filter Card */}
               <section className="filter-card" aria-label="Filters">
+                <div className="filter-card-header">
+                  <div className="filter-header-title">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+                    </svg>
+                    <span>Filter Openings</span>
+                    {activeFilters.length > 0 && (
+                      <span className="filter-active-count-badge">{activeFilters.length} active</span>
+                    )}
+                  </div>
+                  {hasNonDefaultFilters && (
+                    <button
+                      type="button"
+                      id="clear-filters-btn"
+                      className="filter-reset-header-btn"
+                      onClick={handleResetFilters}
+                      title="Reset all filters to default"
+                    >
+                      <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                        <path d="M3 3v5h5" />
+                      </svg>
+                      Reset Filters
+                    </button>
+                  )}
+                </div>
+
                 <div className="filter-grid">
                   {/* Search Box */}
                   <div className="input-group">
@@ -608,16 +822,16 @@ export default function App() {
                         setPage(1);
                       }}
                     >
-                      <option value="all">🌐 All Countries (Global)</option>
+                      <option value="all">All Countries (Global)</option>
                       <option value="India">
-                        🇮🇳 India ({countries.find(c => c.country === 'India')?.count || 0} jobs)
+                        India ({countries.find(c => c.country === 'India')?.count || 0} jobs)
                       </option>
-                      <optgroup label="🌍 International Countries">
+                      <optgroup label="International Countries">
                         {countries
                           .filter(c => c.country && c.country !== 'India')
                           .map(c => (
                             <option key={c.country} value={c.country}>
-                              {getCountryFlag(c.country)} {c.country} ({c.count} {c.count === 1 ? 'job' : 'jobs'})
+                              {c.country} ({c.count} {c.count === 1 ? 'job' : 'jobs'})
                             </option>
                           ))}
                       </optgroup>
@@ -640,13 +854,13 @@ export default function App() {
                     >
                       <option value="all">
                         {selectedCountry === 'India'
-                          ? `🌐 All Indian Cities (${totalCityJobs} jobs)`
+                          ? `All Indian Cities (${totalCityJobs} jobs)`
                           : selectedCountry !== 'all'
-                            ? `🌐 All Cities in ${selectedCountry} (${totalCityJobs} jobs)`
-                            : `🌐 All Cities Worldwide (${totalCityJobs} jobs)`}
+                            ? `All Cities in ${selectedCountry} (${totalCityJobs} jobs)`
+                            : `All Cities Worldwide (${totalCityJobs} jobs)`}
                       </option>
                       {cityGroups.remote.length > 0 && (
-                        <optgroup label="💻 Remote & Distributed">
+                        <optgroup label="Remote and Distributed">
                           {cityGroups.remote.map((c) => (
                             <option key={c.city} value={c.city}>
                               {c.city} ({c.count} {c.count === 1 ? 'job' : 'jobs'})
@@ -655,19 +869,19 @@ export default function App() {
                         </optgroup>
                       )}
                       {cityGroups.major.length > 0 && (
-                        <optgroup label={selectedCountry === 'India' ? '🏢 Major Indian Tech Hubs' : (selectedCountry !== 'all' ? `🏢 Major Tech Hubs in ${selectedCountry}` : '🏢 Major Hubs')}>
+                        <optgroup label={selectedCountry === 'India' ? 'Major Indian Tech Hubs' : (selectedCountry !== 'all' ? `Major Tech Hubs in ${selectedCountry}` : 'Major Hubs')}>
                           {cityGroups.major.map((c) => (
                             <option key={c.city} value={c.city}>
-                              {c.city} {c.state ? `(${c.state})` : ''} — {c.count} {c.count === 1 ? 'job' : 'jobs'}
+                              {c.city} {c.state ? `(${c.state})` : ''} ({c.count} {c.count === 1 ? 'job' : 'jobs'})
                             </option>
                           ))}
                         </optgroup>
                       )}
                       {cityGroups.other.length > 0 && (
-                        <optgroup label={selectedCountry === 'India' ? '📍 Other Cities & Tech Clusters' : '📍 Other Locations'}>
+                        <optgroup label={selectedCountry === 'India' ? 'Other Cities and Tech Clusters' : 'Other Locations'}>
                           {cityGroups.other.slice(0, 100).map((c) => (
                             <option key={c.city} value={c.city}>
-                              {c.city} — {c.count} {c.count === 1 ? 'job' : 'jobs'}
+                              {c.city} ({c.count} {c.count === 1 ? 'job' : 'jobs'})
                             </option>
                           ))}
                         </optgroup>
@@ -687,11 +901,11 @@ export default function App() {
                         setPage(1);
                       }}
                     >
-                      <option value="all">🌐 All Work Modes</option>
-                      <option value="onsite">🏢 On-site Work</option>
-                      <option value="hybrid">🔄 Hybrid (Office + WFH)</option>
-                      <option value="remote">💻 100% Remote / WFH</option>
-                      <option value="unknown">❓ Unspecified Location</option>
+                      <option value="all">All Work Modes</option>
+                      <option value="onsite">On-site Work</option>
+                      <option value="hybrid">Hybrid (Office + Remote)</option>
+                      <option value="remote">Remote</option>
+                      <option value="unknown">Unspecified Location</option>
                     </select>
                   </div>
 
@@ -708,16 +922,16 @@ export default function App() {
                           setPage(1);
                         }}
                       >
-                        <option value="all">🏢 All Companies ({stats.companies.length})</option>
+                        <option value="all">All Companies ({stats.companies.length})</option>
                         {companyGroups.tier1.length > 0 && (
-                          <optgroup label="🔥 Big Tech & Tier-1 Product Giants">
+                          <optgroup label="Tier-1 Product Companies">
                             {companyGroups.tier1.map((comp) => (
                               <option key={comp} value={comp}>{comp}</option>
                             ))}
                           </optgroup>
                         )}
                         {companyGroups.other.length > 0 && (
-                          <optgroup label="💼 All Other Tech Companies">
+                          <optgroup label="Other Tech Companies">
                             {companyGroups.other.map((comp) => (
                               <option key={comp} value={comp}>{comp}</option>
                             ))}
@@ -739,24 +953,46 @@ export default function App() {
                         setPage(1);
                       }}
                     >
-                      <option value="open">🟢 Active & Open Postings Only</option>
-                      <option value="all">⚪ All Postings (Active + Archived)</option>
-                      <option value="closed">🔴 Closed Postings Only</option>
+                      <option value="open">Active and Open Postings Only</option>
+                      <option value="all">All Postings (Active + Archived)</option>
+                      <option value="closed">Closed Postings Only</option>
                     </select>
                   </div>
-
-                  {/* Clear Filters Button */}
-                  <div className="input-group" style={{ display: 'flex', alignItems: 'flex-end' }}>
-                    <button
-                      id="clear-filters-btn"
-                      type="button"
-                      className="clear-btn"
-                      onClick={handleResetFilters}
-                    >
-                      Reset Filters
-                    </button>
-                  </div>
                 </div>
+
+                {/* Active Filters Row (Clearly Displays Every Active Filter with Dismiss Buttons) */}
+                {activeFilters.length > 0 && (
+                  <div className="filter-active-chips-strip">
+                    <span className="chips-strip-label">Applied Filters:</span>
+                    <div className="chips-strip-tags">
+                      {activeFilters.map((f) => (
+                        <span key={f.id} className="active-filter-chip">
+                          <span className="chip-key">{f.label}:</span>
+                          <span className="chip-val">{f.value}</span>
+                          <button
+                            type="button"
+                            className="chip-del-btn"
+                            onClick={f.onRemove}
+                            title={`Remove ${f.label} filter`}
+                            aria-label={`Remove ${f.label} filter`}
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))}
+                      {hasNonDefaultFilters && (
+                        <button
+                          type="button"
+                          className="chips-clear-all-btn"
+                          onClick={handleResetFilters}
+                          title="Reset all filters to default"
+                        >
+                          Clear All
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 {/* Secondary Filter Row: Tech & Coding Roles Toggle */}
                 <div className="filter-row-secondary" style={{ marginTop: '14px', paddingTop: '12px', borderTop: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -771,11 +1007,11 @@ export default function App() {
                       }}
                       style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: 'var(--primary)' }}
                     />
-                    <span>⚡ Tech & Coding Roles Only (Software, Engineering, AI, Data, DevOps, Fullstack)</span>
+                    <span>Tech & Engineering Roles Only (Software, Engineering, AI, Data, DevOps, Fullstack)</span>
                   </label>
                   {techOnlyJobs && (
                     <span style={{ fontSize: '12px', color: 'var(--success)', fontWeight: 600 }}>
-                      ✓ Filtering out non-technical roles (accounting, sales, HR, operations)
+                      Filtering out non-technical roles
                     </span>
                   )}
                 </div>
@@ -787,13 +1023,13 @@ export default function App() {
                   <div className="results-count" id="results-count-text">
                     Showing <strong>{jobs.length}</strong> of <strong>{meta.total}</strong> matching jobs
                     {selectedCountry !== 'all' ? (
-                      <span className="active-tag">{getCountryFlag(selectedCountry)} {selectedCountry}</span>
+                      <span className="active-tag">{selectedCountry}</span>
                     ) : (
-                      <span className="active-tag">🌐 Global / All Countries</span>
+                      <span className="active-tag">Global / All Countries</span>
                     )}
-                    {techOnlyJobs && <span className="active-tag" style={{ background: 'rgba(16, 185, 129, 0.12)', color: '#059669', borderColor: 'rgba(16, 185, 129, 0.3)' }}>⚡ Tech Roles Only</span>}
-                    {selectedCity !== 'all' && <span className="active-tag">📍 {selectedCity}</span>}
-                    {workModeFilter !== 'all' && <span className="active-tag">💼 {workModeFilter}</span>}
+                    {techOnlyJobs && <span className="active-tag" style={{ background: 'rgba(16, 185, 129, 0.12)', color: '#059669', borderColor: 'rgba(16, 185, 129, 0.3)' }}>Tech Roles Only</span>}
+                    {selectedCity !== 'all' && <span className="active-tag">{selectedCity}</span>}
+                    {workModeFilter !== 'all' && <span className="active-tag">{workModeFilter}</span>}
                   </div>
 
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -881,7 +1117,7 @@ export default function App() {
                                       className="job-location-text"
                                       title={`Raw ATS Location: ${rawLoc}`}
                                     >
-                                      📍 {displayCity}
+                                      {displayCity}
                                     </span>
                                     <span className={`mode-badge ${getWorkModeBadgeClass(job.workMode)}`}>
                                       {job.workMode}
@@ -897,16 +1133,30 @@ export default function App() {
                                 <td className="job-date-text">
                                   {formatDate(job.lastSeenAt)}
                                 </td>
-                                <td style={{ textAlign: 'right' }}>
-                                  <a
-                                    href={job.applyUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="apply-button"
-                                    id={`apply-link-${job.sourceJobId}`}
-                                  >
-                                    Apply ↗
-                                  </a>
+                                <td className="job-action-cell" style={{ textAlign: 'right' }}>
+                                  <div className="action-buttons-cluster">
+                                    <button
+                                      type="button"
+                                      className="btn-job-eligibility"
+                                      onClick={() => setEligibilityJob(job)}
+                                      title="Check eligibility: Freshers, Skills & Tech, Work Mode & India/US Policy"
+                                      id={`eligibility-btn-${job.sourceJobId || job._id}`}
+                                    >
+                                      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M12 2L14.39 8.26L21 9.27L16.27 13.88L17.82 20.46L12 17.07L6.18 20.46L7.73 13.88L3 9.27L9.61 8.26L12 2Z" />
+                                      </svg>
+                                      <span>Eligibility</span>
+                                    </button>
+                                    <a
+                                      href={job.applyUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="apply-button"
+                                      id={`apply-link-${job.sourceJobId}`}
+                                    >
+                                      Apply
+                                    </a>
+                                  </div>
                                 </td>
                               </tr>
                             );
@@ -927,7 +1177,7 @@ export default function App() {
                           disabled={page <= 1}
                           onClick={() => setPage((p) => Math.max(p - 1, 1))}
                         >
-                          ← Previous
+                          Previous
                         </button>
                         <button
                           id="next-page-btn"
@@ -935,7 +1185,7 @@ export default function App() {
                           disabled={page >= meta.totalPages}
                           onClick={() => setPage((p) => Math.min(p + 1, meta.totalPages))}
                         >
-                          Next →
+                          Next
                         </button>
                       </div>
                     </div>
@@ -956,6 +1206,21 @@ export default function App() {
           </div>
         </footer>
       </div>
+
+      {/* Job Eligibility Modal */}
+      {eligibilityJob && (
+        <JobEligibilityModal
+          job={eligibilityJob}
+          onClose={() => setEligibilityJob(null)}
+          onAddToPipeline={(j) => {
+            setActiveTab('reachout');
+            setEligibilityJob(null);
+          }}
+        />
+      )}
+
+      {/* Global Auth Modal */}
+      <AuthModal />
     </div>
   );
 }

@@ -3,6 +3,7 @@ const Office = require('../models/Office');
 const City = require('../models/City');
 const Job = require('../models/Job');
 const UncertainMerge = require('../models/UncertainMerge');
+const UserPipeline = require('../models/UserPipeline');
 
 /**
  * GET /api/directory/cities
@@ -100,7 +101,24 @@ exports.getCompanies = async (req, res) => {
     }
 
     if (followUp && followUp !== 'all') {
-      companyQuery.followUpStatus = followUp;
+      if (req.user && req.user.id) {
+        const userPipes = await UserPipeline.find({ userId: req.user.id, followUpStatus: followUp }, 'companyId').lean();
+        const pipeCompanyIds = userPipes.map(p => p.companyId);
+        if (companyQuery._id && companyQuery._id.$in) {
+          const idSet = new Set(pipeCompanyIds.map(id => id.toString()));
+          companyQuery._id = { $in: companyQuery._id.$in.filter(id => idSet.has(id.toString())) };
+        } else {
+          companyQuery._id = { $in: pipeCompanyIds };
+        }
+      } else {
+        return res.status(200).json({
+          success: true,
+          companies: [],
+          total: 0,
+          page: pageNum,
+          totalPages: 0
+        });
+      }
     }
 
     // City filter
@@ -204,15 +222,30 @@ exports.getCompanies = async (req, res) => {
       jobsMap[cId].push(j);
     }
 
+    // Check if user is logged in to overlay their personal outreach status
+    let userPipelineMap = {};
+    if (req.user && req.user.id) {
+      const userPipelines = await UserPipeline.find({
+        userId: req.user.id,
+        companyId: { $in: paginatedCompanies.map(c => c._id) }
+      }).lean();
+      for (const up of userPipelines) {
+        userPipelineMap[up.companyId.toString()] = up;
+      }
+    }
+
     // Assemble company cards with strictly verified hiring status
     const processed = paginatedCompanies.map(comp => {
       const cId = comp._id.toString();
       const openJobs = jobsMap[cId] || [];
       const offices = officesMap[cId] || [];
       const isHiring = openJobs.length > 0;
+      const userPipe = userPipelineMap[cId];
 
       return {
         ...comp,
+        followUpStatus: userPipe ? userPipe.followUpStatus : 'none',
+        notes: userPipe ? userPipe.notes : '',
         offices,
         openJobs,
         openJobsCount: openJobs.length,
@@ -239,28 +272,75 @@ exports.getCompanies = async (req, res) => {
 
 /**
  * GET /api/directory/reach-out
- * Lists companies with outreach channels for cold/direct outreach
+ * Lists companies tracked in the user's personal outreach pipeline
  */
 exports.getReachOutCompanies = async (req, res) => {
   try {
     const { city, q, status } = req.query;
 
-    const companyQuery = {};
+    const validPipelineStages = ['to_contact', 'contacted', 'replied', 'not_interested'];
+    const stageCounts = {
+      all: 0,
+      to_contact: 0,
+      contacted: 0,
+      replied: 0,
+      not_interested: 0
+    };
 
-    // Filter by outreach pipeline stage
-    if (status && status !== 'all') {
-      companyQuery.followUpStatus = status;
-    } else {
-      companyQuery.followUpStatus = { $in: ['to_contact', 'contacted', 'replied', 'not_interested'] };
+    // If guest (not authenticated), return empty list with authenticated: false
+    if (!req.user || !req.user.id) {
+      return res.status(200).json({
+        success: true,
+        authenticated: false,
+        companies: [],
+        total: 0,
+        stageCounts
+      });
     }
+
+    // Authenticated user: retrieve all companies tracked in their pipeline
+    const userPipelines = await UserPipeline.find({
+      userId: req.user.id,
+      followUpStatus: { $in: validPipelineStages }
+    }).lean();
+
+    const userPipelineMap = {};
+    for (const up of userPipelines) {
+      const cId = up.companyId.toString();
+      userPipelineMap[cId] = up;
+      if (stageCounts.hasOwnProperty(up.followUpStatus)) {
+        stageCounts[up.followUpStatus] += 1;
+        stageCounts.all += 1;
+      }
+    }
+
+    // Filter by stage if requested (otherwise show all tracked companies)
+    const filteredPipelines = userPipelines.filter(up =>
+      !status || status === 'all' || up.followUpStatus === status
+    );
+
+    const targetCompanyIds = filteredPipelines.map(up => up.companyId);
+
+    if (targetCompanyIds.length === 0) {
+      return res.status(200).json({
+        success: true,
+        authenticated: true,
+        companies: [],
+        total: 0,
+        stageCounts
+      });
+    }
+
+    const companyQuery = { _id: { $in: targetCompanyIds } };
 
     if (city && city !== 'all') {
       const cityRecord = await City.findOne({ slug: city.toLowerCase() });
       if (cityRecord) {
-        const officesInCity = await Office.find({ cityId: cityRecord._id }, 'companyId');
+        const officesInCity = await Office.find({ cityId: cityRecord._id, companyId: { $in: targetCompanyIds } }, 'companyId');
         companyQuery._id = { $in: officesInCity.map(o => o.companyId) };
       } else {
         const matchingOffices = await Office.find({
+          companyId: { $in: targetCompanyIds },
           $or: [
             { locality: new RegExp(`^${city}$`, 'i') },
             { address: new RegExp(city, 'i') }
@@ -275,39 +355,9 @@ exports.getReachOutCompanies = async (req, res) => {
       companyQuery.name = new RegExp(escaped, 'i');
     }
 
-    // Pipeline stage counts aggregation (respecting city and search if present)
-    const stageMatch = {
-      followUpStatus: { $in: ['to_contact', 'contacted', 'replied', 'not_interested'] }
-    };
-    if (companyQuery._id) {
-      stageMatch._id = companyQuery._id;
-    }
-    if (companyQuery.name) {
-      stageMatch.name = companyQuery.name;
-    }
-
-    const [companies, stageAggregation] = await Promise.all([
-      Company.find(companyQuery).sort({ updatedAt: -1, name: 1 }).lean(),
-      Company.aggregate([
-        { $match: stageMatch },
-        { $group: { _id: '$followUpStatus', count: { $sum: 1 } } }
-      ])
-    ]);
-
-    const stageCounts = {
-      all: 0,
-      to_contact: 0,
-      contacted: 0,
-      replied: 0,
-      not_interested: 0
-    };
-
-    stageAggregation.forEach(item => {
-      if (item._id && stageCounts.hasOwnProperty(item._id)) {
-        stageCounts[item._id] = item.count;
-      }
-      stageCounts.all += item.count;
-    });
+    const companies = await Company.find(companyQuery)
+      .sort({ updatedAt: -1, name: 1 })
+      .lean();
 
     const companyIds = companies.map(c => c._id);
 
@@ -326,12 +376,17 @@ exports.getReachOutCompanies = async (req, res) => {
       officesMap[cId].push(off);
     }
 
-    const result = companies.map(comp => {
+    let result = [];
+    for (const comp of companies) {
       const cId = comp._id.toString();
       const isHiring = hiringCompanyIds.has(cId);
       const offices = officesMap[cId] || [];
+      const userPipe = userPipelineMap[cId];
 
-      // Ensure every outreach company has direct contact channels
+      const currentStatus = userPipe ? userPipe.followUpStatus : 'to_contact';
+      const currentNotes = userPipe ? userPipe.notes : '';
+
+      // Ensure direct contact channels
       const emails = [...(comp.contact?.emails || [])];
       const phones = [...(comp.contact?.phones || [])];
 
@@ -353,8 +408,10 @@ exports.getReachOutCompanies = async (req, res) => {
         });
       }
 
-      return {
+      result.push({
         ...comp,
+        followUpStatus: currentStatus,
+        notes: currentNotes,
         contact: {
           ...comp.contact,
           emails,
@@ -363,11 +420,12 @@ exports.getReachOutCompanies = async (req, res) => {
         offices,
         isHiring,
         hiringStatusLabel: isHiring ? 'Hiring (Open roles available)' : 'No known vacancy'
-      };
-    });
+      });
+    }
 
     res.status(200).json({
       success: true,
+      authenticated: true,
       companies: result,
       total: result.length,
       stageCounts
@@ -380,7 +438,7 @@ exports.getReachOutCompanies = async (req, res) => {
 
 /**
  * PATCH /api/directory/companies/:id/follow-up
- * Updates followUpStatus and notes
+ * Updates followUpStatus and notes for the user's pipeline
  */
 exports.updateCompanyFollowUp = async (req, res) => {
   try {
@@ -401,12 +459,38 @@ exports.updateCompanyFollowUp = async (req, res) => {
       update.notes = String(notes);
     }
 
-    const company = await Company.findByIdAndUpdate(id, { $set: update }, { new: true });
+    // Persist per-user pipeline record
+    if (req.user && req.user.id) {
+      // If user provided notes without specifying a follow-up status, promote to 'to_contact' if currently 'none'
+      if (update.followUpStatus === undefined) {
+        const existingPipe = await UserPipeline.findOne({ userId: req.user.id, companyId: id });
+        if (!existingPipe || existingPipe.followUpStatus === 'none') {
+          update.followUpStatus = 'to_contact';
+        }
+      }
+
+      await UserPipeline.findOneAndUpdate(
+        { userId: req.user.id, companyId: id },
+        { $set: update },
+        { upsert: true, new: true }
+      );
+    }
+
+    const company = await Company.findById(id).lean();
     if (!company) {
       return res.status(400).json({ success: false, error: 'Company not found' });
     }
 
-    res.status(200).json({ success: true, company });
+    res.status(200).json({
+      success: true,
+      company: {
+        ...company,
+        followUpStatus: update.followUpStatus !== undefined ? update.followUpStatus : 'none',
+        notes: update.notes !== undefined ? update.notes : ''
+      },
+      followUpStatus: update.followUpStatus !== undefined ? update.followUpStatus : 'none',
+      notes: update.notes !== undefined ? update.notes : ''
+    });
   } catch (err) {
     console.error('Error updating company follow-up:', err);
     res.status(500).json({ success: false, error: 'Failed to update company' });
