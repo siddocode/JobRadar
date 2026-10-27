@@ -3,10 +3,12 @@ import CompanyDirectory from './components/CompanyDirectory';
 import ReachOutView from './components/ReachOutView';
 import AuthModal from './components/AuthModal';
 import JobEligibilityModal from './components/JobEligibilityModal';
+import CandidateProfileUploadModal from './components/CandidateProfileUploadModal';
 import { useAuth } from './context/AuthContext';
+import { getJobMatchQuick } from './utils/candidateMatcher';
 
 export default function App() {
-  const { user, isAuthenticated, logout, openAuthModal, authFetch } = useAuth();
+  const { user, isAuthenticated, logout, openAuthModal, authFetch, candidateProfile } = useAuth();
   const [activeTab, setActiveTab] = useState('directory'); // 'directory' | 'jobs' | 'reachout'
   const [theme, setTheme] = useState(() => localStorage.getItem('jobradar_theme') || 'light');
 
@@ -14,6 +16,7 @@ export default function App() {
   const [companyCount, setCompanyCount] = useState(0);
   const [reachOutCount, setReachOutCount] = useState(0);
   const [eligibilityJob, setEligibilityJob] = useState(null);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
   const [jobs, setJobs] = useState([]);
   const [cities, setCities] = useState([]);
@@ -21,14 +24,15 @@ export default function App() {
   const [stats, setStats] = useState(null);
 
   // Filters
+  const [onlyEligibleJobs, setOnlyEligibleJobs] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCountry, setSelectedCountry] = useState('India');
+  const [selectedCountry, setSelectedCountry] = useState('all');
   const [countries, setCountries] = useState([]);
   const [selectedCity, setSelectedCity] = useState('all');
   const [workModeFilter, setWorkModeFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('open');
   const [companyFilter, setCompanyFilter] = useState('all');
-  const [techOnlyJobs, setTechOnlyJobs] = useState(true);
+  const [techOnlyJobs, setTechOnlyJobs] = useState(false);
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(25);
 
@@ -43,6 +47,13 @@ export default function App() {
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('jobradar_theme', theme);
   }, [theme]);
+
+  // Reset eligibility filter if user is not authenticated
+  useEffect(() => {
+    if (!isAuthenticated && onlyEligibleJobs) {
+      setOnlyEligibleJobs(false);
+    }
+  }, [isAuthenticated, onlyEligibleJobs]);
 
   // Fetch aggregate stats
   const fetchStats = async () => {
@@ -258,14 +269,22 @@ export default function App() {
     return () => clearTimeout(handler);
   }, [fetchJobs]);
 
+  // Synchronize country filter with candidate's location when candidate profile is loaded or changed
+  useEffect(() => {
+    if (candidateProfile?.country) {
+      setSelectedCountry(candidateProfile.country);
+    }
+  }, [candidateProfile]);
+
   const handleResetFilters = () => {
     setSearchQuery('');
-    setSelectedCountry('India');
+    setSelectedCountry('all');
     setSelectedCity('all');
     setWorkModeFilter('all');
     setStatusFilter('open');
     setCompanyFilter('all');
-    setTechOnlyJobs(true);
+    setTechOnlyJobs(false);
+    setOnlyEligibleJobs(false);
     setPage(1);
   };
 
@@ -428,20 +447,34 @@ export default function App() {
       });
     }
 
+    if (onlyEligibleJobs && isAuthenticated && candidateProfile) {
+      list.push({
+        id: 'onlyEligible',
+        label: 'Eligibility',
+        value: `Eligible Only (${candidateProfile.country || 'Global'})`,
+        onRemove: () => {
+          setOnlyEligibleJobs(false);
+          setPage(1);
+        }
+      });
+    }
+
     return list;
-  }, [searchQuery, selectedCountry, selectedCity, workModeFilter, companyFilter, statusFilter, techOnlyJobs]);
+  }, [searchQuery, selectedCountry, selectedCity, workModeFilter, companyFilter, statusFilter, techOnlyJobs, onlyEligibleJobs, isAuthenticated, candidateProfile]);
 
   const hasNonDefaultFilters = useMemo(() => {
-    return Boolean(
-      searchQuery.trim() ||
-      selectedCity !== 'all' ||
-      workModeFilter !== 'all' ||
-      companyFilter !== 'all' ||
-      statusFilter !== 'open' ||
-      selectedCountry !== 'India' ||
-      !techOnlyJobs
-    );
-  }, [searchQuery, selectedCity, workModeFilter, companyFilter, statusFilter, selectedCountry, techOnlyJobs]);
+    return activeFilters.length > 0;
+  }, [activeFilters]);
+
+  // Compute displayed jobs, with filtering for candidate eligibility across country & seniority
+  const displayedJobs = useMemo(() => {
+    if (!onlyEligibleJobs || !isAuthenticated || !candidateProfile) return jobs;
+    return jobs.filter((job) => {
+      const qm = getJobMatchQuick(job, candidateProfile);
+      if (!qm) return false;
+      return qm.overall.canApply && !qm.overall.isHardBlocker && qm.overall.status !== 'NOT_ELIGIBLE';
+    });
+  }, [jobs, onlyEligibleJobs, isAuthenticated, candidateProfile]);
 
   const formatDate = (isoString) => {
     if (!isoString) return 'N/A';
@@ -994,26 +1027,117 @@ export default function App() {
                   </div>
                 )}
 
-                {/* Secondary Filter Row: Tech & Coding Roles Toggle */}
-                <div className="filter-row-secondary" style={{ marginTop: '14px', paddingTop: '12px', borderTop: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <label className="tech-checkbox-label" htmlFor="tech-jobs-toggle" style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '8px', fontWeight: 600, fontSize: '13.5px', color: 'var(--text-primary)' }}>
-                    <input
-                      id="tech-jobs-toggle"
-                      type="checkbox"
-                      checked={techOnlyJobs}
-                      onChange={(e) => {
-                        setTechOnlyJobs(e.target.checked);
-                        setPage(1);
+                {/* Secondary Filter Row: Tech & Coding Roles Toggle + Only Eligible Toggle + CV Match Bar */}
+                <div className="filter-row-secondary" style={{ marginTop: '14px', paddingTop: '12px', borderTop: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+                    <label className="tech-checkbox-label" htmlFor="tech-jobs-toggle" style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '8px', fontWeight: 600, fontSize: '13.5px', color: 'var(--text-primary)' }}>
+                      <input
+                        id="tech-jobs-toggle"
+                        type="checkbox"
+                        checked={techOnlyJobs}
+                        onChange={(e) => {
+                          setTechOnlyJobs(e.target.checked);
+                          setPage(1);
+                        }}
+                        style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: 'var(--primary)' }}
+                      />
+                      <span>Tech & Engineering Roles Only</span>
+                      {techOnlyJobs && (
+                        <span style={{ fontSize: '12px', color: 'var(--success)', fontWeight: 600, marginLeft: '4px' }}>
+                          (Active)
+                        </span>
+                      )}
+                    </label>
+
+                    <label
+                      className={`tech-checkbox-label eligible-toggle-pill ${onlyEligibleJobs ? 'active' : ''}`}
+                      htmlFor="eligible-jobs-toggle"
+                      style={{
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        fontWeight: 700,
+                        fontSize: '13px',
+                        color: onlyEligibleJobs ? '#047857' : '#059669',
+                        background: onlyEligibleJobs ? 'rgba(16, 185, 129, 0.16)' : 'rgba(16, 185, 129, 0.08)',
+                        padding: '4px 12px',
+                        borderRadius: '20px',
+                        border: '1px solid rgba(16, 185, 129, 0.35)',
+                        transition: 'all 0.2s ease'
                       }}
-                      style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: 'var(--primary)' }}
-                    />
-                    <span>Tech & Engineering Roles Only (Software, Engineering, AI, Data, DevOps, Fullstack)</span>
-                  </label>
-                  {techOnlyJobs && (
-                    <span style={{ fontSize: '12px', color: 'var(--success)', fontWeight: 600 }}>
-                      Filtering out non-technical roles
+                      title={
+                        !isAuthenticated
+                          ? 'Sign in required to filter by eligibility'
+                          : (candidateProfile ? `Filter roles based on your eligibility (${candidateProfile.country}, ${candidateProfile.experienceDisplay})` : 'Upload CV or Portfolio to check eligibility across jobs')
+                      }
+                    >
+                      <input
+                        id="eligible-jobs-toggle"
+                        type="checkbox"
+                        checked={isAuthenticated && onlyEligibleJobs}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          if (checked && !isAuthenticated) {
+                            openAuthModal('Please sign in or create an account to filter jobs by your CV eligibility.', 'login');
+                            return;
+                          }
+                          if (checked && !candidateProfile) {
+                            setIsProfileModalOpen(true);
+                            return;
+                          }
+                          setOnlyEligibleJobs(checked);
+                          setPage(1);
+                        }}
+                        style={{ width: '15px', height: '15px', cursor: 'pointer', accentColor: '#10b981' }}
+                      />
+                      <span>Show Eligible Roles Only</span>
+                      {isAuthenticated && onlyEligibleJobs && (
+                        <span style={{ fontSize: '11px', background: '#10b981', color: '#fff', padding: '1px 6px', borderRadius: '10px', fontWeight: 600 }}>
+                          Active
+                        </span>
+                      )}
+                    </label>
+                  </div>
+
+                  {/* Candidate Profile / CV Match Bar Trigger */}
+                  <button
+                    type="button"
+                    className={`btn-candidate-profile-trigger ${isAuthenticated && candidateProfile ? 'has-profile' : ''}`}
+                    onClick={() => {
+                      if (!isAuthenticated) {
+                        openAuthModal('Please sign in or create an account to upload your CV and match your job eligibility.', 'login');
+                        return;
+                      }
+                      setIsProfileModalOpen(true);
+                    }}
+                    title={
+                      !isAuthenticated
+                        ? 'Sign in required to upload CV or portfolio'
+                        : (candidateProfile
+                          ? `Active CV Profile: ${candidateProfile.country}, ${candidateProfile.experienceDisplay || `${candidateProfile.totalYearsExperience} Yrs Exp`}`
+                          : 'Upload your CV in PDF or enter portfolio URL to check eligibility across jobs')
+                    }
+                    id="match-profile-trigger-btn"
+                  >
+                    <span className="profile-trigger-icon">{isAuthenticated && candidateProfile ? '👤' : '📄'}</span>
+                    <span className="profile-trigger-content">
+                      {isAuthenticated && candidateProfile ? (
+                        <>
+                          <span className="trigger-lead">CV Active:</span>
+                          <span className="trigger-detail">
+                            {candidateProfile.country} • {candidateProfile.experienceDisplay || (candidateProfile.totalExperienceMonths ? `${candidateProfile.totalExperienceMonths} Mos` : `${candidateProfile.totalYearsExperience || 0} Yrs`)} • {candidateProfile.skills?.length || 0} Skills
+                          </span>
+                          <span className="trigger-update-tag">Edit</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="trigger-lead">+ Match My CV / Portfolio</span>
+                          <span className="trigger-hint">{!isAuthenticated ? '(Sign In Required)' : '(Check Eligibility)'}</span>
+                        </>
+                      )}
                     </span>
-                  )}
+                  </button>
                 </div>
               </section>
 
@@ -1021,7 +1145,12 @@ export default function App() {
               <div className="results-container">
                 <div className="results-header">
                   <div className="results-count" id="results-count-text">
-                    Showing <strong>{jobs.length}</strong> of <strong>{meta.total}</strong> matching jobs
+                    Showing <strong>{displayedJobs.length}</strong> of <strong>{meta.total}</strong> matching jobs
+                    {onlyEligibleJobs && isAuthenticated && candidateProfile && (
+                      <span className="active-tag" style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#059669', borderColor: '#10b981', fontWeight: 700 }}>
+                        ✓ Eligible For You ({candidateProfile.country || 'All Countries'})
+                      </span>
+                    )}
                     {selectedCountry !== 'all' ? (
                       <span className="active-tag">{selectedCountry}</span>
                     ) : (
@@ -1084,7 +1213,7 @@ export default function App() {
                           </tr>
                         </thead>
                         <tbody>
-                          {jobs.map((job) => {
+                          {displayedJobs.map((job) => {
                             const rawLoc = job.locationRaw || job.location || 'Unspecified';
                             const countryTag = job.country && job.country !== 'India' ? ` (${job.country})` : '';
                             const displayCity = job.city
@@ -1093,10 +1222,29 @@ export default function App() {
                                 ? (job.country ? `Remote (${job.country})` : 'Remote / Global')
                                 : `${rawLoc}${countryTag && !rawLoc.toLowerCase().includes(job.country.toLowerCase()) ? countryTag : ''}`);
 
+                            const quickMatch = (isAuthenticated && candidateProfile) ? getJobMatchQuick(job, candidateProfile) : null;
+
                             return (
                               <tr key={job._id || `${job.source}-${job.sourceJobId}`}>
                                 <td className="job-title-cell">
                                   <div className="title-text">{job.title}</div>
+
+                                  {/* Live Eligibility Match Indicator when candidate profile is active and user is authenticated */}
+                                  {isAuthenticated && candidateProfile && quickMatch && (
+                                    <div
+                                      className={`job-row-match-pill ${quickMatch.overall.badgeTone}`}
+                                      onClick={() => setEligibilityJob(job)}
+                                      title={`Click to view breakdown: ${quickMatch.overall.summary}`}
+                                    >
+                                      <span className="match-pill-dot" />
+                                      <span className="match-pill-text">
+                                        {quickMatch.overall.isHardBlocker
+                                          ? '🚫 US Auth Required'
+                                          : `${quickMatch.overall.score}% Match • ${quickMatch.overall.status === 'ELIGIBLE' ? 'Eligible' : 'Partial Fit'}`}
+                                      </span>
+                                    </div>
+                                  )}
+
                                   {job.source === 'adzuna' && (
                                     <div className="adzuna-attribution">
                                       Provided by <a href="https://www.adzuna.in" target="_blank" rel="noopener noreferrer">Adzuna</a>
@@ -1137,15 +1285,19 @@ export default function App() {
                                   <div className="action-buttons-cluster">
                                     <button
                                       type="button"
-                                      className="btn-job-eligibility"
+                                      className={`btn-job-eligibility ${isAuthenticated && candidateProfile ? (quickMatch?.overall?.badgeTone || 'has-profile-match') : ''}`}
                                       onClick={() => setEligibilityJob(job)}
-                                      title="Check eligibility: Freshers, Skills & Tech, Work Mode & India/US Policy"
+                                      title={isAuthenticated && candidateProfile ? `Check match for ${candidateProfile.name}: ${quickMatch?.overall?.headline || ''}` : "View eligibility and requirements for this role"}
                                       id={`eligibility-btn-${job.sourceJobId || job._id}`}
                                     >
                                       <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
                                         <path d="M12 2L14.39 8.26L21 9.27L16.27 13.88L17.82 20.46L12 17.07L6.18 20.46L7.73 13.88L3 9.27L9.61 8.26L12 2Z" />
                                       </svg>
-                                      <span>Eligibility</span>
+                                      <span>
+                                        {isAuthenticated && candidateProfile
+                                          ? (quickMatch ? (quickMatch.overall.isHardBlocker ? 'Blocker' : `${quickMatch.overall.score}% Fit`) : 'Eligibility')
+                                          : 'Eligibility'}
+                                      </span>
                                     </button>
                                     <a
                                       href={job.applyUrl}
@@ -1216,8 +1368,21 @@ export default function App() {
             setActiveTab('reachout');
             setEligibilityJob(null);
           }}
+          onOpenProfileModal={() => {
+            if (!isAuthenticated) {
+              openAuthModal('Please sign in or create an account to upload your CV and match your job eligibility.', 'login');
+              return;
+            }
+            setIsProfileModalOpen(true);
+          }}
         />
       )}
+
+      {/* Candidate Profile Upload / Edit Modal */}
+      <CandidateProfileUploadModal
+        isOpen={isProfileModalOpen}
+        onClose={() => setIsProfileModalOpen(false)}
+      />
 
       {/* Global Auth Modal */}
       <AuthModal />

@@ -27,6 +27,8 @@
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^8.9.2",
-    "node-cron": "^4.6.0"
+    "multer": "^2.5.0",
+    "node-cron": "^4.6.0",
+    "pdf-parse": "^2.4.5"
   }
 }

@@ -1,24 +1,33 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useAuth } from '../context/AuthContext';
+import { evaluateCandidateMatch, generateClientEligibility } from '../utils/candidateMatcher';
+import CvTailorSection from './CvTailorSection';
 
 /**
  * JobEligibilityModal Component
- * Displays clear, beautiful, and structured eligibility analysis for a job:
- * - Freshers vs Experience required (years, seniority)
- * - Required Tech Stack & Major Skills
- * - Work Mode & Location (Remote vs Hybrid vs On-site)
- * - India Work Authorization (If US/International, can Indian applicants apply?)
- * - Education & Key Takeaways
+ * Evaluates both:
+ * 1. Personalized Candidate Match against uploaded CV (PDF) or Portfolio URL:
+ *    - Country & Work Authorization eligibility (Most Important)
+ *    - Experience & Seniority fit (Most Important)
+ *    - Technical skills matched vs missing
+ *    - Clear breakdown: ELIGIBLE factors, NON-ELIGIBLE factors, and OVERALL verdict
+ * 2. Standalone Job Requirements & Criteria
  */
 export default function JobEligibilityModal({
   job,
   onClose,
   onAddToPipeline,
+  onOpenProfileModal,
   isInPipeline = false
 }) {
-  const [eligibility, setEligibility] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const { candidateProfile, isAuthenticated, openAuthModal, token, updateCandidateProfile } = useAuth();
+
+  const [eligibility, setEligibility] = useState(() => job?.eligibility || null);
+  const [loading, setLoading] = useState(() => !job?.eligibility);
   const [copiedSummary, setCopiedSummary] = useState(false);
+
+  // Tab: 'match' (Personalized Candidate Match) | 'job' (General Job Requirements)
+  const [viewTab, setViewTab] = useState((isAuthenticated && candidateProfile) ? 'match' : 'job');
 
   // Close on Escape key
   useEffect(() => {
@@ -29,14 +38,20 @@ export default function JobEligibilityModal({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onClose]);
 
-  // Fetch or analyze eligibility
+  // Fetch or analyze job eligibility
   useEffect(() => {
     if (!job) return;
+
+    // If job already has server-analyzed eligibility, use it immediately
+    if (job.eligibility) {
+      setEligibility(job.eligibility);
+      setLoading(false);
+      return;
+    }
 
     let isMounted = true;
     const fetchEligibility = async () => {
       setLoading(true);
-      setError(null);
 
       const jobId = job._id || job.sourceJobId;
       try {
@@ -55,7 +70,6 @@ export default function JobEligibilityModal({
       } catch (err) {
         console.warn('API fetch failed, falling back to client-side analysis:', err);
         if (isMounted) {
-          // Client-side fallback analyzer
           const fallback = generateClientEligibility(job);
           setEligibility(fallback);
         }
@@ -71,20 +85,45 @@ export default function JobEligibilityModal({
     };
   }, [job]);
 
+  // Evaluate candidate match whenever eligibility and candidateProfile are available
+  const candidateMatch = useMemo(() => {
+    if (!eligibility || !candidateProfile) return null;
+    return evaluateCandidateMatch(eligibility, candidateProfile);
+  }, [eligibility, candidateProfile]);
+
+  // Copy summary to clipboard
   const handleCopySummary = () => {
     if (!eligibility) return;
 
-    const summaryText = [
+    const lines = [
       `Job: ${job.title} at ${job.company}`,
-      `Experience Level: ${eligibility.seniority?.experienceText || 'Not specified'}`,
-      `Freshers Eligible: ${eligibility.seniority?.isFresher ? 'Yes' : 'No'}`,
-      `Work Mode: ${eligibility.workplace?.mode || job.workMode || 'Unspecified'} (${eligibility.workplace?.locationDisplay || 'India'})`,
-      `India Hiring Policy: ${eligibility.indiaEligibility?.verdictTitle || 'Direct India Opening'}`,
-      `Top Skills: ${eligibility.skills?.slice(0, 6).join(', ') || 'Software Engineering'}`,
+      `Location: ${job.city || job.locationRaw || 'India'} (${job.workMode || 'Unspecified'})`,
       `Apply URL: ${job.applyUrl}`
-    ].join('\n');
+    ];
 
-    navigator.clipboard.writeText(summaryText);
+    if (candidateMatch) {
+      lines.push(
+        `--- CANDIDATE ELIGIBILITY EVALUATION ---`,
+        `Candidate: ${candidateMatch.candidateSummary.name} (${candidateMatch.candidateSummary.country}, ${candidateMatch.candidateSummary.experienceDisplay || `${candidateMatch.candidateSummary.totalYearsExperience} Yrs Exp`})`,
+        `Overall Verdict: ${candidateMatch.overall.status} (${candidateMatch.overall.score}% Match)`,
+        `Headline: ${candidateMatch.overall.headline}`,
+        `Summary: ${candidateMatch.overall.summary}`,
+        `Eligible Factors: ${candidateMatch.eligibleFactors.map(f => f.title).join('; ')}`
+      );
+      if (candidateMatch.nonEligibleFactors.length > 0) {
+        lines.push(`Non-Eligible Factors / Gaps: ${candidateMatch.nonEligibleFactors.map(f => f.title).join('; ')}`);
+      }
+    } else {
+      lines.push(
+        `Experience Level: ${eligibility.seniority?.experienceText || 'Not specified'}`,
+        `Freshers Eligible: ${eligibility.seniority?.isFresher ? 'Yes' : 'No'}`,
+        `Work Mode: ${eligibility.workplace?.mode || job.workMode || 'Unspecified'} (${eligibility.workplace?.locationDisplay || 'India'})`,
+        `India Hiring Policy: ${eligibility.indiaEligibility?.verdictTitle || 'Direct India Opening'}`,
+        `Top Skills: ${eligibility.skills?.slice(0, 6).join(', ') || 'Software Engineering'}`
+      );
+    }
+
+    navigator.clipboard.writeText(lines.join('\n'));
     setCopiedSummary(true);
     setTimeout(() => setCopiedSummary(false), 2000);
   };
@@ -95,13 +134,13 @@ export default function JobEligibilityModal({
 
   return (
     <div className="auth-modal-overlay" onClick={onClose} role="dialog" aria-modal="true">
-      <div className="eligibility-modal-container" onClick={(e) => e.stopPropagation()}>
+      <div className="eligibility-modal-container enhanced-modal" onClick={(e) => e.stopPropagation()}>
         {/* Close Button */}
         <button
           className="auth-modal-close"
           onClick={onClose}
-          title="Close"
-          aria-label="Close modal"
+          title="Close modal"
+          aria-label="Close"
           type="button"
         >
           ×
@@ -142,6 +181,42 @@ export default function JobEligibilityModal({
               Open
             </span>
           </div>
+
+          {/* Dual Navigation Tabs: Candidate Match vs Job Criteria */}
+          <div className="modal-tabs-header">
+            <button
+              type="button"
+              className={`modal-tab-link ${viewTab === 'match' ? 'active' : ''}`}
+              onClick={() => setViewTab('match')}
+            >
+              <span className="tab-icon">🎯</span>
+              <span>Candidate Match</span>
+              {candidateMatch && (
+                <span className={`tab-score-pill ${candidateMatch.overall.badgeTone}`}>
+                  {candidateMatch.overall.score}% Fit
+                </span>
+              )}
+            </button>
+
+            <button
+              type="button"
+              className={`modal-tab-link ${viewTab === 'job' ? 'active' : ''}`}
+              onClick={() => setViewTab('job')}
+            >
+              <span className="tab-icon">📋</span>
+              <span>Job Requirements &amp; Criteria</span>
+            </button>
+
+            <button
+              type="button"
+              className={`modal-tab-link ${viewTab === 'tailor' ? 'active' : ''}`}
+              onClick={() => setViewTab('tailor')}
+            >
+              <span className="tab-icon">✨</span>
+              <span>Tailor &amp; Download CV</span>
+              <span className="tab-score-pill special-ats-pill">ATS Optimizer</span>
+            </button>
+          </div>
         </div>
 
         {/* Loading State */}
@@ -150,142 +225,422 @@ export default function JobEligibilityModal({
             <div className="spinner"></div>
             <p className="loading-text">Analyzing job requirements, seniority tier &amp; work authorization...</p>
           </div>
-        ) : eligibility ? (
+        ) : (
           <div className="eligibility-body-content">
-            {/* 1. High-Impact India Hiring & US Policy Verdict Banner */}
-            <div className={`eligibility-verdict-banner ${eligibility.indiaEligibility?.badgeTone || 'success'}`}>
-              <div className="verdict-banner-left">
-                <div className="verdict-icon-box">
-                  <span className="verdict-emoji">{eligibility.indiaEligibility?.badgeIcon || '🇮🇳'}</span>
-                </div>
-                <div className="verdict-text-group">
-                  <div className="verdict-status-pill">
-                    {eligibility.indiaEligibility?.badgeText || 'Direct India Opening'}
+            {/* =========================================================================
+                TAB 1: CANDIDATE MATCH ANALYZER (CV / PORTFOLIO)
+               ========================================================================= */}
+            {viewTab === 'match' && (
+              <div className="candidate-match-tab-content">
+                {/* 1. If user is not authenticated */}
+                {!isAuthenticated ? (
+                  <div className="in-modal-no-profile-box">
+                    <div className="no-profile-icon">🔒</div>
+                    <h3 className="no-profile-title">Sign In Required for Personalized Fit</h3>
+                    <p className="no-profile-desc">
+                      Create an account or sign in to upload your CV, verify ATS eligibility, and evaluate your match score, country authorization, and missing skills for this role.
+                    </p>
+                    <button
+                      type="button"
+                      className="btn-primary-open-profile"
+                      onClick={() => {
+                        onClose();
+                        openAuthModal('Please sign in or create an account to view your personalized eligibility match for this job.', 'login');
+                      }}
+                    >
+                      Sign In to Check Match
+                    </button>
                   </div>
-                  <h3 className="verdict-title">
-                    {eligibility.indiaEligibility?.verdictTitle}
-                  </h3>
-                  <p className="verdict-desc">
-                    {eligibility.indiaEligibility?.explanation}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* 2. Structured 4-Card Eligibility Grid */}
-            <div className="eligibility-cards-grid">
-              {/* Card 1: Seniority & Freshers */}
-              <div className="eligibility-card">
-                <div className="card-header-line">
-                  <div className="card-icon-bubble bubble-purple">🎓</div>
-                  <span className="card-header-label">Seniority &amp; Experience</span>
-                </div>
-
-                <div className="card-primary-stat">
-                  <span className="stat-highlight">
-                    {eligibility.seniority?.isFresher ? 'Freshers Allowed' : 'Experience Required'}
-                  </span>
-                  <span className={`fresher-tag ${eligibility.seniority?.isFresher ? 'fresher-yes' : 'fresher-no'}`}>
-                    {eligibility.seniority?.isFresher ? '✓ Freshers Eligible' : 'Experienced Role'}
-                  </span>
-                </div>
-
-                <div className="card-detail-item">
-                  <span className="detail-label">Experience Bracket:</span>
-                  <strong className="detail-value">{eligibility.seniority?.experienceText}</strong>
-                </div>
-
-                <div className="card-detail-item">
-                  <span className="detail-label">Seniority Tier:</span>
-                  <span className="detail-value">{eligibility.seniority?.level}</span>
-                </div>
-              </div>
-
-              {/* Card 2: Work Mode & Location */}
-              <div className="eligibility-card">
-                <div className="card-header-line">
-                  <div className="card-icon-bubble bubble-blue">
-                    {eligibility.workplace?.mode === 'Remote' ? '💻' : (eligibility.workplace?.mode === 'Hybrid' ? '🏢' : '📍')}
+                ) : !candidateProfile ? (
+                  <div className="in-modal-no-profile-box">
+                    <div className="no-profile-icon">📄</div>
+                    <h3 className="no-profile-title">Personalized Match Requires Active CV or Portfolio</h3>
+                    <p className="no-profile-desc">
+                      Upload your CV in PDF or enter your portfolio site URL using the <strong>+ Match My CV / Portfolio</strong> button on the main dashboard.
+                      JobRadar will automatically evaluate your country work authorization, experience fit, and skills match for this position and across all jobs.
+                    </p>
+                    {onOpenProfileModal && (
+                      <button
+                        type="button"
+                        className="btn-primary-open-profile"
+                        onClick={() => {
+                          onClose();
+                          onOpenProfileModal();
+                        }}
+                      >
+                        + Upload CV or Portfolio (One-time)
+                      </button>
+                    )}
                   </div>
-                  <span className="card-header-label">Work Mode &amp; Region</span>
-                </div>
+                ) : (
+                  /* 2. Candidate Match Results Display */
+                  candidateMatch && (
+                    <div className="candidate-match-results">
+                      {/* Active Candidate Profile Bar */}
+                      <div className="active-candidate-bar">
+                        <div className="candidate-bar-left">
+                          <div className="candidate-avatar-icon">👤</div>
+                          <div className="candidate-bar-info">
+                            <div className="candidate-bar-name">
+                              <strong>{candidateMatch.candidateSummary.name}</strong>
+                              <span className="candidate-country-tag">
+                                📍 {candidateMatch.candidateSummary.country}
+                                {candidateMatch.candidateSummary.city ? `, ${candidateMatch.candidateSummary.city}` : ''}
+                              </span>
+                            </div>
+                            <div className="candidate-bar-meta">
+                              <span>🎓 {candidateMatch.candidateSummary.experienceDisplay || (candidateMatch.candidateSummary.totalExperienceMonths ? `${candidateMatch.candidateSummary.totalExperienceMonths} Mos Experience` : `${candidateMatch.candidateSummary.totalYearsExperience || 0} Yrs Experience`)}</span>
+                              <span className="meta-dot">•</span>
+                              <span>⚡ {candidateMatch.candidateSummary.skillsDetectedCount} Skills Detected</span>
+                              <span className="meta-dot">•</span>
+                              <span className="source-label">Source: {candidateMatch.candidateSummary.sourceName}</span>
+                            </div>
+                          </div>
+                        </div>
 
-                <div className="card-primary-stat">
-                  <span className="stat-highlight">{eligibility.workplace?.mode}</span>
-                  <span className={`mode-badge-pill ${eligibility.workplace?.mode?.toLowerCase()}`}>
-                    {eligibility.workplace?.mode}
-                  </span>
-                </div>
+                        {onOpenProfileModal && (
+                          <button
+                            type="button"
+                            className="btn-change-cv"
+                            onClick={() => {
+                              onClose();
+                              onOpenProfileModal();
+                            }}
+                            title="Upload a different CV or portfolio URL"
+                          >
+                            ↻ Change CV / URL
+                          </button>
+                        )}
+                      </div>
 
-                <div className="card-detail-item">
-                  <span className="detail-label">Base Location:</span>
-                  <strong className="detail-value" title={eligibility.workplace?.locationDisplay}>
-                    {eligibility.workplace?.locationDisplay}
-                  </strong>
-                </div>
+                      {/* HERO OVERALL VERDICT BANNER */}
+                      <div className={`match-verdict-hero ${candidateMatch.overall.badgeTone}`}>
+                        <div className="verdict-hero-top">
+                          <div className="verdict-score-badge">
+                            <span className="score-number">{candidateMatch.overall.score}%</span>
+                            <span className="score-label">MATCH SCORE</span>
+                          </div>
 
-                <div className="card-detail-item">
-                  <span className="detail-label">Country Jurisdiction:</span>
-                  <span className="detail-value">{eligibility.workplace?.country || 'India'}</span>
-                </div>
-              </div>
+                          <div className="verdict-status-column">
+                            <div className="verdict-status-pill-row">
+                              <span className={`status-pill ${candidateMatch.overall.badgeTone}`}>
+                                {candidateMatch.overall.status.replace('_', ' ')}
+                              </span>
+                              {candidateMatch.overall.isHardBlocker && (
+                                <span className="blocker-pill">COUNTRY BLOCKER</span>
+                              )}
+                            </div>
+                            <h3 className="verdict-headline-text">
+                              {candidateMatch.overall.headline}
+                            </h3>
+                          </div>
+                        </div>
 
-              {/* Card 3: Key Skills & Tech Stack */}
-              <div className="eligibility-card span-two-cols">
-                <div className="card-header-line">
-                  <div className="card-icon-bubble bubble-green">⚡</div>
-                  <span className="card-header-label">Required Tech Stack &amp; Skills</span>
-                  <span className="skills-count-pill">{eligibility.skills?.length || 0} Identified</span>
-                </div>
+                        <p className="verdict-summary-paragraph">
+                          {candidateMatch.overall.summary}
+                        </p>
 
-                <div className="skills-chips-flow">
-                  {eligibility.skills && eligibility.skills.length > 0 ? (
-                    eligibility.skills.map((skill, idx) => (
-                      <span key={`sk-${idx}`} className="eligibility-skill-tag">
-                        {skill}
-                      </span>
-                    ))
-                  ) : (
-                    <span className="no-skills-text">Software engineering principles, problem solving, and relevant tech stack.</span>
-                  )}
-                </div>
+                        {/* Actionable Tips */}
+                        {candidateMatch.overall.actionableTips?.length > 0 && (
+                          <div className="actionable-tips-box">
+                            <span className="tips-title">💡 Actionable Next Steps:</span>
+                            <ul className="tips-list">
+                              {candidateMatch.overall.actionableTips.map((tip, idx) => (
+                                <li key={`tip-${idx}`}>{tip}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
 
-                {eligibility.education && (
-                  <div className="education-note-row">
-                    <span className="edu-icon">📜</span>
-                    <span className="edu-text">
-                      <strong>Education:</strong> {eligibility.education}
-                    </span>
-                  </div>
+                      {/* SECTION A: ELIGIBLE FACTORS (What Candidate Qualifies For) */}
+                      <div className="factors-section eligible-section">
+                        <div className="factors-section-header">
+                          <div className="section-header-left">
+                            <span className="section-header-icon eligible-check">✓</span>
+                            <h4 className="section-heading">
+                              Eligible Factors ({candidateMatch.eligibleFactors.length} Passed)
+                            </h4>
+                          </div>
+                          <span className="section-sub-badge">Requirements You Satisfy</span>
+                        </div>
+
+                        <div className="factors-grid">
+                          {candidateMatch.eligibleFactors.map((factor) => (
+                            <div key={factor.id} className="factor-card factor-pass">
+                              <div className="factor-card-header">
+                                <span className="factor-icon-bubble pass-bubble">{factor.icon}</span>
+                                <div className="factor-title-box">
+                                  <span className="factor-category">{factor.category}</span>
+                                  <h5 className="factor-card-title">{factor.title}</h5>
+                                </div>
+                                <span className="factor-status-badge pass">ELIGIBLE</span>
+                              </div>
+
+                              <p className="factor-card-detail">{factor.detail}</p>
+
+                              {factor.chips && factor.chips.length > 0 && (
+                                <div className="factor-chips-flow">
+                                  {factor.chips.map((chip, cIdx) => (
+                                    <span key={`fc-${cIdx}`} className="factor-chip pass-chip">
+                                      {chip}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* CALLOUT TO TAILOR CV FOR THIS ROLE */}
+                      <div className="tailor-cta-banner">
+                        <div className="cta-left-content">
+                          <span className="cta-sparkle">✨</span>
+                          <div className="cta-text">
+                            <strong>Want to beat the ATS for {job.company}?</strong>
+                            <span>Automatically modify and optimize your CV with target keywords required for this job, then download your tailored ATS resume.</span>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          className="btn-cta-tailor"
+                          onClick={() => setViewTab('tailor')}
+                        >
+                          <span>Tailor My CV</span>
+                          <span>➔</span>
+                        </button>
+                      </div>
+
+                      {/* SECTION B: NON-ELIGIBLE FACTORS & GAPS (What is Missing or Blocking) */}
+                      <div className="factors-section non-eligible-section">
+                        <div className="factors-section-header">
+                          <div className="section-header-left">
+                            <span className="section-header-icon gap-warn">
+                              {candidateMatch.nonEligibleFactors.length > 0 ? '⚠️' : '🎉'}
+                            </span>
+                            <h4 className="section-heading">
+                              Non-Eligible Factors &amp; Gaps ({candidateMatch.nonEligibleFactors.length})
+                            </h4>
+                          </div>
+                          <span className="section-sub-badge">
+                            {candidateMatch.nonEligibleFactors.length > 0 ? 'Attention Needed' : 'Zero Blockers'}
+                          </span>
+                        </div>
+
+                        {candidateMatch.nonEligibleFactors.length === 0 ? (
+                          <div className="zero-blockers-card">
+                            <span className="zero-icon">🎯</span>
+                            <div className="zero-text">
+                              <strong>Zero Blockers or Disqualifiers Found!</strong>
+                              <span>Your profile satisfies all key country work authorization, experience, and primary skill requirements.</span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="factors-grid">
+                            {candidateMatch.nonEligibleFactors.map((factor) => (
+                              <div
+                                key={factor.id}
+                                className={`factor-card factor-fail ${factor.isBlocker ? 'hard-blocker-card' : 'gap-card'}`}
+                              >
+                                <div className="factor-card-header">
+                                  <span className={`factor-icon-bubble ${factor.isBlocker ? 'blocker-bubble' : 'gap-bubble'}`}>
+                                    {factor.icon}
+                                  </span>
+                                  <div className="factor-title-box">
+                                    <span className="factor-category">{factor.category}</span>
+                                    <h5 className="factor-card-title">{factor.title}</h5>
+                                  </div>
+                                  <span className={`factor-status-badge ${factor.isBlocker ? 'blocker' : 'gap'}`}>
+                                    {factor.isBlocker ? 'NON-ELIGIBLE' : 'SKILL GAP'}
+                                  </span>
+                                </div>
+
+                                <p className="factor-card-detail">{factor.detail}</p>
+
+                                {factor.missingItems && factor.missingItems.length > 0 && (
+                                  <div className="factor-chips-flow">
+                                    <span className="missing-label">Missing:</span>
+                                    {factor.missingItems.map((item, mIdx) => (
+                                      <span key={`mi-${mIdx}`} className="factor-chip missing-chip">
+                                        {item}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+
+                                {factor.recommendation && (
+                                  <div className="factor-recommendation-note">
+                                    <span className="rec-icon">💡</span>
+                                    <span className="rec-text">{factor.recommendation}</span>
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )
                 )}
               </div>
-            </div>
+            )}
 
-            {/* 3. Key Takeaways Checklist */}
-            <div className="eligibility-takeaways-box">
-              <h4 className="takeaways-title">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-                  <polyline points="22 4 12 14.01 9 11.01" />
-                </svg>
-                <span>Candidate Eligibility Checklist</span>
-              </h4>
-
-              <div className="takeaways-grid">
-                {eligibility.keyHighlights?.map((item, idx) => (
-                  <div key={`th-${idx}`} className="takeaway-item">
-                    <span className="takeaway-icon">{item.icon}</span>
-                    <div className="takeaway-text-col">
-                      <span className="takeaway-label">{item.label}</span>
-                      <strong className="takeaway-val">{item.value}</strong>
-                      <span className="takeaway-sub">{item.subtext}</span>
+            {/* =========================================================================
+                TAB 2: GENERAL JOB REQUIREMENTS & CRITERIA
+               ========================================================================= */}
+            {viewTab === 'job' && (
+              <div className="job-requirements-tab-content">
+                {/* 1. India Hiring & US Policy Verdict Banner */}
+                <div className={`eligibility-verdict-banner ${eligibility.indiaEligibility?.badgeTone || 'success'}`}>
+                  <div className="verdict-banner-left">
+                    <div className="verdict-icon-box">
+                      <span className="verdict-emoji">{eligibility.indiaEligibility?.badgeIcon || '🇮🇳'}</span>
+                    </div>
+                    <div className="verdict-text-group">
+                      <div className="verdict-status-pill">
+                        {eligibility.indiaEligibility?.badgeText || 'Direct India Opening'}
+                      </div>
+                      <h3 className="verdict-title">
+                        {eligibility.indiaEligibility?.verdictTitle}
+                      </h3>
+                      <p className="verdict-desc">
+                        {eligibility.indiaEligibility?.explanation}
+                      </p>
                     </div>
                   </div>
-                ))}
+                </div>
+
+                {/* 2. Structured 4-Card Eligibility Grid */}
+                <div className="eligibility-cards-grid">
+                  {/* Card 1: Seniority & Freshers */}
+                  <div className="eligibility-card">
+                    <div className="card-header-line">
+                      <div className="card-icon-bubble bubble-purple">🎓</div>
+                      <span className="card-header-label">Seniority &amp; Experience</span>
+                    </div>
+
+                    <div className="card-primary-stat">
+                      <span className="stat-highlight">
+                        {eligibility.seniority?.isFresher ? 'Freshers Allowed' : 'Experience Required'}
+                      </span>
+                      <span className={`fresher-tag ${eligibility.seniority?.isFresher ? 'fresher-yes' : 'fresher-no'}`}>
+                        {eligibility.seniority?.isFresher ? '✓ Freshers Eligible' : 'Experienced Role'}
+                      </span>
+                    </div>
+
+                    <div className="card-detail-item">
+                      <span className="detail-label">Experience Bracket:</span>
+                      <strong className="detail-value">{eligibility.seniority?.experienceText}</strong>
+                    </div>
+
+                    <div className="card-detail-item">
+                      <span className="detail-label">Seniority Tier:</span>
+                      <span className="detail-value">{eligibility.seniority?.level}</span>
+                    </div>
+                  </div>
+
+                  {/* Card 2: Work Mode & Location */}
+                  <div className="eligibility-card">
+                    <div className="card-header-line">
+                      <div className="card-icon-bubble bubble-blue">
+                        {eligibility.workplace?.mode === 'Remote' ? '💻' : (eligibility.workplace?.mode === 'Hybrid' ? '🏢' : '📍')}
+                      </div>
+                      <span className="card-header-label">Work Mode &amp; Region</span>
+                    </div>
+
+                    <div className="card-primary-stat">
+                      <span className="stat-highlight">{eligibility.workplace?.mode}</span>
+                      <span className={`mode-badge-pill ${eligibility.workplace?.mode?.toLowerCase()}`}>
+                        {eligibility.workplace?.mode}
+                      </span>
+                    </div>
+
+                    <div className="card-detail-item">
+                      <span className="detail-label">Base Location:</span>
+                      <strong className="detail-value" title={eligibility.workplace?.locationDisplay}>
+                        {eligibility.workplace?.locationDisplay}
+                      </strong>
+                    </div>
+
+                    <div className="card-detail-item">
+                      <span className="detail-label">Country Jurisdiction:</span>
+                      <span className="detail-value">{eligibility.workplace?.country || 'India'}</span>
+                    </div>
+                  </div>
+
+                  {/* Card 3: Key Skills & Tech Stack */}
+                  <div className="eligibility-card span-two-cols">
+                    <div className="card-header-line">
+                      <div className="card-icon-bubble bubble-green">⚡</div>
+                      <span className="card-header-label">Required Tech Stack &amp; Skills</span>
+                      <span className="skills-count-pill">{eligibility.skills?.length || 0} Identified</span>
+                    </div>
+
+                    <div className="skills-chips-flow">
+                      {eligibility.skills && eligibility.skills.length > 0 ? (
+                        eligibility.skills.map((skill, idx) => (
+                          <span key={`sk-${idx}`} className="eligibility-skill-tag">
+                            {skill}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="no-skills-text">Software engineering principles, problem solving, and relevant tech stack.</span>
+                      )}
+                    </div>
+
+                    {eligibility.education && (
+                      <div className="education-note-row">
+                        <span className="edu-icon">📜</span>
+                        <span className="edu-text">
+                          <strong>Education:</strong> {eligibility.education}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* 3. Candidate Eligibility Checklist */}
+                <div className="eligibility-takeaways-box">
+                  <h4 className="takeaways-title">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                      <polyline points="22 4 12 14.01 9 11.01" />
+                    </svg>
+                    <span>General Candidate Eligibility Checklist</span>
+                  </h4>
+
+                  <div className="takeaways-grid">
+                    {eligibility.keyHighlights?.map((item, idx) => (
+                      <div key={`th-${idx}`} className="takeaway-item">
+                        <span className="takeaway-icon">{item.icon}</span>
+                        <div className="takeaway-text-col">
+                          <span className="takeaway-label">{item.label}</span>
+                          <strong className="takeaway-val">{item.value}</strong>
+                          <span className="takeaway-sub">{item.subtext}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
-            </div>
+            )}
+
+            {/* =========================================================================
+                TAB 3: TAILOR CV FOR THIS SPECIFIC JOB (ATS OPTIMIZER & DOWNLOAD)
+               ========================================================================= */}
+            {viewTab === 'tailor' && (
+              <CvTailorSection
+                job={job}
+                candidateProfile={candidateProfile}
+                token={token}
+                onProfileUpdated={(newProfile) => {
+                  if (updateCandidateProfile) updateCandidateProfile(newProfile);
+                }}
+              />
+            )}
           </div>
-        ) : null}
+        )}
 
         {/* Modal Action Footer */}
         <div className="eligibility-modal-footer">
@@ -315,6 +670,18 @@ export default function JobEligibilityModal({
                   <polyline points="20 6 9 17 4 12" />
                 </svg>
                 <span>{isInPipeline ? '✓ In Outreach Pipeline' : '+ Track in Pipeline'}</span>
+              </button>
+            )}
+
+            {viewTab !== 'tailor' && (
+              <button
+                type="button"
+                className="btn-eligibility-pipeline"
+                style={{ background: 'rgba(99, 102, 241, 0.1)', borderColor: 'rgba(99, 102, 241, 0.3)', color: '#4f46e5' }}
+                onClick={() => setViewTab('tailor')}
+                title="Modify and optimize your CV for this job"
+              >
+                <span>✨ Tailor CV</span>
               </button>
             )}
           </div>
@@ -364,120 +731,4 @@ function getSourceBadgeClass(source) {
     adzuna: 'badge-adzuna'
   };
   return map[source.toLowerCase()] || 'badge-default';
-}
-
-/**
- * Client-side fallback analyzer if backend is unreachable.
- */
-function generateClientEligibility(job) {
-  const title = (job.title || '').trim();
-  const rawLoc = (job.locationRaw || job.location || '').trim();
-  const country = (job.country || '').trim();
-  const city = (job.city || '').trim();
-  const company = (job.company || '').trim();
-  const workMode = (job.workMode || 'unknown').toLowerCase();
-
-  const isFresher = /\b(intern|internship|trainee|fresher|graduate|campus|new grad|entry[- ]level|associate software|junior)\b/i.test(title);
-  const isSenior = /\b(senior|sr\.?|lead|staff|principal|architect|director|vp)\b/i.test(title);
-
-  const hasIndiaLocation = country.toLowerCase() === 'india' ||
-    /\b(bengaluru|bangalore|hyderabad|noida|gurgaon|gurugram|delhi|pune|mumbai|chennai|kolkata)\b/i.test(city || rawLoc);
-
-  const isUS = country.toLowerCase() === 'united states' || country.toLowerCase() === 'us' || /\busa?\b|california|san jose|seattle|san francisco/i.test(rawLoc);
-
-  const detectedSkills = [];
-  if (/python|ml|ai|data/i.test(title)) detectedSkills.push('Python', 'SQL', 'Data Modeling');
-  if (/react|frontend|ui|web/i.test(title)) detectedSkills.push('JavaScript', 'TypeScript', 'React', 'HTML/CSS');
-  if (/backend|engineer|developer/i.test(title)) detectedSkills.push('Node.js / Java', 'REST APIs', 'SQL', 'Microservices');
-  if (/cloud|devops|sre|infrastructure/i.test(title)) detectedSkills.push('AWS', 'Docker', 'Kubernetes', 'Linux');
-  if (/architect/i.test(title)) detectedSkills.push('System Design', 'Cloud Architecture', 'Distributed Systems');
-  if (detectedSkills.length === 0) detectedSkills.push('Software Engineering', 'Problem Solving', 'Data Structures');
-
-  let indiaEligibility;
-  if (hasIndiaLocation) {
-    indiaEligibility = {
-      status: 'direct_india',
-      canIndiansApply: true,
-      badgeText: 'Direct India Opening',
-      badgeTone: 'success',
-      badgeIcon: '🇮🇳',
-      verdictTitle: '100% Eligible: Direct India Entity Hire',
-      explanation: `Officially based at ${company}'s India office (${city || rawLoc || 'India'}). Indian residents are fully eligible with local payroll and benefits.`
-    };
-  } else if (workMode === 'remote' && /worldwide|global|anywhere/i.test(rawLoc)) {
-    indiaEligibility = {
-      status: 'eligible_worldwide',
-      canIndiansApply: true,
-      badgeText: 'Global Remote (India Allowed)',
-      badgeTone: 'success',
-      badgeIcon: '🌐',
-      verdictTitle: 'Eligible: Worldwide Remote Role',
-      explanation: `${company} supports global remote candidates. Indian residents can apply remotely.`
-    };
-  } else if (isUS) {
-    indiaEligibility = {
-      status: 'restricted_us',
-      canIndiansApply: false,
-      badgeText: 'US Work Auth Required',
-      badgeTone: 'warning',
-      badgeIcon: '🇺🇸',
-      verdictTitle: 'Restricted: Existing US Work Authorization Required',
-      explanation: `This role is located in the US (${rawLoc || 'United States'}). Candidates in India cannot work cross-border without existing US citizenship, Green Card, or valid US visa.`
-    };
-  } else {
-    indiaEligibility = {
-      status: 'conditional',
-      canIndiansApply: true,
-      badgeText: 'Location Specific',
-      badgeTone: 'info',
-      badgeIcon: 'ℹ️',
-      verdictTitle: 'Check ATS Requirements',
-      explanation: `Check official ${company} ATS listing for location-specific work permit prerequisites.`
-    };
-  }
-
-  return {
-    jobId: job._id || job.sourceJobId,
-    title,
-    company,
-    seniority: {
-      isFresher,
-      level: isFresher ? 'Fresher / Early Career' : (isSenior ? 'Senior / Lead' : 'Mid-Level'),
-      experienceText: isFresher ? '0 - 2 Years (Freshers & College Grads)' : (isSenior ? '5+ Years Professional Exp' : '2 - 5 Years Exp')
-    },
-    skills: detectedSkills,
-    workplace: {
-      mode: workMode === 'remote' ? 'Remote' : (hasIndiaLocation ? 'Hybrid / On-site' : 'Flexible'),
-      locationDisplay: rawLoc || city || 'Unspecified',
-      country: country || (hasIndiaLocation ? 'India' : 'Unspecified')
-    },
-    indiaEligibility,
-    education: 'B.E. / B.Tech / BCA / MCA / BS in Computer Science or equivalent',
-    keyHighlights: [
-      {
-        label: 'Experience Fit',
-        icon: isFresher ? '🎓' : '💼',
-        value: isFresher ? 'Fresher Friendly' : 'Experienced Level',
-        subtext: isFresher ? 'College grads and junior candidates meet criteria' : 'Requires relevant professional experience'
-      },
-      {
-        label: 'India Candidate Status',
-        icon: indiaEligibility.badgeIcon,
-        value: indiaEligibility.verdictTitle,
-        subtext: indiaEligibility.canIndiansApply ? 'Indian applicants are eligible' : 'Requires existing local work permit'
-      },
-      {
-        label: 'Work Mode',
-        icon: '🏢',
-        value: workMode === 'remote' ? 'Remote' : 'Office / Hybrid',
-        subtext: rawLoc || 'Location as per ATS'
-      },
-      {
-        label: 'Primary Skills',
-        icon: '⚡',
-        value: detectedSkills.slice(0, 3).join(', '),
-        subtext: 'Core technical competencies identified'
-      }
-    ]
-  };
 }

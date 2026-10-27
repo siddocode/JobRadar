@@ -389,5 +389,7 @@ function analyzeJobEligibility(job) {
 
 module.exports = {
   analyzeJobEligibility,
-  stripHtml
+  stripHtml,
+  TECH_TAXONOMY,
+  INDIAN_CITIES_REGEX
 };

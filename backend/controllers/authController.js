@@ -2,6 +2,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const { JWT_SECRET } = require('../middleware/authMiddleware');
+const emailService = require('../services/emailService');
 
 // In-memory store for pending email OTPs (expires in 10 minutes)
 const pendingOtps = new Map();
@@ -12,10 +13,10 @@ function generateOtpCode() {
 }
 
 /**
- * POST /api/auth/send-otp
- * Generates an OTP for the given email and returns devOtp (demo mode)
+ * POST /api/auth/check-email
+ * Checks if an email is already registered and verified
  */
-exports.sendOtp = async (req, res) => {
+exports.checkEmail = async (req, res) => {
   try {
     const { email } = req.body;
     if (!email || !email.includes('@')) {
@@ -23,6 +24,46 @@ exports.sendOtp = async (req, res) => {
     }
 
     const cleanEmail = email.trim().toLowerCase();
+    const existingUser = await User.findOne({ email: cleanEmail, isVerified: true });
+
+    return res.status(200).json({
+      success: true,
+      exists: Boolean(existingUser),
+      message: existingUser
+        ? 'An account with this email already exists. Please sign in instead.'
+        : 'Email is available'
+    });
+  } catch (err) {
+    console.error('Check email error:', err);
+    return res.status(500).json({ success: false, error: 'Failed to verify email availability' });
+  }
+};
+
+/**
+ * POST /api/auth/send-otp
+ * Generates an OTP for the given email and sends verification email via Brevo
+ */
+exports.sendOtp = async (req, res) => {
+  try {
+    const { email, purpose } = req.body;
+    if (!email || !email.includes('@')) {
+      return res.status(400).json({ success: false, error: 'A valid email address is required' });
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+
+    // If purpose is registration, disallow existing registered accounts
+    if (purpose === 'register') {
+      const existingUser = await User.findOne({ email: cleanEmail, isVerified: true });
+      if (existingUser) {
+        return res.status(400).json({
+          success: false,
+          exists: true,
+          error: 'An account with this email already exists. Please sign in instead.'
+        });
+      }
+    }
+
     const otpCode = generateOtpCode();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
@@ -37,12 +78,26 @@ exports.sendOtp = async (req, res) => {
 
     console.log(`[Auth] Verification OTP for ${cleanEmail}: ${otpCode}`);
 
-    // Return the OTP in devOtp for banner display until real SMTP is configured
+    // Send the real verification email via Brevo
+    try {
+      await emailService.sendOtpEmail({
+        to: cleanEmail,
+        code: otpCode
+      });
+      console.log(`[Auth] Brevo verification code email delivered to ${cleanEmail}`);
+    } catch (emailErr) {
+      console.error(`[Auth] Failed to send Brevo verification email to ${cleanEmail}:`, emailErr.message);
+      return res.status(500).json({
+        success: false,
+        error: `Could not send verification email: ${emailErr.message || 'Email delivery failed'}. Please check your email address.`
+      });
+    }
+
     return res.status(200).json({
       success: true,
-      message: 'Verification code sent. In demo mode, use the code displayed above.',
+      message: `Verification code sent to ${cleanEmail}. Please check your inbox.`,
       email: cleanEmail,
-      devOtp: otpCode
+      emailSent: true
     });
   } catch (err) {
     console.error('Error generating OTP:', err);
@@ -129,6 +184,18 @@ exports.register = async (req, res) => {
 
     // Clear pending memory OTP
     pendingOtps.delete(cleanEmail);
+
+    // Send welcome / registration confirmation email via Brevo
+    try {
+      await emailService.sendWelcomeEmail({
+        to: user.email,
+        name: user.name
+      });
+      console.log(`[Auth] Registration welcome email successfully sent to ${user.email}`);
+    } catch (emailErr) {
+      console.error(`[Auth] Failed to send welcome email to ${user.email}:`, emailErr.message);
+      // Non-blocking for registration success, but logged
+    }
 
     const token = jwt.sign(
       { id: user._id, email: user.email, name: user.name },
@@ -241,8 +308,10 @@ exports.loginWithOtp = async (req, res) => {
       return res.status(400).json({ success: false, error: 'Invalid or expired verification code' });
     }
 
+    let isNewUser = false;
     let user = await User.findOne({ email: cleanEmail });
     if (!user) {
+      isNewUser = true;
       // Auto-create verified user with temporary random password
       const randomPassword = Math.random().toString(36).slice(-10);
       const hashedPassword = await bcrypt.hash(randomPassword, 10);
@@ -255,6 +324,18 @@ exports.loginWithOtp = async (req, res) => {
     }
 
     pendingOtps.delete(cleanEmail);
+
+    if (isNewUser) {
+      try {
+        await emailService.sendWelcomeEmail({
+          to: user.email,
+          name: user.name
+        });
+        console.log(`[Auth] Registration welcome email sent to new user: ${user.email}`);
+      } catch (emailErr) {
+        console.error(`[Auth] Failed to send welcome email for new user:`, emailErr.message);
+      }
+    }
 
     const token = jwt.sign(
       { id: user._id, email: user.email, name: user.name },
@@ -284,7 +365,7 @@ exports.loginWithOtp = async (req, res) => {
  */
 exports.getMe = async (req, res) => {
   try {
-    const user = await User.findById(req.user.id).select('email name isVerified createdAt');
+    const user = await User.findById(req.user.id).select('email name isVerified createdAt candidateProfile');
     if (!user) {
       return res.status(404).json({ success: false, error: 'User not found' });
     }
@@ -295,11 +376,40 @@ exports.getMe = async (req, res) => {
         email: user.email,
         name: user.name,
         isVerified: user.isVerified,
-        createdAt: user.createdAt
+        createdAt: user.createdAt,
+        candidateProfile: user.candidateProfile || null
       }
     });
   } catch (err) {
     console.error('Get me error:', err);
     return res.status(500).json({ success: false, error: 'Failed to retrieve profile' });
+  }
+};
+
+/**
+ * POST /api/auth/candidate-profile
+ * Saves candidate CV / portfolio parsed profile to user's persistent record
+ */
+exports.saveCandidateProfile = async (req, res) => {
+  try {
+    const { candidateProfile } = req.body;
+    if (!candidateProfile) {
+      return res.status(400).json({ success: false, error: 'Candidate profile data is required' });
+    }
+
+    const updatedUser = await User.findByIdAndUpdate(
+      req.user.id,
+      { $set: { candidateProfile } },
+      { new: true }
+    ).select('email name isVerified createdAt candidateProfile');
+
+    return res.status(200).json({
+      success: true,
+      message: 'Candidate profile saved successfully',
+      candidateProfile: updatedUser.candidateProfile
+    });
+  } catch (err) {
+    console.error('Save candidate profile error:', err);
+    return res.status(500).json({ success: false, error: 'Failed to save candidate profile' });
   }
 };

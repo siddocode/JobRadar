@@ -1,6 +1,9 @@
 const Job = require('../models/Job');
 const SourceRun = require('../models/SourceRun');
 const { analyzeJobEligibility } = require('../services/eligibilityAnalyzer');
+const { parseCvPdf, parsePortfolioUrl, extractCandidateProfile } = require('../services/candidateParser');
+const { evaluateCandidateEligibility } = require('../services/eligibilityMatcher');
+const { tailorCandidateResume } = require('../services/cvTailorService');
 
 /**
  * GET /api/jobs
@@ -112,7 +115,7 @@ async function getJobs(req, res) {
         .sort({ lastSeenAt: -1, updatedAt: -1 })
         .skip(skip)
         .limit(parsedLimit)
-        .select('source sourceJobId company title location locationRaw city state country workMode fingerprint applyUrl updatedAt firstSeenAt lastSeenAt status')
+        .select('source sourceJobId company title location locationRaw city state country workMode fingerprint applyUrl updatedAt firstSeenAt lastSeenAt status descriptionHtml')
         .lean(),
       Job.countDocuments(filter),
       Job.countDocuments({ status: 'open' }),
@@ -148,8 +151,17 @@ async function getJobs(req, res) {
           existing.source = job.source;
           existing.applyUrl = job.applyUrl;
           existing.sourceJobId = job.sourceJobId;
+          if (job.descriptionHtml) {
+            existing.descriptionHtml = job.descriptionHtml;
+          }
         }
       }
+    }
+
+    // Attach precomputed eligibility for instant, 100% consistent candidate matching
+    for (const job of deduplicatedJobs) {
+      job.eligibility = analyzeJobEligibility(job);
+      delete job.descriptionHtml;
     }
 
     return res.status(200).json({
@@ -429,6 +441,292 @@ async function getJobEligibility(req, res) {
   }
 }
 
+/**
+ * POST /api/jobs/candidate/parse-cv
+ * Handles PDF CV upload, extracts text, and parses structured candidate profile
+ */
+async function parseCandidateCv(req, res) {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        error: 'No CV file uploaded. Please upload a PDF document.'
+      });
+    }
+
+    const originalName = req.file.originalname || 'Resume.pdf';
+    console.log(`[jobController:parseCandidateCv] Parsing uploaded CV: ${originalName} (${req.file.size} bytes)`);
+
+    const rawText = await parseCvPdf(req.file.buffer);
+    const profile = extractCandidateProfile(rawText, {
+      sourceType: 'pdf',
+      sourceName: originalName
+    });
+
+    if (req.user && req.user.id) {
+      try {
+        const User = require('../models/User');
+        await User.findByIdAndUpdate(req.user.id, { candidateProfile: profile });
+      } catch (userErr) {
+        console.warn('[jobController:parseCandidateCv] Could not sync to user record:', userErr.message);
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'CV successfully parsed',
+      profile
+    });
+  } catch (error) {
+    console.error('[jobController:parseCandidateCv] Error:', error.message);
+    return res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to parse CV PDF'
+    });
+  }
+}
+
+/**
+ * POST /api/jobs/candidate/parse-url
+ * Fetches candidate portfolio website, strips HTML, and parses structured candidate profile
+ */
+async function parseCandidateUrl(req, res) {
+  try {
+    const { portfolioUrl } = req.body;
+    if (!portfolioUrl || typeof portfolioUrl !== 'string') {
+      return res.status(400).json({
+        success: false,
+        error: 'Portfolio site URL is required (e.g., https://myportfolio.com)'
+      });
+    }
+
+    console.log(`[jobController:parseCandidateUrl] Fetching portfolio: ${portfolioUrl}`);
+    const rawText = await parsePortfolioUrl(portfolioUrl);
+    const profile = extractCandidateProfile(rawText, {
+      sourceType: 'url',
+      sourceName: portfolioUrl
+    });
+
+    if (req.user && req.user.id) {
+      try {
+        const User = require('../models/User');
+        await User.findByIdAndUpdate(req.user.id, { candidateProfile: profile });
+      } catch (userErr) {
+        console.warn('[jobController:parseCandidateUrl] Could not sync to user record:', userErr.message);
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Portfolio successfully fetched and parsed',
+      profile
+    });
+  } catch (error) {
+    console.error('[jobController:parseCandidateUrl] Error:', error.message);
+    return res.status(400).json({
+      success: false,
+      error: error.message || 'Failed to parse portfolio URL'
+    });
+  }
+}
+
+/**
+ * POST /api/jobs/:id/check-candidate-eligibility
+ * Evaluates candidate profile (passed in body, or extracted) against a specific job
+ */
+async function checkCandidateEligibility(req, res) {
+  try {
+    const { id } = req.params;
+    let { candidateProfile, portfolioUrl } = req.body || {};
+
+    let job = null;
+    if (id.match(/^[0-9a-fA-F]{24}$/)) {
+      job = await Job.findById(id).lean();
+    }
+    if (!job) {
+      job = await Job.findOne({ sourceJobId: id }).lean();
+    }
+    if (!job) {
+      return res.status(404).json({ success: false, error: 'Job not found' });
+    }
+
+    // If PDF file was uploaded in this request
+    if (req.file) {
+      const rawText = await parseCvPdf(req.file.buffer);
+      candidateProfile = extractCandidateProfile(rawText, {
+        sourceType: 'pdf',
+        sourceName: req.file.originalname || 'Uploaded CV'
+      });
+    } else if (!candidateProfile && portfolioUrl) {
+      const rawText = await parsePortfolioUrl(portfolioUrl);
+      candidateProfile = extractCandidateProfile(rawText, {
+        sourceType: 'url',
+        sourceName: portfolioUrl
+      });
+    }
+
+    if (!candidateProfile) {
+      return res.status(400).json({
+        success: false,
+        error: 'Candidate profile data, CV file, or portfolioUrl is required'
+      });
+    }
+
+    const jobEligibility = analyzeJobEligibility(job);
+    const candidateMatch = evaluateCandidateEligibility(jobEligibility, candidateProfile);
+
+    return res.status(200).json({
+      success: true,
+      jobEligibility,
+      candidateProfile,
+      candidateMatch
+    });
+  } catch (error) {
+    console.error('[jobController:checkCandidateEligibility] Error:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to evaluate candidate eligibility',
+      message: error.message
+    });
+  }
+}
+
+/**
+ * POST /api/jobs/evaluate-candidate
+ * Evaluates candidate profile against any arbitrary job payload
+ */
+async function evaluateDirectMatch(req, res) {
+  try {
+    const { job, candidateProfile } = req.body;
+    if (!job || !candidateProfile) {
+      return res.status(400).json({
+        success: false,
+        error: 'Both job data and candidateProfile are required'
+      });
+    }
+
+    const jobEligibility = analyzeJobEligibility(job);
+    const candidateMatch = evaluateCandidateEligibility(jobEligibility, candidateProfile);
+
+    return res.status(200).json({
+      success: true,
+      jobEligibility,
+      candidateProfile,
+      candidateMatch
+    });
+  } catch (error) {
+    console.error('[jobController:evaluateDirectMatch] Error:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to evaluate candidate eligibility',
+      message: error.message
+    });
+  }
+}
+
+/**
+ * POST /api/jobs/:id/tailor-cv
+ * Tailors candidate CV for a specific job:
+ * - Accepts either uploaded PDF CV or existing candidate profile JSON
+ * - Infuses job-specific keywords, optimizes professional summary, enhances experience bullets
+ * - Returns structured tailored resume document with match boost stats
+ */
+async function tailorCvForJob(req, res) {
+  try {
+    const { id } = req.params;
+    let candidateProfile = null;
+    let rawCvText = '';
+
+    // If PDF file was uploaded with this tailoring request
+    if (req.file) {
+      rawCvText = await parseCvPdf(req.file.buffer);
+      candidateProfile = extractCandidateProfile(rawCvText, {
+        sourceType: 'pdf',
+        sourceName: req.file.originalname || 'Uploaded CV'
+      });
+    } else if (req.body && req.body.portfolioUrl && req.body.portfolioUrl.trim()) {
+      const pUrl = req.body.portfolioUrl.trim();
+      rawCvText = await parsePortfolioUrl(pUrl);
+      candidateProfile = extractCandidateProfile(rawCvText, {
+        sourceType: 'url',
+        sourceName: pUrl
+      });
+      candidateProfile.portfolio = pUrl;
+    } else {
+      // Check body
+      if (req.body && req.body.candidateProfile) {
+        candidateProfile = typeof req.body.candidateProfile === 'string'
+          ? JSON.parse(req.body.candidateProfile)
+          : req.body.candidateProfile;
+      }
+      if (req.body && req.body.rawCvText) {
+        rawCvText = req.body.rawCvText;
+      }
+    }
+
+    // Fallback to authenticated user's profile if available
+    if (!candidateProfile && req.user && req.user.id) {
+      try {
+        const User = require('../models/User');
+        const user = await User.findById(req.user.id).lean();
+        if (user && user.candidateProfile) {
+          candidateProfile = user.candidateProfile;
+        }
+      } catch (_) {}
+    }
+
+    // Sync candidateProfile back to user if authenticated
+    if (req.user && req.user.id && candidateProfile) {
+      try {
+        const User = require('../models/User');
+        await User.findByIdAndUpdate(req.user.id, { candidateProfile });
+      } catch (_) {}
+    }
+
+    if (!candidateProfile && !rawCvText) {
+      return res.status(400).json({
+        success: false,
+        error: 'Please enter your portfolio website URL or upload a PDF CV to tailor.'
+      });
+    }
+
+    let job = null;
+    if (id && id.match(/^[0-9a-fA-F]{24}$/)) {
+      job = await Job.findById(id).lean();
+    }
+    if (!job) {
+      job = await Job.findOne({ sourceJobId: id }).lean();
+    }
+    if (!job) {
+      return res.status(404).json({ success: false, error: 'Job not found' });
+    }
+
+    const jobEligibility = analyzeJobEligibility(job);
+
+    const result = tailorCandidateResume({
+      candidateProfile,
+      rawCvText,
+      job,
+      jobEligibility
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: `CV successfully tailored for ${job.title} at ${job.company}`,
+      tailoredResume: result.tailoredResume,
+      stats: result.stats,
+      parsedProfile: candidateProfile
+    });
+  } catch (error) {
+    console.error('[jobController:tailorCvForJob] Error:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to tailor CV for job',
+      message: error.message
+    });
+  }
+}
+
 module.exports = {
   getJobs,
   getCities,
@@ -436,6 +734,11 @@ module.exports = {
   getJobStats,
   triggerSync,
   getSyncStatus,
-  getJobEligibility
+  getJobEligibility,
+  parseCandidateCv,
+  parseCandidateUrl,
+  checkCandidateEligibility,
+  evaluateDirectMatch,
+  tailorCvForJob
 };
 

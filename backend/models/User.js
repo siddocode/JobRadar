@@ -32,6 +32,10 @@ const userSchema = new mongoose.Schema(
         type: Date,
         default: null
       }
+    },
+    candidateProfile: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null
     }
   },
   {

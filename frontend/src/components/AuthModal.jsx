@@ -8,6 +8,7 @@ export default function AuthModal() {
     authModalTab,
     closeAuthModal,
     setAuthModalTab,
+    checkEmail,
     requestOtp,
     register,
     login,
@@ -21,12 +22,15 @@ export default function AuthModal() {
   const [otp, setOtp] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
-  // OTP state & Dev banner
-  const [devOtp, setDevOtp] = useState(null);
+  // Email availability check states
+  const [isEmailRegistered, setIsEmailRegistered] = useState(false);
+  const [isCheckingEmail, setIsCheckingEmail] = useState(false);
+
+  // OTP state
+  const [otpSent, setOtpSent] = useState(false);
   const [isSendingOtp, setIsSendingOtp] = useState(false);
   const [otpSentMessage, setOtpSentMessage] = useState('');
   const [otpCooldown, setOtpCooldown] = useState(0);
-  const [copiedOtp, setCopiedOtp] = useState(false);
 
   // Sign in mode: 'password' | 'otp'
   const [signInMode, setSignInMode] = useState('password');
@@ -49,12 +53,15 @@ export default function AuthModal() {
     if (authModalOpen) {
       setError(null);
       setSuccessMsg(null);
+      setIsEmailRegistered(false);
     } else {
-      setDevOtp(null);
+      setOtpSent(false);
       setOtpSentMessage('');
       setOtp('');
       setError(null);
       setSuccessMsg(null);
+      setIsEmailRegistered(false);
+      setIsCheckingEmail(false);
     }
   }, [authModalOpen]);
 
@@ -66,6 +73,43 @@ export default function AuthModal() {
     }
     return () => clearTimeout(timer);
   }, [otpCooldown]);
+
+  // Check email availability in signup mode as user enters email
+  const verifyEmailAvailability = async (targetEmail) => {
+    if (!targetEmail || !targetEmail.includes('@') || targetEmail.length < 5 || tab !== 'signup') {
+      setIsEmailRegistered(false);
+      return;
+    }
+    setIsCheckingEmail(true);
+    try {
+      const res = await checkEmail(targetEmail);
+      if (res.exists) {
+        setIsEmailRegistered(true);
+        setError('An account with this email already exists. Please sign in instead.');
+      } else {
+        setIsEmailRegistered(false);
+        if (error && error.includes('already exists')) {
+          setError(null);
+        }
+      }
+    } catch (err) {
+      console.warn('Check email error:', err);
+    } finally {
+      setIsCheckingEmail(false);
+    }
+  };
+
+  // Debounced check while typing in registration mode
+  useEffect(() => {
+    if (tab !== 'signup' || !email.includes('@') || email.length < 5) {
+      setIsEmailRegistered(false);
+      return;
+    }
+    const timer = setTimeout(() => {
+      verifyEmailAvailability(email);
+    }, 450);
+    return () => clearTimeout(timer);
+  }, [email, tab]);
 
   // Close on Escape key
   useEffect(() => {
@@ -86,32 +130,32 @@ export default function AuthModal() {
       setError('Please enter a valid email address first');
       return;
     }
+
+    if (tab === 'signup') {
+      setIsCheckingEmail(true);
+      const checkRes = await checkEmail(targetEmail);
+      setIsCheckingEmail(false);
+      if (checkRes.exists) {
+        setIsEmailRegistered(true);
+        setError('An account with this email already exists. Please sign in instead.');
+        return;
+      }
+    }
+
     setIsSendingOtp(true);
     setError(null);
     try {
-      const data = await requestOtp(targetEmail);
-      if (data.devOtp) {
-        setDevOtp(data.devOtp);
-      }
-      setOtpSentMessage('Verification code generated!');
+      const data = await requestOtp(targetEmail, tab === 'signup' ? 'register' : 'login');
+      setOtpSent(true);
+      setOtpSentMessage(data.message || `Verification code sent to ${targetEmail}`);
       setOtpCooldown(30);
     } catch (err) {
+      if (err.exists) {
+        setIsEmailRegistered(true);
+      }
       setError(err.message || 'Failed to send verification code');
     } finally {
       setIsSendingOtp(false);
-    }
-  };
-
-  const handleCopyOtp = () => {
-    if (!devOtp) return;
-    navigator.clipboard.writeText(devOtp);
-    setCopiedOtp(true);
-    setTimeout(() => setCopiedOtp(false), 1600);
-  };
-
-  const handleAutoFillOtp = () => {
-    if (devOtp) {
-      setOtp(devOtp);
     }
   };
 
@@ -191,41 +235,15 @@ export default function AuthModal() {
           </div>
         )}
 
-        {/* PROMINENT DEV / DEMO OTP BANNER ON TOP (as requested by user) */}
-        {devOtp && (
-          <div className="auth-dev-otp-banner" id="auth-otp-top-banner">
-            <div className="otp-banner-header">
-              <div className="otp-live-indicator">
-                <span className="otp-live-dot"></span>
-                <span className="otp-banner-title">Verification Code (Demo Mode)</span>
-              </div>
-              <span className="otp-simulated-tag">Simulated SMTP</span>
+        {/* Verification Code Status Banner */}
+        {otpSent && (
+          <div className="auth-email-sent-alert" id="auth-otp-top-banner">
+            <div className="auth-email-sent-badge">
+              <span className="auth-email-sent-dot"></span>
+              <span>Verification Code Sent</span>
             </div>
-
-            <div className="otp-code-display-row">
-              <span className="otp-digits-box" title="Verification code">{devOtp}</span>
-              <div className="otp-action-btns">
-                <button
-                  type="button"
-                  className="otp-autofill-btn"
-                  onClick={handleAutoFillOtp}
-                  title="Auto-fill code into verification input"
-                >
-                  Auto-Fill
-                </button>
-                <button
-                  type="button"
-                  className="otp-copy-btn"
-                  onClick={handleCopyOtp}
-                  title="Copy code to clipboard"
-                >
-                  {copiedOtp ? 'Copied' : 'Copy'}
-                </button>
-              </div>
-            </div>
-
-            <p className="otp-banner-note">
-              Email verification code for <strong>{email || 'your email'}</strong>. Real SMTP will be configured for production.
+            <p className="auth-email-sent-message">
+              We sent a 6-digit verification code to <strong>{email || 'your email'}</strong>. Please check your inbox (and spam folder) and enter it below.
             </p>
           </div>
         )}
@@ -293,30 +311,52 @@ export default function AuthModal() {
                       type="button"
                       className="auth-text-action-btn"
                       onClick={() => handleSendOtp(email)}
-                      disabled={isSendingOtp || !email.includes('@')}
+                      disabled={isSendingOtp || !email.includes('@') || isEmailRegistered || isCheckingEmail}
+                      title={isEmailRegistered ? 'Email already registered. Please sign in.' : undefined}
                     >
-                      {isSendingOtp ? 'Sending...' : (devOtp ? 'Resend Code' : 'Get Verification Code')}
+                      {isCheckingEmail ? 'Checking...' : (isSendingOtp ? 'Sending...' : (otpSent ? 'Resend Code' : 'Get Verification Code'))}
                     </button>
                   )}
                 </div>
                 <input
                   type="email"
                   id="auth-email-input"
-                  className="auth-input"
+                  className={`auth-input ${isEmailRegistered ? 'auth-input-warning' : ''}`}
                   placeholder="name@company.com or personal email"
                   required
                   value={email}
                   onChange={(e) => {
                     setEmail(e.target.value);
+                    if (isEmailRegistered) setIsEmailRegistered(false);
                     if (error) setError(null);
                   }}
                   onBlur={() => {
-                    // Auto-request OTP on entering valid email if not requested yet
-                    if (email.includes('@') && email.length > 5 && !devOtp && !isSendingOtp) {
-                      handleSendOtp(email);
+                    if (tab === 'signup' && email.includes('@') && email.length > 5) {
+                      verifyEmailAvailability(email);
                     }
                   }}
                 />
+                {isEmailRegistered && (
+                  <div className="auth-email-exists-box">
+                    <div className="auth-email-exists-content">
+                      <span className="auth-email-exists-dot"></span>
+                      <span className="auth-email-exists-msg">
+                        This email is already registered.
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      className="auth-switch-tab-quick-btn"
+                      onClick={() => {
+                        setTab('login');
+                        setIsEmailRegistered(false);
+                        setError(null);
+                      }}
+                    >
+                      Sign In &rarr;
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* 6-Digit OTP Input */}
@@ -325,8 +365,10 @@ export default function AuthModal() {
                   <label className="auth-label" htmlFor="auth-otp-input">
                     6-Digit Verification Code
                   </label>
-                  {!devOtp && (
+                  {!otpSent ? (
                     <span className="auth-hint-text">Click "Get Verification Code" above</span>
+                  ) : (
+                    <span className="auth-hint-text" style={{ color: '#059669', fontWeight: 600 }}>Sent to inbox</span>
                   )}
                 </div>
                 <div className="auth-otp-input-wrapper">
@@ -339,16 +381,8 @@ export default function AuthModal() {
                     required
                     value={otp}
                     onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
+                    autoComplete="one-time-code"
                   />
-                  {devOtp && otp !== devOtp && (
-                    <button
-                      type="button"
-                      className="otp-inline-fill-btn"
-                      onClick={handleAutoFillOtp}
-                    >
-                      Fill {devOtp}
-                    </button>
-                  )}
                 </div>
               </div>
 
@@ -379,7 +413,7 @@ export default function AuthModal() {
               <button
                 type="submit"
                 className="auth-submit-btn"
-                disabled={loading}
+                disabled={loading || isEmailRegistered}
                 id="auth-signup-submit"
               >
                 {loading ? 'Creating Account...' : 'Create Account & Verify'}
@@ -438,7 +472,7 @@ export default function AuthModal() {
                         onClick={() => handleSendOtp(email)}
                         disabled={isSendingOtp || !email.includes('@')}
                       >
-                        {isSendingOtp ? 'Sending...' : 'Get Code'}
+                        {isSendingOtp ? 'Sending...' : (otpSent ? 'Resend Code' : 'Get Code')}
                       </button>
                     )}
                   </div>
