@@ -565,7 +565,9 @@ const TECH_HUB_SEEDS = {
       rating: 4.7,
       user_ratings_total: 3100,
       category: "Software & IT Services",
-      isTech: true
+      isTech: true,
+      atsType: "workday",
+      atsSlug: "adobe"
     },
     {
       name: "Paytm HQ (One97 Communications)",
@@ -578,7 +580,69 @@ const TECH_HUB_SEEDS = {
       rating: 4.4,
       user_ratings_total: 4800,
       category: "Tech / Product Company",
-      isTech: true
+      isTech: true,
+      atsType: "lever",
+      atsSlug: "paytm"
+    },
+    {
+      name: "Level AI",
+      formatted_address: "Express Trade Towers 2, Sector 132, Noida-Greater Noida Expressway, Noida, Uttar Pradesh 201304",
+      locality: "Sector 132 Expressway",
+      lat: 28.5090,
+      lng: 77.3790,
+      website: "https://thelevel.ai",
+      category: "AI / SaaS Startup",
+      isTech: true,
+      atsType: "lever",
+      atsSlug: "levelai"
+    },
+    {
+      name: "Sumo Logic India",
+      formatted_address: "Advant Navis Business Park, Tower B, Sector 142, Noida Expressway, Uttar Pradesh 201305",
+      locality: "Sector 142 Expressway",
+      lat: 28.4988,
+      lng: 77.4120,
+      website: "https://www.sumologic.com",
+      category: "Cloud & DevSecOps",
+      isTech: true,
+      atsType: "greenhouse",
+      atsSlug: "sumologic"
+    },
+    {
+      name: "Bitwarden India",
+      formatted_address: "Candor TechSpace, Sector 135, Noida Expressway, Uttar Pradesh 201304",
+      locality: "Sector 135 Expressway",
+      lat: 28.5095,
+      lng: 77.3785,
+      website: "https://bitwarden.com",
+      category: "Cybersecurity & Open Source",
+      isTech: true,
+      atsType: "greenhouse",
+      atsSlug: "bitwarden"
+    },
+    {
+      name: "ShyftLabs",
+      formatted_address: "Oxygen Business Park, Sector 144, Noida Expressway, Uttar Pradesh 201306",
+      locality: "Sector 144 Expressway",
+      lat: 28.4920,
+      lng: 77.4250,
+      website: "https://shyftlabs.io",
+      category: "Data & AI Engineering",
+      isTech: true,
+      atsType: "lever",
+      atsSlug: "shyftlabs"
+    },
+    {
+      name: "Speechify India",
+      formatted_address: "Candor TechSpace, Sector 62, Noida, Uttar Pradesh 201309",
+      locality: "Sector 62",
+      lat: 28.6275,
+      lng: 77.3680,
+      website: "https://speechify.com",
+      category: "AI & Voice Tech",
+      isTech: true,
+      atsType: "greenhouse",
+      atsSlug: "speechify"
     },
     {
       name: "HCL Technologies HQ",
@@ -617,6 +681,94 @@ const TECH_HUB_SEEDS = {
       rating: 4.6,
       user_ratings_total: 2150,
       category: "Tech / Product Company",
+      isTech: true
+    },
+    {
+      name: "Innovaccer HQ",
+      formatted_address: "Candor TechSpace, Tower 5, Sector 62, Noida, Uttar Pradesh 201309",
+      locality: "Sector 62",
+      lat: 28.6285,
+      lng: 77.3690,
+      website: "https://innovaccer.com",
+      category: "Healthcare AI Unicorn",
+      isTech: true,
+      atsType: "workable",
+      atsSlug: "innovaccer-analytics"
+    },
+    {
+      name: "Netomi India",
+      formatted_address: "Candor TechSpace, Sector 62, Noida, Uttar Pradesh 201309",
+      locality: "Sector 62",
+      lat: 28.6280,
+      lng: 77.3685,
+      website: "https://www.netomi.com",
+      category: "AI Startup",
+      isTech: true,
+      atsType: "lever",
+      atsSlug: "netomi"
+    },
+    {
+      name: "Shipsy",
+      formatted_address: "Candor TechSpace, Sector 62, Noida, Uttar Pradesh 201309",
+      locality: "Sector 62",
+      lat: 28.6282,
+      lng: 77.3680,
+      website: "https://shipsy.io",
+      category: "Logistics Tech SaaS",
+      isTech: true,
+      atsType: "smartrecruiters",
+      atsSlug: "shipsy"
+    },
+    {
+      name: "GeeksforGeeks",
+      formatted_address: "A-143, 7th Floor, Sovereign Corporate Tower, Sector 136, Noida Expressway, Uttar Pradesh 201305",
+      locality: "Sector 136 Expressway",
+      lat: 28.5040,
+      lng: 77.3980,
+      website: "https://www.geeksforgeeks.org",
+      category: "EdTech Platform",
+      isTech: true,
+      atsType: "smartrecruiters",
+      atsSlug: "gfg"
+    },
+    {
+      name: "PhysicsWallah HQ",
+      formatted_address: "Candor TechSpace, Tower 3, Sector 62, Noida, Uttar Pradesh 201309",
+      locality: "Sector 62",
+      lat: 28.6278,
+      lng: 77.3682,
+      website: "https://www.pw.live",
+      category: "EdTech Unicorn",
+      isTech: true
+    },
+    {
+      name: "Moglix HQ",
+      formatted_address: "Plot No. 1, Sector 126, Noida Expressway, Uttar Pradesh 201303",
+      locality: "Sector 126 Expressway",
+      lat: 28.5420,
+      lng: 77.3490,
+      website: "https://www.moglix.com",
+      category: "B2B E-commerce Unicorn",
+      isTech: true
+    },
+    {
+      name: "Classplus HQ",
+      formatted_address: "Express Trade Towers 2, Sector 132, Noida Expressway, Uttar Pradesh 201304",
+      locality: "Sector 132 Expressway",
+      lat: 28.5110,
+      lng: 77.3780,
+      website: "https://classplus.co",
+      category: "EdTech Startup",
+      isTech: true
+    },
+    {
+      name: "IndiaMART InterMESH HQ",
+      formatted_address: "Advant Navis Business Park, Tower A, Sector 142, Noida Expressway, Uttar Pradesh 201305",
+      locality: "Sector 142 Expressway",
+      lat: 28.4985,
+      lng: 77.4125,
+      website: "https://www.indiamart.com",
+      category: "B2B Tech Platform",
       isTech: true
     }
   ],

@@ -52,7 +52,7 @@ export function evaluateCandidateMatch(jobEligibility, candidateProfile) {
     isEligible: true,
     isBlocker: false,
     badgeTone: 'success',
-    icon: '🌐',
+    icon: 'globe',
     detail: '',
     recommendation: null
   };
@@ -61,21 +61,21 @@ export function evaluateCandidateMatch(jobEligibility, candidateProfile) {
     countryScore = 35;
     countryResult.title = `Country Fit: 100% Eligible (Domestic ${candCountry} Opening)`;
     countryResult.detail = `This job is based in ${candCountry} (${jobCity || jobLoc}). You reside in ${candCountry} and qualify for direct domestic employment.`;
-    countryResult.icon = '✓';
+    countryResult.icon = 'check';
     countryResult.badgeTone = 'success';
     eligibleFactors.push(countryResult);
   } else if (isWorldwideRemote) {
     countryScore = 35;
     countryResult.title = 'Country Fit: 100% Eligible (Global Remote)';
     countryResult.detail = `${jobEligibility.company} allows worldwide remote candidates. Candidates located in ${candCountry} are fully eligible to apply remotely.`;
-    countryResult.icon = '🌐';
+    countryResult.icon = 'globe';
     countryResult.badgeTone = 'success';
     eligibleFactors.push(countryResult);
   } else if (isUSRoleWithAuth) {
     countryScore = 35;
     countryResult.title = 'Country Fit: US Work Authorization Satisfied';
     countryResult.detail = 'Role is US-based. Your profile indicates US residency or work authorization.';
-    countryResult.icon = '🇺🇸';
+    countryResult.icon = 'check';
     countryResult.badgeTone = 'success';
     eligibleFactors.push(countryResult);
   } else {
@@ -84,7 +84,7 @@ export function evaluateCandidateMatch(jobEligibility, candidateProfile) {
     countryResult.isEligible = false;
     countryResult.isBlocker = true;
     countryResult.badgeTone = 'danger';
-    countryResult.icon = '🚫';
+    countryResult.icon = 'blocker';
     const targetCountry = jobCountry || 'a different country';
     countryResult.title = `Country Blocker: Located in ${targetCountry}`;
     countryResult.detail = `This position requires legal work authorization in ${targetCountry} (${jobLoc || targetCountry}). Candidates residing in ${candCountry} cannot work cross-border without local visa/authorization.`;
@@ -111,7 +111,7 @@ export function evaluateCandidateMatch(jobEligibility, candidateProfile) {
     isEligible: true,
     isBlocker: false,
     badgeTone: 'success',
-    icon: '🎓',
+    icon: 'experience',
     detail: '',
     recommendation: null
   };
@@ -123,14 +123,14 @@ export function evaluateCandidateMatch(jobEligibility, candidateProfile) {
       experienceScore = 30;
       expResult.title = `Experience Fit: 100% Eligible (${candExpDisplay} Exp)`;
       expResult.detail = `Job welcomes early career talent, freshers, and developers with 0-2 years of experience. Your profile (${candExpDisplay}, ${candidateProfile.seniorityLevel || 'Early Career'}) is an ideal fit.`;
-      expResult.icon = '✓';
+      expResult.icon = 'check';
       expResult.badgeTone = 'success';
       eligibleFactors.push(expResult);
     } else {
       experienceScore = 28;
       expResult.title = 'Experience Fit: Exceeds Minimum Entry-Level Requirement';
       expResult.detail = `Role is entry-level, but your ${candExpDisplay} of experience gives you strong foundational qualification.`;
-      expResult.icon = '✓';
+      expResult.icon = 'check';
       expResult.badgeTone = 'success';
       eligibleFactors.push(expResult);
     }
@@ -139,7 +139,7 @@ export function evaluateCandidateMatch(jobEligibility, candidateProfile) {
       experienceScore = 30;
       expResult.title = `Experience Fit: Meets Seniority Requirement (${candExpDisplay} Exp)`;
       expResult.detail = `Job specifies ${jobSeniority.experienceText}. Your profile reflects ${candExpDisplay} of experience (${candidateProfile.seniorityLevel}).`;
-      expResult.icon = '✓';
+      expResult.icon = 'check';
       expResult.badgeTone = 'success';
       eligibleFactors.push(expResult);
     } else if (candTotalMonths >= jobMinMonths - 6 || (jobMinYears <= 1 && candTotalMonths >= 6)) {
@@ -147,7 +147,7 @@ export function evaluateCandidateMatch(jobEligibility, candidateProfile) {
       experienceScore = 22;
       expResult.title = `Experience Level: Close Match (${candExpDisplay} vs ${jobMinYears}+ Yrs)`;
       expResult.detail = `Role prefers ${jobSeniority.experienceText}; your profile shows ${candExpDisplay}. Your practical engineering experience and skill match provide strong qualification.`;
-      expResult.icon = '✓';
+      expResult.icon = 'check';
       expResult.badgeTone = 'success';
       eligibleFactors.push(expResult);
     } else {
@@ -155,7 +155,7 @@ export function evaluateCandidateMatch(jobEligibility, candidateProfile) {
       expResult.status = 'NOT_ELIGIBLE';
       expResult.isEligible = false;
       expResult.badgeTone = 'warning';
-      expResult.icon = '⚠️';
+      expResult.icon = 'warning';
       expResult.title = 'Experience Gap: Seniority Requirement Not Met';
       expResult.detail = `Job requires ${jobSeniority.experienceText} (${jobSeniority.level}). Your profile reflects ${candExpDisplay} (${candidateProfile.seniorityLevel}).`;
       expResult.recommendation = `Target roles matching your current experience level (0-${Math.max(2, candYears + 1)} years) or highlight deep hands-on project work in your application.`;
@@ -200,7 +200,7 @@ export function evaluateCandidateMatch(jobEligibility, candidateProfile) {
       status: 'ELIGIBLE',
       isEligible: true,
       badgeTone: 'success',
-      icon: '⚡',
+      icon: 'skills',
       detail: 'Your profile matches key technical competencies required for this position.',
       chips: matchedSkills
     });
@@ -215,7 +215,7 @@ export function evaluateCandidateMatch(jobEligibility, candidateProfile) {
       status: isMajorGap ? 'NOT_ELIGIBLE' : 'RECOMMENDATION',
       isEligible: !isMajorGap,
       badgeTone: isMajorGap ? 'warning' : 'info',
-      icon: isMajorGap ? '⚠️' : '💡',
+      icon: isMajorGap ? 'warning' : 'info',
       detail: isMajorGap
         ? 'The job prioritizes several technologies not detected in your CV/portfolio.'
         : 'These skills are mentioned in the job description and could strengthen your application if added.',
@@ -233,7 +233,7 @@ export function evaluateCandidateMatch(jobEligibility, candidateProfile) {
     status: 'ELIGIBLE',
     isEligible: true,
     badgeTone: 'success',
-    icon: '📜',
+    icon: 'education',
     detail: `Candidate credentials (${candEdu}) align with standard engineering requirements.`,
     chips: [candEdu]
   });
@@ -249,7 +249,7 @@ export function evaluateCandidateMatch(jobEligibility, candidateProfile) {
       status: 'ELIGIBLE',
       isEligible: true,
       badgeTone: 'success',
-      icon: '💻',
+      icon: 'remote',
       detail: 'This is a Remote position. You can work comfortably from your current location without office commuting.',
       chips: ['Remote Work']
     });
@@ -261,7 +261,7 @@ export function evaluateCandidateMatch(jobEligibility, candidateProfile) {
       status: 'ELIGIBLE',
       isEligible: true,
       badgeTone: 'info',
-      icon: '🏢',
+      icon: 'office',
       detail: `Role involves ${jobMode} presence in ${jobLoc}. Candidate should be based in or open to commuting/relocating to ${jobLoc}.`,
       chips: [jobMode, jobLoc]
     });
@@ -455,7 +455,7 @@ export function generateClientEligibility(job) {
       canIndiansApply: true,
       badgeText: 'Global Remote (India Allowed)',
       badgeTone: 'success',
-      badgeIcon: '🌐',
+      badgeIcon: 'globe',
       verdictTitle: 'Eligible: Worldwide Remote Role',
       explanation: `${company} supports global remote candidates. Indian residents can apply remotely.`
     };
@@ -465,7 +465,7 @@ export function generateClientEligibility(job) {
       canIndiansApply: false,
       badgeText: 'US Work Auth Required',
       badgeTone: 'warning',
-      badgeIcon: '🇺🇸',
+      badgeIcon: 'restricted',
       verdictTitle: 'Restricted: Existing US Work Authorization Required',
       explanation: `This role is located in the US (${rawLoc || 'United States'}). Candidates in India cannot work cross-border without existing US citizenship, Green Card, or valid US visa.`
     };

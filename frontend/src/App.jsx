@@ -4,8 +4,22 @@ import ReachOutView from './components/ReachOutView';
 import AuthModal from './components/AuthModal';
 import JobEligibilityModal from './components/JobEligibilityModal';
 import CandidateProfileUploadModal from './components/CandidateProfileUploadModal';
+import TechCorridorMapView from './components/TechCorridorMapView';
 import { useAuth } from './context/AuthContext';
 import { getJobMatchQuick } from './utils/candidateMatcher';
+
+const PRIMARY_TECH_HUBS = [
+  { key: 'all', name: 'All India' },
+  { key: 'Bengaluru', name: 'Bengaluru' },
+  { key: 'Hyderabad', name: 'Hyderabad' },
+  { key: 'Gurugram', name: 'Gurugram' },
+  { key: 'Pune', name: 'Pune' },
+  { key: 'Noida', name: 'Noida' },
+  { key: 'New Delhi', name: 'Delhi NCR' },
+  { key: 'Mumbai', name: 'Mumbai' },
+  { key: 'Chennai', name: 'Chennai' },
+  { key: 'Kolkata', name: 'Kolkata' }
+];
 
 export default function App() {
   const { user, isAuthenticated, logout, openAuthModal, authFetch, candidateProfile } = useAuth();
@@ -23,12 +37,16 @@ export default function App() {
   const [meta, setMeta] = useState({ total: 0, openTotal: 0, totalInDb: 0, page: 1, limit: 25, totalPages: 1 });
   const [stats, setStats] = useState(null);
 
-  // Filters
+  // Filters & Pan-India Tech Hub Controls
   const [onlyEligibleJobs, setOnlyEligibleJobs] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCountry, setSelectedCountry] = useState('all');
   const [countries, setCountries] = useState([]);
   const [selectedCity, setSelectedCity] = useState('all');
+  const [selectedCorridor, setSelectedCorridor] = useState('all');
+  const [availableCorridors, setAvailableCorridors] = useState([]);
+  const [experienceLevel, setExperienceLevel] = useState('all'); // 'all' | 'freshers' | 'mid' | 'senior'
+  const [viewMode, setViewMode] = useState('grid'); // 'grid' | 'table'
   const [workModeFilter, setWorkModeFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('open');
   const [companyFilter, setCompanyFilter] = useState('all');
@@ -106,7 +124,26 @@ export default function App() {
     }
   }, [selectedCountry, statusFilter]);
 
-  // Fetch jobs with comprehensive filters including selectedCountry
+  // Fetch tech corridors dynamically when city changes
+  useEffect(() => {
+    if (selectedCity && selectedCity !== 'all') {
+      fetch(`/api/corridors?city=${encodeURIComponent(selectedCity)}&status=${statusFilter}`)
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data && data.success && Array.isArray(data.corridors)) {
+            setAvailableCorridors(data.corridors);
+          } else {
+            setAvailableCorridors([]);
+          }
+        })
+        .catch(() => setAvailableCorridors([]));
+    } else {
+      setAvailableCorridors([]);
+    }
+    setSelectedCorridor('all');
+  }, [selectedCity, statusFilter]);
+
+  // Fetch jobs with comprehensive filters including corridors & experience
   const fetchJobs = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -115,12 +152,22 @@ export default function App() {
       if (searchQuery.trim()) params.append('q', searchQuery.trim());
       if (selectedCountry && selectedCountry !== 'all') params.append('country', selectedCountry);
       if (selectedCity !== 'all') params.append('city', selectedCity);
+      if (selectedCorridor && selectedCorridor !== 'all') params.append('corridor', selectedCorridor);
+
+      if (experienceLevel === 'freshers') {
+        params.append('fresherFriendly', 'true');
+      } else if (experienceLevel === 'mid') {
+        params.append('seniority', 'mid');
+      } else if (experienceLevel === 'senior') {
+        params.append('seniority', 'senior');
+      }
+
       if (workModeFilter !== 'all') params.append('workMode', workModeFilter);
       if (statusFilter !== 'all') params.append('status', statusFilter);
       if (companyFilter !== 'all') params.append('company', companyFilter);
       if (techOnlyJobs) params.append('techOnly', 'true');
       params.append('page', String(page));
-      params.append('limit', String(limit));
+      params.append('limit', String(viewMode === 'map' ? 100 : limit));
 
       const res = await fetch(`/api/jobs?${params.toString()}`);
       if (!res.ok) {
@@ -142,7 +189,7 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, [searchQuery, selectedCountry, selectedCity, workModeFilter, statusFilter, companyFilter, techOnlyJobs, page, limit]);
+  }, [searchQuery, selectedCountry, selectedCity, selectedCorridor, experienceLevel, workModeFilter, statusFilter, companyFilter, techOnlyJobs, page, limit, viewMode]);
 
   const fetchDirectoryMeta = useCallback(async () => {
     try {
@@ -280,6 +327,8 @@ export default function App() {
     setSearchQuery('');
     setSelectedCountry('all');
     setSelectedCity('all');
+    setSelectedCorridor('all');
+    setExperienceLevel('all');
     setWorkModeFilter('all');
     setStatusFilter('open');
     setCompanyFilter('all');
@@ -288,34 +337,70 @@ export default function App() {
     setPage(1);
   };
 
-  // Memoize city counts & structured groups for clear, classy dropdowns
-  const totalCityJobs = useMemo(() => {
-    return cities.reduce((sum, c) => sum + (c.count || 0), 0);
+  // Memoize counts for India tech hub pills
+  const hubCityCounts = useMemo(() => {
+    const map = {};
+    let totalIndia = 0;
+    for (const c of cities) {
+      if (!c || !c.city) continue;
+      const lower = c.city.toLowerCase().trim();
+      const count = c.count || 0;
+      if (c.country === 'India' || !c.country) {
+        totalIndia += count;
+      }
+      map[c.city] = (map[c.city] || 0) + count;
+      if (lower === 'gurgaon') map['Gurugram'] = (map['Gurugram'] || 0) + count;
+      if (lower === 'bangalore') map['Bengaluru'] = (map['Bengaluru'] || 0) + count;
+      if (lower === 'delhi' || lower === 'delhi ncr') map['New Delhi'] = (map['New Delhi'] || 0) + count;
+    }
+    map['all'] = totalIndia;
+    return map;
   }, [cities]);
 
-  const cityGroups = useMemo(() => {
-    if (!cities || cities.length === 0) return { major: [], remote: [], other: [] };
+  // Memoize city counts & structured groups for clear, classy dropdowns
+  // Filter cities by selectedCountry to guarantee strict country-city cascading
+  const filteredCities = useMemo(() => {
+    if (!cities || cities.length === 0) return [];
+    if (!selectedCountry || selectedCountry === 'all') return cities;
+    return cities.filter(c => {
+      if (!c.country) return false;
+      return c.country.toLowerCase() === selectedCountry.toLowerCase();
+    });
+  }, [cities, selectedCountry]);
 
-    const MAJOR_NAMES = new Set([
-      'bengaluru', 'bangalore', 'hyderabad', 'pune', 'mumbai', 'delhi', 'delhi ncr',
+  const totalCityJobs = useMemo(() => {
+    return filteredCities.reduce((sum, c) => sum + (c.count || 0), 0);
+  }, [filteredCities]);
+
+  const cityGroups = useMemo(() => {
+    if (!filteredCities || filteredCities.length === 0) return { major: [], remote: [], other: [] };
+
+    const INDIAN_MAJOR = new Set([
+      'bengaluru', 'bangalore', 'hyderabad', 'pune', 'mumbai', 'delhi', 'delhi ncr', 'new delhi',
       'gurgaon', 'gurugram', 'noida', 'chennai', 'kolkata', 'ahmedabad', 'kochi',
-      'jaipur', 'indore', 'chandigarh',
+      'jaipur', 'indore', 'chandigarh'
+    ]);
+
+    const GLOBAL_MAJOR = new Set([
+      ...INDIAN_MAJOR,
       'san francisco', 'san jose', 'new york', 'seattle', 'austin', 'sunnyvale',
       'los angeles', 'chicago', 'boston', 'london', 'toronto', 'vancouver', 'berlin',
       'munich', 'dublin', 'sydney', 'paris', 'singapore', 'amsterdam', 'tokyo'
     ]);
 
+    const activeMajorSet = (selectedCountry === 'India') ? INDIAN_MAJOR : GLOBAL_MAJOR;
+
     const major = [];
     const remote = [];
     const other = [];
 
-    const sorted = [...cities].sort((a, b) => (b.count || 0) - (a.count || 0));
+    const sorted = [...filteredCities].sort((a, b) => (b.count || 0) - (a.count || 0));
 
     for (const c of sorted) {
       const lower = (c.city || '').toLowerCase().trim();
       if (lower.includes('remote') || lower.includes('anywhere')) {
         remote.push(c);
-      } else if (MAJOR_NAMES.has(lower) || MAJOR_NAMES.has(lower.replace(/\s+/g, ''))) {
+      } else if (activeMajorSet.has(lower) || activeMajorSet.has(lower.replace(/\s+/g, ''))) {
         major.push(c);
       } else {
         other.push(c);
@@ -323,7 +408,20 @@ export default function App() {
     }
 
     return { major, remote, other };
-  }, [cities]);
+  }, [filteredCities, selectedCountry]);
+
+  // Auto-reset city & corridor if current city doesn't exist in the selected country
+  useEffect(() => {
+    if (selectedCity && selectedCity !== 'all' && filteredCities.length > 0) {
+      const cityExists = filteredCities.some(
+        c => c.city.toLowerCase() === selectedCity.toLowerCase()
+      );
+      if (!cityExists) {
+        setSelectedCity('all');
+        setSelectedCorridor('all');
+      }
+    }
+  }, [filteredCities, selectedCity]);
 
   const companyGroups = useMemo(() => {
     if (!stats || !stats.companies) return { tier1: [], other: [] };
@@ -384,10 +482,41 @@ export default function App() {
     if (selectedCity && selectedCity !== 'all') {
       list.push({
         id: 'city',
-        label: 'City',
+        label: 'Hub',
         value: selectedCity,
         onRemove: () => {
           setSelectedCity('all');
+          setSelectedCorridor('all');
+          setPage(1);
+        }
+      });
+    }
+
+    if (selectedCorridor && selectedCorridor !== 'all') {
+      const corr = availableCorridors.find(c => c.key === selectedCorridor);
+      list.push({
+        id: 'corridor',
+        label: 'Tech Corridor',
+        value: corr ? (corr.shortName || corr.name) : selectedCorridor,
+        onRemove: () => {
+          setSelectedCorridor('all');
+          setPage(1);
+        }
+      });
+    }
+
+    if (experienceLevel && experienceLevel !== 'all') {
+      const expLabels = {
+        freshers: 'Freshers (0–1y)',
+        mid: 'Mid-Level (2–5y)',
+        senior: 'Senior & Staff (5y+)'
+      };
+      list.push({
+        id: 'experience',
+        label: 'Experience',
+        value: expLabels[experienceLevel] || experienceLevel,
+        onRemove: () => {
+          setExperienceLevel('all');
           setPage(1);
         }
       });
@@ -460,7 +589,7 @@ export default function App() {
     }
 
     return list;
-  }, [searchQuery, selectedCountry, selectedCity, workModeFilter, companyFilter, statusFilter, techOnlyJobs, onlyEligibleJobs, isAuthenticated, candidateProfile]);
+  }, [searchQuery, selectedCountry, selectedCity, selectedCorridor, availableCorridors, experienceLevel, workModeFilter, companyFilter, statusFilter, techOnlyJobs, onlyEligibleJobs, isAuthenticated, candidateProfile]);
 
   const hasNonDefaultFilters = useMemo(() => {
     return activeFilters.length > 0;
@@ -637,7 +766,13 @@ export default function App() {
                   }}
                   title="Show all verified jobs worldwide across all countries"
                 >
-                  <span className="scope-flag">🌐</span>
+                  <span className="scope-flag">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="2" y1="12" x2="22" y2="12" />
+                      <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                    </svg>
+                  </span>
                   <span className="scope-label">
                     {selectedCountry !== 'all' && selectedCountry !== 'India' ? selectedCountry : 'Worldwide'}
                   </span>
@@ -789,6 +924,98 @@ export default function App() {
                 </div>
               </section>
 
+              {/* Pan-India Tech Hub & Corridors Selector */}
+              <div className="tech-hubs-container">
+                <div className="tech-hubs-bar">
+                  {PRIMARY_TECH_HUBS.map((hub) => {
+                    const isSelected = (hub.key === 'all' && selectedCity === 'all') || selectedCity.toLowerCase() === hub.key.toLowerCase();
+                    const count = hubCityCounts[hub.key] || 0;
+                    return (
+                      <button
+                        key={hub.key}
+                        type="button"
+                        className={`tech-hub-pill ${isSelected ? 'active' : ''}`}
+                        onClick={() => {
+                          if (hub.key === 'all') {
+                            setSelectedCity('all');
+                            setSelectedCountry('India');
+                          } else {
+                            setSelectedCity(hub.key);
+                            setSelectedCountry('India');
+                          }
+                          setSelectedCorridor('all');
+                          setPage(1);
+                        }}
+                      >
+                        <span>{hub.name}</span>
+                        {count > 0 && (
+                          <span className="tech-hub-count">
+                            {count > 999 ? `${(count / 1000).toFixed(1)}k` : count}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+
+                  {/* Prominent Quick Map View Toggle */}
+                  <button
+                    type="button"
+                    id="tech-hubs-map-btn"
+                    className={`tech-hub-pill map-quick-toggle ${viewMode === 'map' ? 'active' : ''}`}
+                    onClick={() => {
+                      setViewMode(viewMode === 'map' ? 'grid' : 'map');
+                      const anchor = document.getElementById('results-header-anchor');
+                      if (anchor) anchor.scrollIntoView({ behavior: 'smooth' });
+                    }}
+                    title="Toggle Interactive GIS Tech Corridor Map"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ marginRight: '5px' }}>
+                      <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6" />
+                      <line x1="8" y1="2" x2="8" y2="18" />
+                      <line x1="16" y1="6" x2="16" y2="22" />
+                    </svg>
+                    <span>{viewMode === 'map' ? 'Exit Map View' : 'Corridor Map View'}</span>
+                  </button>
+                </div>
+
+                {/* Dynamic Micro-Corridors Bar */}
+                {availableCorridors.length > 0 && (
+                  <div className="corridors-bar">
+                    <span className="corridors-label">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                        <circle cx="12" cy="12" r="10" />
+                        <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20" />
+                      </svg>
+                      Corridors:
+                    </span>
+                    <button
+                      type="button"
+                      className={`corridor-chip ${selectedCorridor === 'all' ? 'active' : ''}`}
+                      onClick={() => {
+                        setSelectedCorridor('all');
+                        setPage(1);
+                      }}
+                    >
+                      All {selectedCity}
+                    </button>
+                    {availableCorridors.map((c) => (
+                      <button
+                        key={c.key}
+                        type="button"
+                        className={`corridor-chip ${selectedCorridor === c.key ? 'active' : ''}`}
+                        onClick={() => {
+                          setSelectedCorridor(c.key);
+                          setPage(1);
+                        }}
+                      >
+                        <span>{c.shortName || c.name}</span>
+                        {c.count > 0 && <span className="corridor-count">({c.count})</span>}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               {/* Filter Card */}
               <section className="filter-card" aria-label="Filters">
                 <div className="filter-card-header">
@@ -852,6 +1079,7 @@ export default function App() {
                         const nextCountry = e.target.value;
                         setSelectedCountry(nextCountry);
                         setSelectedCity('all');
+                        setSelectedCorridor('all');
                         setPage(1);
                       }}
                     >
@@ -974,6 +1202,25 @@ export default function App() {
                     </div>
                   )}
 
+                  {/* Experience Level Filter */}
+                  <div className="input-group">
+                    <label htmlFor="filter-experience-select" className="input-label">Experience Level</label>
+                    <select
+                      id="filter-experience-select"
+                      className="custom-select"
+                      value={experienceLevel}
+                      onChange={(e) => {
+                        setExperienceLevel(e.target.value);
+                        setPage(1);
+                      }}
+                    >
+                      <option value="all">All Experience Levels</option>
+                      <option value="freshers">Freshers &amp; Early Career (0–1y)</option>
+                      <option value="mid">Mid-Level Roles (2–5y)</option>
+                      <option value="senior">Senior &amp; Staff (5y+)</option>
+                    </select>
+                  </div>
+
                   {/* Status Filter */}
                   <div className="input-group">
                     <label htmlFor="filter-status-select" className="input-label">Status</label>
@@ -999,19 +1246,17 @@ export default function App() {
                     <span className="chips-strip-label">Applied Filters:</span>
                     <div className="chips-strip-tags">
                       {activeFilters.map((f) => (
-                        <span key={f.id} className="active-filter-chip">
+                        <button
+                          key={f.id}
+                          type="button"
+                          className="active-filter-chip"
+                          onClick={f.onRemove}
+                          title={`Click to remove ${f.label} filter`}
+                        >
                           <span className="chip-key">{f.label}:</span>
                           <span className="chip-val">{f.value}</span>
-                          <button
-                            type="button"
-                            className="chip-del-btn"
-                            onClick={f.onRemove}
-                            title={`Remove ${f.label} filter`}
-                            aria-label={`Remove ${f.label} filter`}
-                          >
-                            ×
-                          </button>
-                        </span>
+                          <span className="chip-del-btn" aria-hidden="true">×</span>
+                        </button>
                       ))}
                       {hasNonDefaultFilters && (
                         <button
@@ -1120,7 +1365,14 @@ export default function App() {
                     }
                     id="match-profile-trigger-btn"
                   >
-                    <span className="profile-trigger-icon">{isAuthenticated && candidateProfile ? '👤' : '📄'}</span>
+                    <span className="profile-trigger-icon">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                        <polyline points="14 2 14 8 20 8" />
+                        <line x1="16" y1="13" x2="8" y2="13" />
+                        <line x1="16" y1="17" x2="8" y2="17" />
+                      </svg>
+                    </span>
                     <span className="profile-trigger-content">
                       {isAuthenticated && candidateProfile ? (
                         <>
@@ -1142,46 +1394,130 @@ export default function App() {
               </section>
 
               {/* Results Container */}
-              <div className="results-container">
-                <div className="results-header">
+              <div className="results-container" id="results-header-anchor">
+                <div className="results-header" style={{ flexWrap: 'wrap', gap: '12px' }}>
                   <div className="results-count" id="results-count-text">
-                    Showing <strong>{displayedJobs.length}</strong> of <strong>{meta.total}</strong> matching jobs
-                    {onlyEligibleJobs && isAuthenticated && candidateProfile && (
-                      <span className="active-tag" style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#059669', borderColor: '#10b981', fontWeight: 700 }}>
-                        ✓ Eligible For You ({candidateProfile.country || 'All Countries'})
+                    Showing <strong>{displayedJobs.length}</strong> of <strong>{meta.total}</strong> verified roles
+                    {selectedCity !== 'all' && <span className="active-tag">{selectedCity}</span>}
+                    {selectedCorridor !== 'all' && (
+                      <span className="active-tag" style={{ background: 'var(--primary-light)', color: 'var(--primary)', borderColor: 'var(--primary-border)' }}>
+                        {availableCorridors.find(c => c.key === selectedCorridor)?.shortName || selectedCorridor}
                       </span>
                     )}
-                    {selectedCountry !== 'all' ? (
-                      <span className="active-tag">{selectedCountry}</span>
-                    ) : (
-                      <span className="active-tag">Global / All Countries</span>
+                    {experienceLevel !== 'all' && (
+                      <span className="active-tag" style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', borderColor: 'rgba(16, 185, 129, 0.3)' }}>
+                        {experienceLevel === 'freshers' ? 'Freshers Open' : experienceLevel}
+                      </span>
                     )}
-                    {techOnlyJobs && <span className="active-tag" style={{ background: 'rgba(16, 185, 129, 0.12)', color: '#059669', borderColor: 'rgba(16, 185, 129, 0.3)' }}>Tech Roles Only</span>}
-                    {selectedCity !== 'all' && <span className="active-tag">{selectedCity}</span>}
                     {workModeFilter !== 'all' && <span className="active-tag">{workModeFilter}</span>}
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <label htmlFor="page-limit-select" style={{ fontSize: '13px', color: 'var(--text-muted)' }}>Per page:</label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                    {/* Experience Level Segmented Control */}
+                    <div className="experience-segmented">
+                      <button
+                        type="button"
+                        className={`segmented-option ${experienceLevel === 'all' ? 'active' : ''}`}
+                        onClick={() => { setExperienceLevel('all'); setPage(1); }}
+                      >
+                        All Exp
+                      </button>
+                      <button
+                        type="button"
+                        className={`segmented-option ${experienceLevel === 'freshers' ? 'active' : ''}`}
+                        onClick={() => { setExperienceLevel('freshers'); setPage(1); }}
+                      >
+                        Freshers (0–1y)
+                      </button>
+                      <button
+                        type="button"
+                        className={`segmented-option ${experienceLevel === 'mid' ? 'active' : ''}`}
+                        onClick={() => { setExperienceLevel('mid'); setPage(1); }}
+                      >
+                        Mid (2–5y)
+                      </button>
+                      <button
+                        type="button"
+                        className={`segmented-option ${experienceLevel === 'senior' ? 'active' : ''}`}
+                        onClick={() => { setExperienceLevel('senior'); setPage(1); }}
+                      >
+                        Senior (5y+)
+                      </button>
+                    </div>
+
+                    {/* View Mode Switcher */}
+                    <div className="view-mode-segmented">
+                      <button
+                        type="button"
+                        className={`segmented-option ${viewMode === 'grid' ? 'active' : ''}`}
+                        onClick={() => setViewMode('grid')}
+                        title="Radar Grid View"
+                      >
+                        Radar Grid
+                      </button>
+                      <button
+                        type="button"
+                        className={`segmented-option ${viewMode === 'table' ? 'active' : ''}`}
+                        onClick={() => setViewMode('table')}
+                        title="Structured Table View"
+                      >
+                        Table
+                      </button>
+                      <button
+                        type="button"
+                        className={`segmented-option ${viewMode === 'map' ? 'active' : ''}`}
+                        onClick={() => setViewMode('map')}
+                        title="Interactive GIS Tech Corridor Map"
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ marginRight: '4px', verticalAlign: '-1px' }}>
+                          <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6" />
+                          <line x1="8" y1="2" x2="8" y2="18" />
+                          <line x1="16" y1="6" x2="16" y2="22" />
+                        </svg>
+                        Corridor Map
+                      </button>
+                    </div>
+
+                    {/* Per Page Select */}
                     <select
                       id="page-limit-select"
                       className="custom-select"
-                      style={{ width: '80px', padding: '6px 10px', fontSize: '13px' }}
+                      style={{ width: '84px', padding: '6px 8px', fontSize: '12.5px' }}
                       value={limit}
                       onChange={(e) => {
                         setLimit(Number(e.target.value));
                         setPage(1);
                       }}
                     >
-                      <option value={10}>10</option>
-                      <option value={25}>25</option>
-                      <option value={50}>50</option>
-                      <option value={100}>100</option>
+                      <option value={12}>12 / pg</option>
+                      <option value={24}>24 / pg</option>
+                      <option value={48}>48 / pg</option>
+                      <option value={96}>96 / pg</option>
                     </select>
                   </div>
                 </div>
 
-                {loading ? (
+                {viewMode === 'map' ? (
+                  <TechCorridorMapView
+                    selectedCity={selectedCity}
+                    selectedCorridor={selectedCorridor}
+                    onSelectCity={(city) => {
+                      setSelectedCity(city);
+                      setPage(1);
+                    }}
+                    onSelectCorridor={(corridorKey) => {
+                      setSelectedCorridor(corridorKey);
+                      setPage(1);
+                    }}
+                    availableCorridors={availableCorridors}
+                    jobs={displayedJobs}
+                    loading={loading}
+                    onOpenApply={(job) => window.open(job.applyUrl, '_blank')}
+                    onOpenCvTailor={(job) => setEligibilityJob(job)}
+                    onOpenEligibility={(job) => setEligibilityJob(job)}
+                    onRefreshJobs={fetchJobs}
+                  />
+                ) : loading ? (
                   <div className="state-box">
                     <div className="spinner" id="loading-spinner" />
                     <p className="state-title">Loading live jobs...</p>
@@ -1200,128 +1536,256 @@ export default function App() {
                   </div>
                 ) : (
                   <>
-                    <div className="table-responsive">
-                      <table className="jobs-table" id="jobs-table">
-                        <thead>
-                          <tr>
-                            <th>Title & Role</th>
-                            <th>Company & ATS</th>
-                            <th>Location & Mode</th>
-                            <th>Status</th>
-                            <th>Last Seen</th>
-                            <th style={{ textAlign: 'right' }}>Action</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {displayedJobs.map((job) => {
-                            const rawLoc = job.locationRaw || job.location || 'Unspecified';
-                            const countryTag = job.country && job.country !== 'India' ? ` (${job.country})` : '';
-                            const displayCity = job.city
-                              ? `${job.city}${job.state ? `, ${job.state}` : ''}${countryTag}`
-                              : (job.workMode === 'remote'
-                                ? (job.country ? `Remote (${job.country})` : 'Remote / Global')
-                                : `${rawLoc}${countryTag && !rawLoc.toLowerCase().includes(job.country.toLowerCase()) ? countryTag : ''}`);
+                    {viewMode === 'grid' ? (
+                      <div className="radar-grid" id="jobs-grid">
+                        {displayedJobs.map((job) => {
+                          const rawLoc = job.locationRaw || job.location || 'Unspecified';
+                          const countryTag = job.country && job.country !== 'India' ? ` (${job.country})` : '';
+                          const displayCity = job.city
+                            ? `${job.city}${job.state ? `, ${job.state}` : ''}${countryTag}`
+                            : (job.workMode === 'remote'
+                              ? (job.country ? `Remote (${job.country})` : 'Remote / Global')
+                              : `${rawLoc}${countryTag && !rawLoc.toLowerCase().includes(job.country.toLowerCase()) ? countryTag : ''}`);
 
-                            const quickMatch = (isAuthenticated && candidateProfile) ? getJobMatchQuick(job, candidateProfile) : null;
+                          const quickMatch = (isAuthenticated && candidateProfile) ? getJobMatchQuick(job, candidateProfile) : null;
+                          const monogram = (job.company || 'JR').slice(0, 2).toUpperCase();
 
-                            return (
-                              <tr key={job._id || `${job.source}-${job.sourceJobId}`}>
-                                <td className="job-title-cell">
-                                  <div className="title-text">{job.title}</div>
-
-                                  {/* Live Eligibility Match Indicator when candidate profile is active and user is authenticated */}
-                                  {isAuthenticated && candidateProfile && quickMatch && (
-                                    <div
-                                      className={`job-row-match-pill ${quickMatch.overall.badgeTone}`}
-                                      onClick={() => setEligibilityJob(job)}
-                                      title={`Click to view breakdown: ${quickMatch.overall.summary}`}
-                                    >
-                                      <span className="match-pill-dot" />
-                                      <span className="match-pill-text">
-                                        {quickMatch.overall.isHardBlocker
-                                          ? '🚫 US Auth Required'
-                                          : `${quickMatch.overall.score}% Match • ${quickMatch.overall.status === 'ELIGIBLE' ? 'Eligible' : 'Partial Fit'}`}
+                          return (
+                            <div key={job._id || `${job.source}-${job.sourceJobId}`} className="radar-card">
+                              <div>
+                                <div className="radar-card-header">
+                                  <div className="radar-card-company">
+                                    <div className="radar-company-monogram">{monogram}</div>
+                                    <div>
+                                      <div className="radar-company-name">{job.company}</div>
+                                      <span className={`radar-source-pill ${getSourceBadgeClass(job.source)}`}>
+                                        {job.source}
                                       </span>
                                     </div>
-                                  )}
-
-                                  {job.source === 'adzuna' && (
-                                    <div className="adzuna-attribution">
-                                      Provided by <a href="https://www.adzuna.in" target="_blank" rel="noopener noreferrer">Adzuna</a>
-                                    </div>
-                                  )}
-                                </td>
-                                <td>
-                                  <div className="company-wrapper">
-                                    <span className="job-company-pill">{job.company}</span>
-                                    <span className={`ats-pill ${getSourceBadgeClass(job.source)}`}>
-                                      {job.source}
-                                    </span>
                                   </div>
-                                </td>
-                                <td>
-                                  <div className="location-wrapper">
-                                    <span
-                                      className="job-location-text"
-                                      title={`Raw ATS Location: ${rawLoc}`}
-                                    >
-                                      {displayCity}
-                                    </span>
-                                    <span className={`mode-badge ${getWorkModeBadgeClass(job.workMode)}`}>
-                                      {job.workMode}
-                                    </span>
-                                  </div>
-                                </td>
-                                <td>
                                   <span className={`status-badge ${job.status}`}>
                                     <span className="status-dot" />
                                     {job.status}
                                   </span>
-                                </td>
-                                <td className="job-date-text">
-                                  {formatDate(job.lastSeenAt)}
-                                </td>
-                                <td className="job-action-cell" style={{ textAlign: 'right' }}>
-                                  <div className="action-buttons-cluster">
-                                    <button
-                                      type="button"
-                                      className={`btn-job-eligibility ${isAuthenticated && candidateProfile ? (quickMatch?.overall?.badgeTone || 'has-profile-match') : ''}`}
-                                      onClick={() => setEligibilityJob(job)}
-                                      title={isAuthenticated && candidateProfile ? `Check match for ${candidateProfile.name}: ${quickMatch?.overall?.headline || ''}` : "View eligibility and requirements for this role"}
-                                      id={`eligibility-btn-${job.sourceJobId || job._id}`}
-                                    >
-                                      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-                                        <path d="M12 2L14.39 8.26L21 9.27L16.27 13.88L17.82 20.46L12 17.07L6.18 20.46L7.73 13.88L3 9.27L9.61 8.26L12 2Z" />
-                                      </svg>
-                                      <span>
-                                        {isAuthenticated && candidateProfile
-                                          ? (quickMatch ? (quickMatch.overall.isHardBlocker ? 'Blocker' : `${quickMatch.overall.score}% Fit`) : 'Eligibility')
-                                          : 'Eligibility'}
-                                      </span>
-                                    </button>
-                                    <a
-                                      href={job.applyUrl}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="apply-button"
-                                      id={`apply-link-${job.sourceJobId}`}
-                                    >
-                                      Apply
-                                    </a>
-                                  </div>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
+                                </div>
 
-                    {/* Pagination footer */}
-                    <div className="pagination-container">
-                      <span className="page-indicator">
-                        Page {meta.page} of {meta.totalPages}
-                      </span>
+                                <div className="radar-card-title" title={job.title}>
+                                  {job.title}
+                                </div>
+
+                                {/* Live Eligibility Match Indicator */}
+                                {isAuthenticated && candidateProfile && quickMatch && (
+                                  <div
+                                    className={`job-row-match-pill ${quickMatch.overall.badgeTone}`}
+                                    style={{ marginBottom: '10px', width: 'fit-content', cursor: 'pointer' }}
+                                    onClick={() => setEligibilityJob(job)}
+                                    title={`Click for breakdown: ${quickMatch.overall.summary}`}
+                                  >
+                                    <span className="match-pill-dot" />
+                                    <span className="match-pill-text">
+                                      {quickMatch.overall.isHardBlocker
+                                        ? 'Work Authorization Required'
+                                        : `${quickMatch.overall.score}% Match • ${quickMatch.overall.status === 'ELIGIBLE' ? 'Eligible' : 'Partial Fit'}`}
+                                    </span>
+                                  </div>
+                                )}
+
+                                <div className="radar-card-meta">
+                                  <div className="radar-location-row">
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+                                      <circle cx="12" cy="10" r="3" />
+                                    </svg>
+                                    <span>{job.locality ? `${job.locality}, ${job.city || 'India'}` : displayCity}</span>
+                                  </div>
+
+                                  <div className="radar-tags-row">
+                                    <span className={`mode-badge ${getWorkModeBadgeClass(job.workMode)}`}>
+                                      {job.workMode || 'onsite'}
+                                    </span>
+
+                                    {job.techCorridor && (
+                                      <span className="radar-tag corridor">
+                                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                          <polygon points="12 2 2 7 12 12 22 7 12 2" />
+                                          <polyline points="2 17 12 22 22 17" />
+                                          <polyline points="2 12 12 17 22 12" />
+                                        </svg>
+                                        {job.locality || job.techCorridor.replace(/_/g, ' ')}
+                                      </span>
+                                    )}
+
+                                    {job.fresherFriendly && (
+                                      <span className="radar-tag fresher">Freshers (0–1y)</span>
+                                    )}
+
+                                    {job.seniority && !job.fresherFriendly && (
+                                      <span className="radar-tag">{job.seniority}</span>
+                                    )}
+
+                                    {job.roleFamily && job.roleFamily !== 'other' && (
+                                      <span className="radar-tag">{job.roleFamily.replace(/_/g, ' ')}</span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="radar-card-actions">
+                                <button
+                                  type="button"
+                                  className={`radar-btn-secondary ${isAuthenticated && candidateProfile ? (quickMatch?.overall?.badgeTone || '') : ''}`}
+                                  onClick={() => setEligibilityJob(job)}
+                                  title="View eligibility, skills match and requirements"
+                                >
+                                  <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M12 2L14.39 8.26L21 9.27L16.27 13.88L17.82 20.46L12 17.07L6.18 20.46L7.73 13.88L3 9.27L9.61 8.26L12 2Z" />
+                                  </svg>
+                                  <span>{isAuthenticated && candidateProfile && quickMatch ? (quickMatch.overall.isHardBlocker ? 'Auth Blocker' : `${quickMatch.overall.score}% Fit`) : 'Eligibility'}</span>
+                                </button>
+
+                                <a
+                                  href={job.applyUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="radar-btn-apply"
+                                  id={`grid-apply-link-${job.sourceJobId || job._id}`}
+                                >
+                                  <span>Apply Direct</span>
+                                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                    <line x1="7" y1="17" x2="17" y2="7" />
+                                    <polyline points="7 7 17 7 17 17" />
+                                  </svg>
+                                </a>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="table-responsive">
+                        <table className="jobs-table" id="jobs-table">
+                          <thead>
+                            <tr>
+                              <th>Title & Role</th>
+                              <th>Company & ATS</th>
+                              <th>Location & Mode</th>
+                              <th>Status</th>
+                              <th>Last Seen</th>
+                              <th style={{ textAlign: 'right' }}>Action</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {displayedJobs.map((job) => {
+                              const rawLoc = job.locationRaw || job.location || 'Unspecified';
+                              const countryTag = job.country && job.country !== 'India' ? ` (${job.country})` : '';
+                              const displayCity = job.city
+                                ? `${job.city}${job.state ? `, ${job.state}` : ''}${countryTag}`
+                                : (job.workMode === 'remote'
+                                  ? (job.country ? `Remote (${job.country})` : 'Remote / Global')
+                                  : `${rawLoc}${countryTag && !rawLoc.toLowerCase().includes(job.country.toLowerCase()) ? countryTag : ''}`);
+
+                              const quickMatch = (isAuthenticated && candidateProfile) ? getJobMatchQuick(job, candidateProfile) : null;
+
+                              return (
+                                <tr key={job._id || `${job.source}-${job.sourceJobId}`}>
+                                  <td className="job-title-cell">
+                                    <div className="title-text">{job.title}</div>
+
+                                    {/* Live Eligibility Match Indicator when candidate profile is active and user is authenticated */}
+                                    {isAuthenticated && candidateProfile && quickMatch && (
+                                      <div
+                                        className={`job-row-match-pill ${quickMatch.overall.badgeTone}`}
+                                        onClick={() => setEligibilityJob(job)}
+                                        title={`Click to view breakdown: ${quickMatch.overall.summary}`}
+                                      >
+                                        <span className="match-pill-dot" />
+                                        <span className="match-pill-text">
+                                          {quickMatch.overall.isHardBlocker
+                                            ? 'Work Authorization Required'
+                                            : `${quickMatch.overall.score}% Match • ${quickMatch.overall.status === 'ELIGIBLE' ? 'Eligible' : 'Partial Fit'}`}
+                                        </span>
+                                      </div>
+                                    )}
+
+                                    {job.source === 'adzuna' && (
+                                      <div className="adzuna-attribution">
+                                        Provided by <a href="https://www.adzuna.in" target="_blank" rel="noopener noreferrer">Adzuna</a>
+                                      </div>
+                                    )}
+                                  </td>
+                                  <td>
+                                    <div className="company-wrapper">
+                                      <span className="job-company-pill">{job.company}</span>
+                                      <span className={`ats-pill ${getSourceBadgeClass(job.source)}`}>
+                                        {job.source}
+                                      </span>
+                                    </div>
+                                  </td>
+                                  <td>
+                                    <div className="location-wrapper">
+                                      <span
+                                        className="job-location-text"
+                                        title={`Raw ATS Location: ${rawLoc}`}
+                                      >
+                                        {displayCity}
+                                      </span>
+                                      <span className={`mode-badge ${getWorkModeBadgeClass(job.workMode)}`}>
+                                        {job.workMode}
+                                      </span>
+                                    </div>
+                                  </td>
+                                  <td>
+                                    <span className={`status-badge ${job.status}`}>
+                                      <span className="status-dot" />
+                                      {job.status}
+                                    </span>
+                                  </td>
+                                  <td className="job-date-text">
+                                    {formatDate(job.lastSeenAt)}
+                                  </td>
+                                  <td className="job-action-cell" style={{ textAlign: 'right' }}>
+                                    <div className="action-buttons-cluster">
+                                      <button
+                                        type="button"
+                                        className={`btn-job-eligibility ${isAuthenticated && candidateProfile ? (quickMatch?.overall?.badgeTone || 'has-profile-match') : ''}`}
+                                        onClick={() => setEligibilityJob(job)}
+                                        title={isAuthenticated && candidateProfile ? `Check match for ${candidateProfile.name}: ${quickMatch?.overall?.headline || ''}` : "View eligibility and requirements for this role"}
+                                        id={`eligibility-btn-${job.sourceJobId || job._id}`}
+                                      >
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                                          <path d="M12 2L14.39 8.26L21 9.27L16.27 13.88L17.82 20.46L12 17.07L6.18 20.46L7.73 13.88L3 9.27L9.61 8.26L12 2Z" />
+                                        </svg>
+                                        <span>
+                                          {isAuthenticated && candidateProfile
+                                            ? (quickMatch ? (quickMatch.overall.isHardBlocker ? 'Blocker' : `${quickMatch.overall.score}% Fit`) : 'Eligibility')
+                                            : 'Eligibility'}
+                                        </span>
+                                      </button>
+                                      <a
+                                        href={job.applyUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="apply-button"
+                                        id={`apply-link-${job.sourceJobId}`}
+                                      >
+                                        Apply
+                                      </a>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+
+                    {/* Pagination footer - only show for grid/table */}
+                    {viewMode !== 'map' && (
+                      <div className="pagination-container">
+                        <span className="page-indicator">
+                          Page {meta.page} of {meta.totalPages}
+                        </span>
                       <div className="page-controls">
                         <button
                           id="prev-page-btn"
@@ -1341,6 +1805,7 @@ export default function App() {
                         </button>
                       </div>
                     </div>
+                  )}
                   </>
                 )}
               </div>

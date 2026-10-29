@@ -351,7 +351,13 @@ export default function CandidateProfileUploadModal({ isOpen, onClose, onProfile
             {/* Error Message */}
             {error && (
               <div className="candidate-error-banner">
-                <span className="error-icon">⚠️</span>
+                <span className="error-icon">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="12" y1="8" x2="12" y2="12" />
+                    <line x1="12" y1="16" x2="12.01" y2="16" />
+                  </svg>
+                </span>
                 <span>{error}</span>
               </div>
             )}
@@ -432,7 +438,13 @@ export default function CandidateProfileUploadModal({ isOpen, onClose, onProfile
                     Your Portfolio, Personal Site, or GitHub Page
                   </label>
                   <div className="url-field-wrap">
-                    <span className="url-field-icon">🌐</span>
+                    <span className="url-field-icon">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <circle cx="12" cy="12" r="10" />
+                        <line x1="2" y1="12" x2="22" y2="12" />
+                        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                      </svg>
+                    </span>
                     <input
                       id="portfolio-url-input"
                       type="url"
@@ -483,14 +495,14 @@ export default function CandidateProfileUploadModal({ isOpen, onClose, onProfile
                   className="btn-demo-pill"
                   onClick={() => handleLoadDemo('fresher')}
                 >
-                  🎓 Try Demo Fresher (0-1 Yrs, India)
+                  Demo Fresher (0-1 Yrs, India)
                 </button>
                 <button
                   type="button"
                   className="btn-demo-pill"
                   onClick={() => handleLoadDemo('mid')}
                 >
-                  💼 Try Demo 4-Yr Full Stack (India)
+                  Demo 4-Yr Engineer (India)
                 </button>
               </div>
             </div>

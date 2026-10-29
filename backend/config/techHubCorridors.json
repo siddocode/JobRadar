@@ -1,0 +1,258 @@
+{
+  "cities": {
+    "Bengaluru": {
+      "state": "Karnataka",
+      "country": "India",
+      "center": { "lat": 12.9716, "lng": 77.5946 },
+      "corridors": {
+        "orr_bellandur": {
+          "name": "Outer Ring Road & Bellandur",
+          "shortName": "ORR / Bellandur",
+          "center": { "lat": 12.9304, "lng": 77.6850 },
+          "aliases": ["outer ring road", "orr", "bellandur", "kadubeesanahalli", "cessna", "ecoworld", "rmz ecoworld", "devarabeesanahalli", "sarjapur outer ring", "sarjapur marathalli", "marathahalli orr", "prestige tech park", "embassy tech village", "etv"]
+        },
+        "whitefield": {
+          "name": "Whitefield & ITPL Corridor",
+          "shortName": "Whitefield / ITPL",
+          "center": { "lat": 12.9856, "lng": 77.7489 },
+          "aliases": ["whitefield", "itpb", "itpl", "epip", "epip zone", "hoodi", "kadugodi", "pattanduru", "international tech park", "brigade metropolis", "sumadhura", "kundalahalli"]
+        },
+        "manyata": {
+          "name": "Manyata Tech Park & Hebbal",
+          "shortName": "Manyata / Hebbal",
+          "center": { "lat": 13.0497, "lng": 77.6211 },
+          "aliases": ["manyata", "manyata embassy", "manyata tech park", "hebbal", "nagavara", "nagawara", "thanisandra", "jakkur", "karle"]
+        },
+        "electronic_city": {
+          "name": "Electronic City Phases 1 & 2",
+          "shortName": "Electronic City",
+          "center": { "lat": 12.8457, "lng": 77.6679 },
+          "aliases": ["electronic city", "electronic city phase 1", "electronic city phase 2", "electronic city phase i", "electronic city phase ii", "e-city", "cyber park electronic city", "bommasandra", "hosur road"]
+        },
+        "koramangala_hsr": {
+          "name": "Koramangala & HSR Layout",
+          "shortName": "Koramangala / HSR",
+          "center": { "lat": 12.9165, "lng": 77.6350 },
+          "aliases": ["koramangala", "hsr", "hsr layout", "btm", "btm layout", "adugodi", "madiwala", "ejipura", "sector 1 hsr", "sector 2 hsr", "sector 3 hsr", "sector 4 hsr", "sector 5 hsr", "sector 6 hsr", "sector 7 hsr"]
+        },
+        "central_cbd": {
+          "name": "Central CBD & Old Airport Road",
+          "shortName": "Central / CBD",
+          "center": { "lat": 12.9730, "lng": 77.6100 },
+          "aliases": ["mg road", "ub city", "vittal mallya", "richmond road", "residency road", "indiranagar", "c v raman nagar", "bagmane", "bagmane tech park", "old airport road", "hal", "kodihalli", "ulsoor", "ashok nagar", "cubbon park"]
+        }
+      }
+    },
+    "Hyderabad": {
+      "state": "Telangana",
+      "country": "India",
+      "center": { "lat": 17.3850, "lng": 78.4867 },
+      "corridors": {
+        "hitec_city": {
+          "name": "HITEC City & Mindspace",
+          "shortName": "HITEC City",
+          "center": { "lat": 17.4474, "lng": 78.3762 },
+          "aliases": ["hitec city", "hitech city", "cyber towers", "mindspace", "mindspace it park", "cyber gateway", "madhapur", "vittal rao nagar", "inorbit mall road", "deloitte", "oracle", "salesforce", "qualcomm", "knowledge city", "raidurg", "salarpuria", "t-hub", "servicenow"]
+        },
+        "financial_district": {
+          "name": "Financial District & Nanakramguda",
+          "shortName": "Financial District",
+          "center": { "lat": 17.4140, "lng": 78.3430 },
+          "aliases": ["financial district", "nanakramguda", "waverock", "kokapet", "gopanpally", "narsingi", "sas itower", "amazon"]
+        },
+        "gachibowli": {
+          "name": "Gachibowli & Wipro Circle",
+          "shortName": "Gachibowli",
+          "center": { "lat": 17.4401, "lng": 78.3489 },
+          "aliases": ["gachibowli", "wipro circle", "q city", "dlf cybercity hyderabad", "radhika tech park", "isb road", "gachibowli stadium", "microsoft", "infosys", "wipro"]
+        },
+        "kondapur": {
+          "name": "Kondapur & Hafeezpet",
+          "shortName": "Kondapur / Miyapur",
+          "center": { "lat": 17.4699, "lng": 78.3578 },
+          "aliases": ["kondapur", "kothaguda", "hafeezpet", "miyapur", "chandanagar", "kukatpally", "google"]
+        },
+        "central_hyd": {
+          "name": "Central Hyderabad & Begumpet",
+          "shortName": "Begumpet / Central",
+          "center": { "lat": 17.4448, "lng": 78.4664 },
+          "aliases": ["begumpet", "banjara hills", "jubilee hills", "somajiguda", "punjagutta", "ameerpet", "himayatnagar"]
+        }
+      }
+    },
+    "Gurugram": {
+      "state": "Haryana",
+      "country": "India",
+      "center": { "lat": 28.4595, "lng": 77.0266 },
+      "corridors": {
+        "cyber_city": {
+          "name": "DLF Cyber City & Cyber Hub",
+          "shortName": "DLF Cyber City",
+          "center": { "lat": 28.4952, "lng": 77.0891 },
+          "aliases": ["cyber city", "dlf cyber city", "dlf cybercity", "cyberhub", "dlf phase 2", "dlf phase 3", "building 10", "building 9", "building 14", "building 8", "gateway tower", "infinity towers", "silokhera", "microsoft", "makemytrip", "amazon"]
+        },
+        "golf_course_rd": {
+          "name": "Golf Course Road & Extension",
+          "shortName": "Golf Course Rd",
+          "center": { "lat": 28.4580, "lng": 77.1020 },
+          "aliases": ["golf course road", "golf course ext", "golf course extension", "one horizon center", "two horizon center", "sector 42", "sector 43", "sector 53", "sector 54", "sector 56", "sector 57", "sector 58", "sector 59", "paras downtown", "zomato", "blinkit", "dell"]
+        },
+        "udyog_vihar": {
+          "name": "Udyog Vihar Phases 1-5",
+          "shortName": "Udyog Vihar",
+          "center": { "lat": 28.5020, "lng": 77.0820 },
+          "aliases": ["udyog vihar", "udyog vihar phase 1", "udyog vihar phase 2", "udyog vihar phase 3", "udyog vihar phase 4", "udyog vihar phase 5", "maruti industrial area", "sector 18 gurgaon", "sector 18 gurugram", "nagarro", "snapdeal", "airtel"]
+        },
+        "sohna_rd": {
+          "name": "Sohna Road & Sector 48-50",
+          "shortName": "Sohna Road",
+          "center": { "lat": 28.4180, "lng": 77.0450 },
+          "aliases": ["sohna road", "sohna rd", "vatika business park", "spaze itech park", "sector 48", "sector 49", "sector 50", "subhash chowk", "islampur"]
+        },
+        "central_gurgaon": {
+          "name": "Sector 32 & 44 Institutional Area",
+          "shortName": "Sec 32 & 44",
+          "center": { "lat": 28.4520, "lng": 77.0620 },
+          "aliases": ["sector 32", "sector 44", "sector 29", "signature tower", "iffco chowk", "huda city centre", "millennium city centre", "unitech cyber park", "google", "policybazaar"]
+        }
+      }
+    },
+    "Pune": {
+      "state": "Maharashtra",
+      "country": "India",
+      "center": { "lat": 18.5204, "lng": 73.8567 },
+      "corridors": {
+        "hinjawadi": {
+          "name": "Hinjawadi Rajiv Gandhi IT Park",
+          "shortName": "Hinjawadi IT Park",
+          "center": { "lat": 18.5912, "lng": 73.7380 },
+          "aliases": ["hinjawadi", "hinjewadi", "hinjawadi phase 1", "hinjawadi phase 2", "hinjawadi phase 3", "rajiv gandhi infotech park", "blue ridge", "quadron", "embassy techzone pune", "maan", "infosys", "wipro", "cognizant", "tcs", "tech mahindra", "persistent"]
+        },
+        "kharadi_eon": {
+          "name": "Kharadi & EON Free Zone",
+          "shortName": "Kharadi / EON",
+          "center": { "lat": 18.5529, "lng": 73.9515 },
+          "aliases": ["kharadi", "eon free zone", "eon it park", "world trade centre pune", "wtc pune", "gera commerzone", "panchshil it park", "barclays", "credit suisse", "ubs", "mastercard"]
+        },
+        "magarpatta": {
+          "name": "Magarpatta City & Hadapsar",
+          "shortName": "Magarpatta City",
+          "center": { "lat": 18.5158, "lng": 73.9272 },
+          "aliases": ["magarpatta", "magarpatta city", "cybercity magarpatta", "hadapsar", "amanora", "sp infocity", "amdocs"]
+        },
+        "baner_balewadi": {
+          "name": "Baner & Balewadi Tech Corridor",
+          "shortName": "Baner / Balewadi",
+          "center": { "lat": 18.5642, "lng": 73.7769 },
+          "aliases": ["baner", "balewadi", "baner road", "pashan", "sus", "mahalunge", "pan card club road", "pubmatic", "druva", "firstcry", "quick heal", "elasticrun"]
+        },
+        "viman_nagar": {
+          "name": "Viman Nagar & Yerwada",
+          "shortName": "Viman Nagar / Yerwada",
+          "center": { "lat": 18.5679, "lng": 73.9143 },
+          "aliases": ["viman nagar", "yerwada", "yerawada", "commerzone yerwada", "kalyani nagar", "nagar road", "shastri nagar", "cybage"]
+        }
+      }
+    },
+    "Noida": {
+      "state": "Uttar Pradesh",
+      "country": "India",
+      "center": { "lat": 28.5355, "lng": 77.3910 },
+      "corridors": {
+        "sec_62_63": {
+          "name": "Sector 62 & 63 IT Cluster",
+          "shortName": "Sector 62 / 63",
+          "center": { "lat": 28.6280, "lng": 77.3649 },
+          "aliases": ["sector 62", "sector 63", "sector 58", "sector 59", "sector 60", "sec 62", "sec 63", "sec 58", "sec 59", "sec 60", "stellar it park", "ithum", "logix cyber park", "c-core", "d-block sector 62", "candor techspace sector 62", "galaxy business park", "samsung", "tech mahindra", "pine labs", "innovaccer", "physicswallah", "pw", "cvent", "birlasoft", "barclays", "speechify"]
+        },
+        "expressway": {
+          "name": "Noida Expressway (Sec 125-144)",
+          "shortName": "Expressway Corridor",
+          "center": { "lat": 28.5080, "lng": 77.3820 },
+          "aliases": ["noida expressway", "expressway", "sector 125", "sector 126", "sector 127", "sector 128", "sector 132", "sector 135", "sector 136", "sector 137", "sector 142", "sector 144", "sector 145", "sec 125", "sec 126", "sec 127", "sec 128", "sec 132", "sec 135", "sec 136", "sec 137", "sec 142", "sec 144", "oxygen business park", "advant navis", "advant", "candor techspace sector 135", "candor techspace noida", "amity road", "adobe", "hcl", "info edge", "naukri", "level ai", "bitwarden", "sumo logic", "shyftlabs", "moglix", "classplus", "geeksforgeeks", "indiamart"]
+        },
+        "sec_16_18": {
+          "name": "Sector 16 & Film City",
+          "shortName": "Sector 16 / Film City",
+          "center": { "lat": 28.5700, "lng": 77.3150 },
+          "aliases": ["sector 16", "sector 16a", "sector 18", "sector 15", "sector 2", "sector 3", "sector 4", "sector 5", "sec 16", "sec 16a", "sec 18", "sec 15", "sec 2", "sec 3", "sec 4", "sec 5", "film city", "dnd flyway", "world trade tower", "wtt noida", "paytm", "one97", "times internet", "timesinternet"]
+        },
+        "greater_noida": {
+          "name": "Greater Noida Knowledge Park",
+          "shortName": "Greater Noida",
+          "center": { "lat": 28.4744, "lng": 77.5040 },
+          "aliases": ["greater noida", "knowledge park", "knowledge park 2", "knowledge park 3", "knowledge park iii", "pari chowk", "surajpur", "techzone", "ecotech"]
+        }
+      }
+    },
+    "New Delhi": {
+      "state": "Delhi",
+      "country": "India",
+      "center": { "lat": 28.6139, "lng": 77.2090 },
+      "corridors": {
+        "aerocity": {
+          "name": "Aerocity Worldmark & Hospitality Hub",
+          "shortName": "Aerocity Worldmark",
+          "center": { "lat": 28.5505, "lng": 77.1215 },
+          "aliases": ["aerocity", "worldmark", "worldmark 1", "worldmark 2", "worldmark 3", "delhi aerocity", "igi airport road"]
+        },
+        "okhla": {
+          "name": "Okhla Industrial Area Phases 1-3",
+          "shortName": "Okhla Phases 1-3",
+          "center": { "lat": 28.5280, "lng": 77.2750 },
+          "aliases": ["okhla", "okhla phase 1", "okhla phase 2", "okhla phase 3", "okhla industrial area", "nsic okhla", "tehkhand"]
+        },
+        "connaught_place": {
+          "name": "Connaught Place & Barakhamba CBD",
+          "shortName": "Central CBD / CP",
+          "center": { "lat": 28.6315, "lng": 77.2167 },
+          "aliases": ["connaught place", "barakhamba", "barakhamba road", "kasturba gandhi", "kg marg", "janpath", "statesman house", "tolstoy marg"]
+        }
+      }
+    },
+    "Mumbai": {
+      "state": "Maharashtra",
+      "country": "India",
+      "center": { "lat": 19.0760, "lng": 72.8777 },
+      "corridors": {
+        "bkc": {
+          "name": "Bandra Kurla Complex (BKC)",
+          "shortName": "BKC",
+          "center": { "lat": 19.0660, "lng": 72.8680 },
+          "aliases": ["bkc", "bandra kurla complex", "bandra east", "maker maxity", "g block bkc", "the capital bkc"]
+        },
+        "powai_andheri": {
+          "name": "Powai & Andheri East Hub",
+          "shortName": "Powai / Andheri",
+          "center": { "lat": 19.1170, "lng": 72.9050 },
+          "aliases": ["powai", "hiranandani powai", "andheri", "andheri east", "seepz", "midc andheri", "marol", "solitaire corporate park"]
+        },
+        "navi_mumbai": {
+          "name": "Navi Mumbai & Airoli Mindspace",
+          "shortName": "Airoli / Navi Mumbai",
+          "center": { "lat": 19.1550, "lng": 72.9980 },
+          "aliases": ["airoli", "mindspace airoli", "mahape", "millennium business park", "mbp", "vashi", "belapur", "taloja", "turbhe", "thane west"]
+        }
+      }
+    },
+    "Chennai": {
+      "state": "Tamil Nadu",
+      "country": "India",
+      "center": { "lat": 13.0827, "lng": 80.2707 },
+      "corridors": {
+        "omr": {
+          "name": "Old Mahabalipuram Road (OMR IT Expressway)",
+          "shortName": "OMR IT Corridor",
+          "center": { "lat": 12.9150, "lng": 80.2280 },
+          "aliases": ["omr", "old mahabalipuram road", "taramani", "sholinganallur", "siruseri", "sipcot siruseri", "perungudi", "kandanchavadi", "tidel park", "ascendas it park chennai", "elcot sez"]
+        },
+        "guindy_porur": {
+          "name": "Guindy & DLF Cybercity Porur",
+          "shortName": "Guindy / Porur",
+          "center": { "lat": 13.0080, "lng": 80.2050 },
+          "aliases": ["guindy", "olympia tech park", "porur", "dlf porur", "dlf cybercity chennai", "ekkatuthangal", "manapakkam", "mount poonamallee"]
+        }
+      }
+    }
+  }
+}

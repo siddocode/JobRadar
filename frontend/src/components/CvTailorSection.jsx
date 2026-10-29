@@ -3,7 +3,7 @@ import { downloadResumePdf, downloadResumeText, copyResumeToClipboard } from '..
 
 export default function CvTailorSection({ job, candidateProfile, token, onProfileUpdated }) {
   const [selectedFile, setSelectedFile] = useState(null);
-  const [sourceType, setSourceType] = useState('portfolio'); // 'portfolio' | 'pdf'
+  const [sourceType, setSourceType] = useState(() => (candidateProfile ? 'profile' : 'pdf'));
   const [portfolioUrl, setPortfolioUrl] = useState(() => {
     return candidateProfile?.portfolio || (candidateProfile?.sourceType === 'url' ? candidateProfile?.sourceName : '') || '';
   });
@@ -82,6 +82,15 @@ export default function CvTailorSection({ job, candidateProfile, token, onProfil
           headers,
           body: formData
         });
+      } else if (sourceType === 'profile') {
+        headers['Content-Type'] = 'application/json';
+        res = await fetch(`/api/jobs/${jobId}/tailor-cv`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            candidateProfile: candidateProfile || undefined
+          })
+        });
       } else if (sourceType === 'portfolio') {
         const cleanUrl = portfolioUrl ? portfolioUrl.trim() : '';
         if (!cleanUrl && !candidateProfile) {
@@ -97,7 +106,7 @@ export default function CvTailorSection({ job, candidateProfile, token, onProfil
           })
         });
       } else {
-        throw new Error('Please enter your portfolio website URL or upload a PDF CV.');
+        throw new Error('Please select a CV source to tailor.');
       }
 
       const data = await res.json();
@@ -194,6 +203,42 @@ export default function CvTailorSection({ job, candidateProfile, token, onProfil
     }));
   };
 
+  const handleCertificationChange = (idx, val) => {
+    setEditableResume(prev => {
+      const copy = JSON.parse(JSON.stringify(prev));
+      if (!copy.certifications) copy.certifications = [];
+      copy.certifications[idx] = val;
+      return copy;
+    });
+  };
+
+  const handleAchievementChange = (idx, val) => {
+    setEditableResume(prev => {
+      const copy = JSON.parse(JSON.stringify(prev));
+      if (!copy.achievements) copy.achievements = [];
+      copy.achievements[idx] = val;
+      return copy;
+    });
+  };
+
+  const handlePublicationChange = (idx, val) => {
+    setEditableResume(prev => {
+      const copy = JSON.parse(JSON.stringify(prev));
+      if (!copy.publications) copy.publications = [];
+      copy.publications[idx] = val;
+      return copy;
+    });
+  };
+
+  const handleLeadershipChange = (idx, val) => {
+    setEditableResume(prev => {
+      const copy = JSON.parse(JSON.stringify(prev));
+      if (!copy.leadership) copy.leadership = [];
+      copy.leadership[idx] = val;
+      return copy;
+    });
+  };
+
   // Helper to highlight injected keywords in document view
   const renderHighlightedText = (text) => {
     if (!text || !tailoredData?.stats?.keywordsIntegrated?.length) return text;
@@ -244,7 +289,14 @@ export default function CvTailorSection({ job, candidateProfile, token, onProfil
       {/* 1. Header Banner */}
       <div className="cv-tailor-banner">
         <div className="tailor-banner-left">
-          <div className="tailor-magic-icon">✨</div>
+          <div className="tailor-magic-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+              <line x1="16" y1="13" x2="8" y2="13" />
+              <line x1="16" y1="17" x2="8" y2="17" />
+            </svg>
+          </div>
           <div>
             <h3 className="tailor-title">ATS Resume Tailor (Jake's LaTeX Format)</h3>
             <p className="tailor-subtitle">
@@ -266,6 +318,46 @@ export default function CvTailorSection({ job, candidateProfile, token, onProfil
           </div>
 
           <div className="setup-source-options">
+            {candidateProfile && (
+              <label className={`source-option-box ${sourceType === 'profile' ? 'selected' : ''}`}>
+                <div className="option-top-row">
+                  <input
+                    type="radio"
+                    name="cvSource"
+                    checked={sourceType === 'profile'}
+                    onChange={() => {
+                      setSourceType('profile');
+                      setSelectedFile(null);
+                      setError(null);
+                    }}
+                  />
+                  <div className="option-title">
+                    <span className="opt-icon">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                        <circle cx="12" cy="7" r="4" />
+                      </svg>
+                    </span>
+                    <strong>Active Candidate Profile ({candidateProfile.name || 'Siddharth'})</strong>
+                  </div>
+                </div>
+                <p className="option-detail">
+                  Tailor using your stored credentials: <strong>{candidateProfile.headline || 'Software Engineer'}</strong>
+                  {candidateProfile.city ? ` • ${candidateProfile.city}` : ''}
+                  {candidateProfile.experienceDisplay ? ` • ${candidateProfile.experienceDisplay}` : ''}
+                </p>
+                {candidateProfile.skills?.length > 0 && (
+                  <div className="tailor-profile-skills-preview">
+                    {candidateProfile.skills.slice(0, 5).map((sk, idx) => (
+                      <span key={`sk-prev-${idx}`} className="setup-skill-tag">{sk}</span>
+                    ))}
+                    {candidateProfile.skills.length > 5 && (
+                      <span className="setup-skill-more">+{candidateProfile.skills.length - 5} more</span>
+                    )}
+                  </div>
+                )}
+              </label>
+            )}
             <label className={`source-option-box ${sourceType === 'portfolio' ? 'selected' : ''}`}>
               <div className="option-top-row">
                 <input
@@ -279,7 +371,13 @@ export default function CvTailorSection({ job, candidateProfile, token, onProfil
                   }}
                 />
                 <div className="option-title">
-                  <span className="opt-icon">🌐</span>
+                  <span className="opt-icon">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="2" y1="12" x2="22" y2="12" />
+                      <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                    </svg>
+                  </span>
                   <strong>Portfolio Website / Profile URL</strong>
                 </div>
               </div>
@@ -290,7 +388,12 @@ export default function CvTailorSection({ job, candidateProfile, token, onProfil
               {sourceType === 'portfolio' && (
                 <div className="tailor-url-input-wrap" onClick={(e) => e.stopPropagation()}>
                   <div className="tailor-url-box">
-                    <span className="url-prefix-icon">🔗</span>
+                    <span className="url-prefix-icon">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                      </svg>
+                    </span>
                     <input
                       type="url"
                       className="tailor-url-input"
@@ -344,7 +447,12 @@ export default function CvTailorSection({ job, candidateProfile, token, onProfil
                   }}
                 />
                 <div className="option-title">
-                  <span className="opt-icon">📄</span>
+                  <span className="opt-icon">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                      <polyline points="14 2 14 8 20 8" />
+                    </svg>
+                  </span>
                   <strong>Upload a PDF CV / Resume (.pdf)</strong>
                 </div>
               </div>
@@ -370,7 +478,12 @@ export default function CvTailorSection({ job, candidateProfile, token, onProfil
               />
               {selectedFile ? (
                 <div className="dropzone-file-info">
-                  <span className="file-icon">📑</span>
+                  <span className="file-icon">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                      <polyline points="14 2 14 8 20 8" />
+                    </svg>
+                  </span>
                   <div className="file-meta">
                     <strong>{selectedFile.name}</strong>
                     <span>{(selectedFile.size / 1024).toFixed(1)} KB • Click to choose a different PDF</span>
@@ -378,7 +491,13 @@ export default function CvTailorSection({ job, candidateProfile, token, onProfil
                 </div>
               ) : (
                 <div className="dropzone-prompt">
-                  <span className="upload-arrow">📁</span>
+                  <span className="upload-arrow">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                      <polyline points="17 8 12 3 7 8" />
+                      <line x1="12" y1="3" x2="12" y2="15" />
+                    </svg>
+                  </span>
                   <p className="prompt-text">
                     <strong>Click to upload</strong> or drag &amp; drop your CV PDF here
                   </p>
@@ -390,7 +509,11 @@ export default function CvTailorSection({ job, candidateProfile, token, onProfil
 
           {error && (
             <div className="tailor-error-alert">
-              <span>⚠️</span>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="8" x2="12" y2="12" />
+                <line x1="12" y1="16" x2="12.01" y2="16" />
+              </svg>
               <span>{error}</span>
             </div>
           )}
@@ -415,7 +538,10 @@ export default function CvTailorSection({ job, candidateProfile, token, onProfil
                 </>
               ) : (
                 <>
-                  <span>✨</span>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                  </svg>
                   <span>Tailor My CV for {job.company}</span>
                 </>
               )}
@@ -463,14 +589,14 @@ export default function CvTailorSection({ job, candidateProfile, token, onProfil
                 className={`btn-mode-toggle ${!isEditing ? 'active' : ''}`}
                 onClick={() => setIsEditing(false)}
               >
-                📄 ATS Document View
+                ATS Document View
               </button>
               <button
                 type="button"
                 className={`btn-mode-toggle ${isEditing ? 'active' : ''}`}
                 onClick={() => setIsEditing(true)}
               >
-                ✏️ Edit Content
+                Edit Content
               </button>
 
               <label className="toggle-summary-label">
@@ -504,7 +630,7 @@ export default function CvTailorSection({ job, candidateProfile, token, onProfil
                 onClick={handleDownloadText}
                 title="Download as Plain Text / Markdown"
               >
-                <span>📝 Text</span>
+                <span>Text</span>
               </button>
 
               <button
@@ -513,7 +639,7 @@ export default function CvTailorSection({ job, candidateProfile, token, onProfil
                 onClick={handleCopy}
                 title="Copy all text to clipboard"
               >
-                <span>{copied ? '✓ Copied' : '📋 Copy'}</span>
+                <span>{copied ? '✓ Copied' : 'Copy'}</span>
               </button>
 
               <button
@@ -525,7 +651,7 @@ export default function CvTailorSection({ job, candidateProfile, token, onProfil
                 }}
                 title="Retailor or choose another source"
               >
-                <span>🔄 Reset</span>
+                <span>Reset</span>
               </button>
             </div>
           </div>
@@ -866,11 +992,113 @@ export default function CvTailorSection({ job, candidateProfile, token, onProfil
                 </div>
               </section>
             )}
+
+            {/* 5. Certifications */}
+            {editableResume.certifications?.length > 0 && (
+              <section className="jake-section">
+                <h2 className="jake-section-title">Certifications</h2>
+                <div className="jake-divider" />
+                <ul className="jake-bullets-list">
+                  {editableResume.certifications.map((cert, cIdx) => (
+                    <li key={`cert-${cIdx}`}>
+                      {isEditing ? (
+                        <input
+                          type="text"
+                          className="edit-bullet-input"
+                          value={cert}
+                          onChange={(e) => handleCertificationChange(cIdx, e.target.value)}
+                        />
+                      ) : (
+                        <span>{renderHighlightedText(cert)}</span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+
+            {/* 6. Honors & Achievements */}
+            {editableResume.achievements?.length > 0 && (
+              <section className="jake-section">
+                <h2 className="jake-section-title">Honors &amp; Achievements</h2>
+                <div className="jake-divider" />
+                <ul className="jake-bullets-list">
+                  {editableResume.achievements.map((ach, aIdx) => (
+                    <li key={`ach-${aIdx}`}>
+                      {isEditing ? (
+                        <input
+                          type="text"
+                          className="edit-bullet-input"
+                          value={ach}
+                          onChange={(e) => handleAchievementChange(aIdx, e.target.value)}
+                        />
+                      ) : (
+                        <span>{renderHighlightedText(ach)}</span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+
+            {/* 7. Publications & Research */}
+            {editableResume.publications?.length > 0 && (
+              <section className="jake-section">
+                <h2 className="jake-section-title">Publications &amp; Research</h2>
+                <div className="jake-divider" />
+                <ul className="jake-bullets-list">
+                  {editableResume.publications.map((pub, pIdx) => (
+                    <li key={`pub-${pIdx}`}>
+                      {isEditing ? (
+                        <input
+                          type="text"
+                          className="edit-bullet-input"
+                          value={pub}
+                          onChange={(e) => handlePublicationChange(pIdx, e.target.value)}
+                        />
+                      ) : (
+                        <span>{renderHighlightedText(pub)}</span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+
+            {/* 8. Leadership & Extracurricular */}
+            {editableResume.leadership?.length > 0 && (
+              <section className="jake-section">
+                <h2 className="jake-section-title">Leadership &amp; Extracurricular</h2>
+                <div className="jake-divider" />
+                <ul className="jake-bullets-list">
+                  {editableResume.leadership.map((lead, lIdx) => (
+                    <li key={`lead-${lIdx}`}>
+                      {isEditing ? (
+                        <input
+                          type="text"
+                          className="edit-bullet-input"
+                          value={lead}
+                          onChange={(e) => handleLeadershipChange(lIdx, e.target.value)}
+                        />
+                      ) : (
+                        <span>{renderHighlightedText(lead)}</span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
           </div>
 
           {/* Recruiter / ATS Tip */}
           <div className="tailor-tips-banner">
-            <span className="tips-icon">💡</span>
+            <span className="tips-icon">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="16" x2="12" y2="12" />
+                <line x1="12" y1="8" x2="12.01" y2="8" />
+              </svg>
+            </span>
             <div className="tips-content">
               <strong>Recruiter Insight:</strong> This CV uses the Jake's LaTeX Resume template, which achieves a 100% parse score across Workday, Greenhouse, Lever, and Taleo. Download the PDF and submit it directly to {job.company}.
             </div>

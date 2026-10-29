@@ -21,7 +21,15 @@ export function downloadResumePdf(tailoredResume, filename) {
   const contentWidth = pageWidth - (margin * 2); // 554.4 pt
   let y = 36;
 
-  const { name, contact, summary, includeSummary, experience, projects, education, skills } = tailoredResume;
+  const { name, contact, summary, includeSummary, experience, projects, education, skills, certifications, achievements, publications, leadership } = tailoredResume;
+
+  // PAGE BREAK HELPER
+  function checkPageBreak(neededHeight = 20) {
+    if (y + neededHeight > pageHeight - margin - 15) {
+      doc.addPage();
+      y = margin + 15;
+    }
+  }
 
   // 1. NAME (Centered, Times Bold, 20pt)
   const hasName = Boolean(name && name.trim());
@@ -63,11 +71,12 @@ export function downloadResumePdf(tailoredResume, filename) {
   // SECTION DIVIDER HELPER
   let isFirstSection = true;
   function drawSection(title) {
+    checkPageBreak(35);
     if (isFirstSection) {
       y += (hasName || contactList.length > 0 ? 12 : 0);
       isFirstSection = false;
     } else {
-      y += (includeSummary ? 18 : 22); // LaTeX spacing before section title
+      y += (includeSummary ? 16 : 20); // LaTeX spacing before section title
     }
     doc.setFont('times', 'bold');
     doc.setFontSize(11.5);
@@ -91,6 +100,7 @@ export function downloadResumePdf(tailoredResume, filename) {
     doc.setFontSize(9.5);
     doc.setTextColor(30, 30, 30);
     const sumLines = doc.splitTextToSize(summary, contentWidth);
+    checkPageBreak(sumLines.length * 13 + 5);
     doc.text(sumLines, margin, y);
     y += (sumLines.length * 13) + 4;
   }
@@ -100,12 +110,13 @@ export function downloadResumePdf(tailoredResume, filename) {
     drawSection('Experience');
     for (let i = 0; i < experience.length; i++) {
       const exp = experience[i];
-      if (i > 0) y += 12;
+      if (i > 0) y += 10;
 
+      checkPageBreak(25);
       doc.setFont('times', 'bold');
       doc.setFontSize(10);
       doc.setTextColor(0, 0, 0);
-      const roleStr = exp.role || 'Intern';
+      const roleStr = exp.role || 'Role';
       doc.text(roleStr, margin, y);
       const roleWidth = doc.getTextWidth(roleStr);
 
@@ -121,12 +132,14 @@ export function downloadResumePdf(tailoredResume, filename) {
 
       if (exp.bullets && exp.bullets.length > 0) {
         for (const b of exp.bullets) {
+          const lines = doc.splitTextToSize(b, contentWidth - 18);
+          const needed = (lines.length * 13.2) + 2;
+          checkPageBreak(needed);
           doc.setFont('times', 'normal');
           doc.setFontSize(9.5);
           doc.text('•', margin + 6, y);
-          const lines = doc.splitTextToSize(b, contentWidth - 18);
           doc.text(lines, margin + 16, y);
-          y += (lines.length * 13.2) + 1.2;
+          y += needed;
         }
       }
     }
@@ -137,13 +150,13 @@ export function downloadResumePdf(tailoredResume, filename) {
     drawSection('Projects');
     for (let i = 0; i < projects.length; i++) {
       const p = projects[i];
-      if (i > 0) y += 14; // Breathing room between projects
+      if (i > 0) y += 12; // Breathing room between projects
 
+      checkPageBreak(25);
       doc.setFont('times', 'bold');
       doc.setFontSize(10);
       doc.setTextColor(0, 0, 0);
       doc.text(p.name, margin, y);
-      // Measure name width while font is still bold
       const nameWidth = doc.getTextWidth(p.name);
 
       if (p.tagline) {
@@ -154,25 +167,29 @@ export function downloadResumePdf(tailoredResume, filename) {
 
       if (p.bullets && p.bullets.length > 0) {
         for (const pb of p.bullets) {
+          const lines = doc.splitTextToSize(pb, contentWidth - 18);
+          const needed = (lines.length * 13.2) + 2;
+          checkPageBreak(needed);
           doc.setFont('times', 'normal');
           doc.setFontSize(9.5);
           doc.text('•', margin + 6, y);
-          const lines = doc.splitTextToSize(pb, contentWidth - 18);
           doc.text(lines, margin + 16, y);
-          y += (lines.length * 13.2) + 1.2;
+          y += needed;
         }
       }
 
       if (p.techStack) {
+        const prefix = '• Tech Stack: ';
         doc.setFont('times', 'bold');
         doc.setFontSize(9.5);
-        const prefix = '• Tech Stack: ';
-        doc.text(prefix, margin + 6, y);
         const pw = doc.getTextWidth(prefix);
-        doc.setFont('times', 'normal');
         const tLines = doc.splitTextToSize(p.techStack, contentWidth - 18 - pw);
+        const needed = (tLines.length * 13.2) + 2;
+        checkPageBreak(needed);
+        doc.text(prefix, margin + 6, y);
+        doc.setFont('times', 'normal');
         doc.text(tLines, margin + 6 + pw, y);
-        y += (tLines.length * 13.2) + 1.5;
+        y += needed;
       }
     }
   }
@@ -182,8 +199,9 @@ export function downloadResumePdf(tailoredResume, filename) {
     drawSection('Education');
     for (let i = 0; i < education.length; i++) {
       const edu = education[i];
-      if (i > 0) y += 12; // Gap between education institutions
+      if (i > 0) y += 10;
 
+      checkPageBreak(25);
       doc.setFont('times', 'bold');
       doc.setFontSize(10);
       doc.setTextColor(0, 0, 0);
@@ -203,17 +221,20 @@ export function downloadResumePdf(tailoredResume, filename) {
       y += 13.5;
 
       if (edu.details) {
+        const lines = doc.splitTextToSize(edu.details, contentWidth - 18);
+        const needed = (lines.length * 12.5) + 2;
+        checkPageBreak(needed);
         doc.setFont('times', 'normal');
         doc.setFontSize(9.5);
-        doc.text('• ' + edu.details, margin + 6, y);
-        y += 12.5;
+        doc.text('•', margin + 6, y);
+        doc.text(lines, margin + 16, y);
+        y += needed;
       }
     }
   }
 
   // 6. SKILLS SECTION
   if (skills) {
-    drawSection('Skills');
     const skillRows = [
       { label: 'Languages', items: skills.languages },
       { label: 'Frameworks & Libraries', items: skills.frameworks },
@@ -221,20 +242,86 @@ export function downloadResumePdf(tailoredResume, filename) {
       { label: 'Tools & Platforms', items: skills.tools }
     ].filter(r => r.items && r.items.length > 0);
 
-    for (let i = 0; i < skillRows.length; i++) {
-      const sr = skillRows[i];
-      doc.setFont('times', 'bold');
-      doc.setFontSize(9.5);
-      doc.setTextColor(0, 0, 0);
-      const prefix = sr.label + ': ';
-      doc.text(prefix, margin, y);
-      const pw = doc.getTextWidth(prefix);
+    if (skillRows.length > 0) {
+      drawSection('Skills');
+      for (let i = 0; i < skillRows.length; i++) {
+        const sr = skillRows[i];
+        const prefix = sr.label + ': ';
+        doc.setFont('times', 'bold');
+        doc.setFontSize(9.5);
+        doc.setTextColor(0, 0, 0);
+        const pw = doc.getTextWidth(prefix);
 
+        const valStr = sr.items.join(', ');
+        const sLines = doc.splitTextToSize(valStr, contentWidth - pw);
+        const needed = (sLines.length * 13.5) + 3;
+        checkPageBreak(needed);
+
+        doc.text(prefix, margin, y);
+        doc.setFont('times', 'normal');
+        doc.text(sLines, margin + pw, y);
+        y += needed;
+      }
+    }
+  }
+
+  // 7. CERTIFICATIONS SECTION
+  if (certifications && certifications.length > 0) {
+    drawSection('Certifications');
+    for (const cert of certifications) {
+      const lines = doc.splitTextToSize(cert, contentWidth - 18);
+      const needed = (lines.length * 13) + 2;
+      checkPageBreak(needed);
       doc.setFont('times', 'normal');
-      const valStr = sr.items.join(', ');
-      const sLines = doc.splitTextToSize(valStr, contentWidth - pw);
-      doc.text(sLines, margin + pw, y);
-      y += (sLines.length * 14) + 3;
+      doc.setFontSize(9.5);
+      doc.text('•', margin + 6, y);
+      doc.text(lines, margin + 16, y);
+      y += needed;
+    }
+  }
+
+  // 8. HONORS & ACHIEVEMENTS SECTION
+  if (achievements && achievements.length > 0) {
+    drawSection('Honors & Achievements');
+    for (const ach of achievements) {
+      const lines = doc.splitTextToSize(ach, contentWidth - 18);
+      const needed = (lines.length * 13) + 2;
+      checkPageBreak(needed);
+      doc.setFont('times', 'normal');
+      doc.setFontSize(9.5);
+      doc.text('•', margin + 6, y);
+      doc.text(lines, margin + 16, y);
+      y += needed;
+    }
+  }
+
+  // 9. PUBLICATIONS & RESEARCH SECTION
+  if (publications && publications.length > 0) {
+    drawSection('Publications & Research');
+    for (const pub of publications) {
+      const lines = doc.splitTextToSize(pub, contentWidth - 18);
+      const needed = (lines.length * 13) + 2;
+      checkPageBreak(needed);
+      doc.setFont('times', 'normal');
+      doc.setFontSize(9.5);
+      doc.text('•', margin + 6, y);
+      doc.text(lines, margin + 16, y);
+      y += needed;
+    }
+  }
+
+  // 10. LEADERSHIP & EXTRACURRICULAR SECTION
+  if (leadership && leadership.length > 0) {
+    drawSection('Leadership & Extracurricular');
+    for (const lead of leadership) {
+      const lines = doc.splitTextToSize(lead, contentWidth - 18);
+      const needed = (lines.length * 13) + 2;
+      checkPageBreak(needed);
+      doc.setFont('times', 'normal');
+      doc.setFontSize(9.5);
+      doc.text('•', margin + 6, y);
+      doc.text(lines, margin + 16, y);
+      y += needed;
     }
   }
 
@@ -250,7 +337,7 @@ export function downloadResumePdf(tailoredResume, filename) {
 export function generateResumeMarkdown(tailoredResume) {
   if (!tailoredResume) return '';
 
-  const { name, contact, summary, includeSummary, experience, projects, education, skills } = tailoredResume;
+  const { name, contact, summary, includeSummary, experience, projects, education, skills, certifications, achievements, publications, leadership } = tailoredResume;
   const lines = [];
 
   // Header
@@ -330,6 +417,42 @@ export function generateResumeMarkdown(tailoredResume) {
     if (skills.frameworks?.length) lines.push(`- **Frameworks & Libraries:** ${skills.frameworks.join(', ')}`);
     if (skills.databases?.length) lines.push(`- **Databases:** ${skills.databases.join(', ')}`);
     if (skills.tools?.length) lines.push(`- **Tools & Platforms:** ${skills.tools.join(', ')}`);
+    lines.push('');
+  }
+
+  // Certifications
+  if (certifications && certifications.length > 0) {
+    lines.push('## Certifications');
+    for (const cert of certifications) {
+      lines.push(`- ${cert}`);
+    }
+    lines.push('');
+  }
+
+  // Achievements
+  if (achievements && achievements.length > 0) {
+    lines.push('## Honors & Achievements');
+    for (const ach of achievements) {
+      lines.push(`- ${ach}`);
+    }
+    lines.push('');
+  }
+
+  // Publications
+  if (publications && publications.length > 0) {
+    lines.push('## Publications & Research');
+    for (const pub of publications) {
+      lines.push(`- ${pub}`);
+    }
+    lines.push('');
+  }
+
+  // Leadership
+  if (leadership && leadership.length > 0) {
+    lines.push('## Leadership & Extracurricular');
+    for (const lead of leadership) {
+      lines.push(`- ${lead}`);
+    }
     lines.push('');
   }
 

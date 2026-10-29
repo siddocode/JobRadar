@@ -31,6 +31,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/jobs', jobRoutes);
 app.use('/api/directory', directoryRoutes);
 app.get('/api/cities', jobController.getCities);
+app.get('/api/corridors', jobController.getCorridors);
 app.get('/api/countries', jobController.getCountries);
 
 // Health check endpoint
@@ -88,29 +89,33 @@ async function startServer() {
 
 // In-App Background Cron Scheduler
 function setupCronScheduler() {
-  const enableCron = process.env.ENABLE_CRON === 'true';
+  const enableCron = process.env.ENABLE_CRON !== 'false'; // Enabled by default for autonomous live operation
   const cronSchedule = process.env.CRON_SCHEDULE || '0 */6 * * *';
 
   if (enableCron) {
     try {
       const cron = require('node-cron');
       const { runCollection } = require('./scripts/collect');
+      const { harvestAllMajorHubs } = require('./services/autoJobHarvester');
 
-      console.log(`[Scheduler] In-app cron scheduler enabled with schedule: "${cronSchedule}"`);
+      console.log(`[Scheduler] Autonomous 100% Free Job Harvester active (Schedule: "${cronSchedule}")`);
       cron.schedule(cronSchedule, async () => {
-        console.log(`[Scheduler] Starting scheduled job collection at ${new Date().toISOString()}...`);
+        console.log(`[Scheduler] Starting recurring automated harvest at ${new Date().toISOString()}...`);
         try {
+          // 1. Run free public ATS startup harvester across Indian tech capitals
+          await harvestAllMajorHubs();
+          // 2. Run board sync
           const summary = await runCollection();
-          console.log(`[Scheduler] Scheduled collection complete: ${summary.totalUpserted} upserted, ${summary.totalClosed} closed.`);
+          console.log(`[Scheduler] Automated sync complete: ${summary.totalUpserted} upserted, ${summary.totalClosed} closed.`);
         } catch (err) {
-          console.error('[Scheduler] Scheduled collection error:', err.message);
+          console.error('[Scheduler] Automated sync error:', err.message);
         }
       });
     } catch (err) {
       console.error('[Scheduler] Failed to initialize in-app cron:', err.message);
     }
   } else {
-    console.log('[Scheduler] In-app cron is idle (Enable via ENABLE_CRON=true in backend/.env if running always-on).');
+    console.log('[Scheduler] In-app cron is disabled.');
   }
 }
 

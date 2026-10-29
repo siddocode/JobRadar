@@ -189,7 +189,13 @@ export default function JobEligibilityModal({
               className={`modal-tab-link ${viewTab === 'match' ? 'active' : ''}`}
               onClick={() => setViewTab('match')}
             >
-              <span className="tab-icon">🎯</span>
+              <span className="tab-icon">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10" />
+                  <circle cx="12" cy="12" r="6" />
+                  <circle cx="12" cy="12" r="2" />
+                </svg>
+              </span>
               <span>Candidate Match</span>
               {candidateMatch && (
                 <span className={`tab-score-pill ${candidateMatch.overall.badgeTone}`}>
@@ -203,7 +209,13 @@ export default function JobEligibilityModal({
               className={`modal-tab-link ${viewTab === 'job' ? 'active' : ''}`}
               onClick={() => setViewTab('job')}
             >
-              <span className="tab-icon">📋</span>
+              <span className="tab-icon">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+                  <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
+                  <path d="M9 12l2 2 4-4" />
+                </svg>
+              </span>
               <span>Job Requirements &amp; Criteria</span>
             </button>
 
@@ -212,7 +224,12 @@ export default function JobEligibilityModal({
               className={`modal-tab-link ${viewTab === 'tailor' ? 'active' : ''}`}
               onClick={() => setViewTab('tailor')}
             >
-              <span className="tab-icon">✨</span>
+              <span className="tab-icon">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                </svg>
+              </span>
               <span>Tailor &amp; Download CV</span>
               <span className="tab-score-pill special-ats-pill">ATS Optimizer</span>
             </button>
@@ -235,7 +252,12 @@ export default function JobEligibilityModal({
                 {/* 1. If user is not authenticated */}
                 {!isAuthenticated ? (
                   <div className="in-modal-no-profile-box">
-                    <div className="no-profile-icon">🔒</div>
+                    <div className="no-profile-icon">
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                      </svg>
+                    </div>
                     <h3 className="no-profile-title">Sign In Required for Personalized Fit</h3>
                     <p className="no-profile-desc">
                       Create an account or sign in to upload your CV, verify ATS eligibility, and evaluate your match score, country authorization, and missing skills for this role.
@@ -253,7 +275,14 @@ export default function JobEligibilityModal({
                   </div>
                 ) : !candidateProfile ? (
                   <div className="in-modal-no-profile-box">
-                    <div className="no-profile-icon">📄</div>
+                    <div className="no-profile-icon">
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                        <polyline points="14 2 14 8 20 8" />
+                        <line x1="16" y1="13" x2="8" y2="13" />
+                        <line x1="16" y1="17" x2="8" y2="17" />
+                      </svg>
+                    </div>
                     <h3 className="no-profile-title">Personalized Match Requires Active CV or Portfolio</h3>
                     <p className="no-profile-desc">
                       Upload your CV in PDF or enter your portfolio site URL using the <strong>+ Match My CV / Portfolio</strong> button on the main dashboard.
@@ -279,19 +308,40 @@ export default function JobEligibilityModal({
                       {/* Active Candidate Profile Bar */}
                       <div className="active-candidate-bar">
                         <div className="candidate-bar-left">
-                          <div className="candidate-avatar-icon">👤</div>
+                          <div className="candidate-avatar-icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                              <circle cx="12" cy="7" r="4" />
+                            </svg>
+                          </div>
                           <div className="candidate-bar-info">
                             <div className="candidate-bar-name">
                               <strong>{candidateMatch.candidateSummary.name}</strong>
                               <span className="candidate-country-tag">
-                                📍 {candidateMatch.candidateSummary.country}
+                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ display: 'inline-block', verticalAlign: '-1px', marginRight: '3px' }}>
+                                  <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+                                  <circle cx="12" cy="10" r="3" />
+                                </svg>
+                                {candidateMatch.candidateSummary.country}
                                 {candidateMatch.candidateSummary.city ? `, ${candidateMatch.candidateSummary.city}` : ''}
                               </span>
                             </div>
                             <div className="candidate-bar-meta">
-                              <span>🎓 {candidateMatch.candidateSummary.experienceDisplay || (candidateMatch.candidateSummary.totalExperienceMonths ? `${candidateMatch.candidateSummary.totalExperienceMonths} Mos Experience` : `${candidateMatch.candidateSummary.totalYearsExperience || 0} Yrs Experience`)}</span>
+                              <span>
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ display: 'inline-block', verticalAlign: '-1.5px', marginRight: '3px' }}>
+                                  <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
+                                  <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
+                                </svg>
+                                {candidateMatch.candidateSummary.experienceDisplay || (candidateMatch.candidateSummary.totalExperienceMonths ? `${candidateMatch.candidateSummary.totalExperienceMonths} Mos Experience` : `${candidateMatch.candidateSummary.totalYearsExperience || 0} Yrs Experience`)}
+                              </span>
                               <span className="meta-dot">•</span>
-                              <span>⚡ {candidateMatch.candidateSummary.skillsDetectedCount} Skills Detected</span>
+                              <span>
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ display: 'inline-block', verticalAlign: '-1.5px', marginRight: '3px' }}>
+                                  <polyline points="16 18 22 12 16 6" />
+                                  <polyline points="8 6 2 12 8 18" />
+                                </svg>
+                                {candidateMatch.candidateSummary.skillsDetectedCount} Skills Detected
+                              </span>
                               <span className="meta-dot">•</span>
                               <span className="source-label">Source: {candidateMatch.candidateSummary.sourceName}</span>
                             </div>
@@ -343,7 +393,7 @@ export default function JobEligibilityModal({
                         {/* Actionable Tips */}
                         {candidateMatch.overall.actionableTips?.length > 0 && (
                           <div className="actionable-tips-box">
-                            <span className="tips-title">💡 Actionable Next Steps:</span>
+                            <span className="tips-title">Actionable Recommendations:</span>
                             <ul className="tips-list">
                               {candidateMatch.overall.actionableTips.map((tip, idx) => (
                                 <li key={`tip-${idx}`}>{tip}</li>
@@ -369,7 +419,11 @@ export default function JobEligibilityModal({
                           {candidateMatch.eligibleFactors.map((factor) => (
                             <div key={factor.id} className="factor-card factor-pass">
                               <div className="factor-card-header">
-                                <span className="factor-icon-bubble pass-bubble">{factor.icon}</span>
+                                <span className="factor-icon-bubble pass-bubble">
+                                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                    <polyline points="20 6 9 17 4 12" />
+                                  </svg>
+                                </span>
                                 <div className="factor-title-box">
                                   <span className="factor-category">{factor.category}</span>
                                   <h5 className="factor-card-title">{factor.title}</h5>
@@ -396,10 +450,17 @@ export default function JobEligibilityModal({
                       {/* CALLOUT TO TAILOR CV FOR THIS ROLE */}
                       <div className="tailor-cta-banner">
                         <div className="cta-left-content">
-                          <span className="cta-sparkle">✨</span>
+                          <span className="cta-sparkle">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                              <polyline points="14 2 14 8 20 8" />
+                              <line x1="16" y1="13" x2="8" y2="13" />
+                              <line x1="16" y1="17" x2="8" y2="17" />
+                            </svg>
+                          </span>
                           <div className="cta-text">
-                            <strong>Want to beat the ATS for {job.company}?</strong>
-                            <span>Automatically modify and optimize your CV with target keywords required for this job, then download your tailored ATS resume.</span>
+                            <strong>Want to optimize your CV for {job.company}?</strong>
+                            <span>Automatically modify and align your CV with the target keywords for this role, then download your tailored ATS document.</span>
                           </div>
                         </div>
                         <button
@@ -408,7 +469,10 @@ export default function JobEligibilityModal({
                           onClick={() => setViewTab('tailor')}
                         >
                           <span>Tailor My CV</span>
-                          <span>➔</span>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <line x1="5" y1="12" x2="19" y2="12" />
+                            <polyline points="12 5 19 12 12 19" />
+                          </svg>
                         </button>
                       </div>
 
@@ -417,7 +481,17 @@ export default function JobEligibilityModal({
                         <div className="factors-section-header">
                           <div className="section-header-left">
                             <span className="section-header-icon gap-warn">
-                              {candidateMatch.nonEligibleFactors.length > 0 ? '⚠️' : '🎉'}
+                              {candidateMatch.nonEligibleFactors.length > 0 ? (
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                  <circle cx="12" cy="12" r="10" />
+                                  <line x1="12" y1="8" x2="12" y2="12" />
+                                  <line x1="12" y1="16" x2="12.01" y2="16" />
+                                </svg>
+                              ) : (
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                  <polyline points="20 6 9 17 4 12" />
+                                </svg>
+                              )}
                             </span>
                             <h4 className="section-heading">
                               Non-Eligible Factors &amp; Gaps ({candidateMatch.nonEligibleFactors.length})
@@ -430,9 +504,14 @@ export default function JobEligibilityModal({
 
                         {candidateMatch.nonEligibleFactors.length === 0 ? (
                           <div className="zero-blockers-card">
-                            <span className="zero-icon">🎯</span>
+                            <span className="zero-icon">
+                              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                                <path d="M9 12l2 2 4-4" />
+                              </svg>
+                            </span>
                             <div className="zero-text">
-                              <strong>Zero Blockers or Disqualifiers Found!</strong>
+                              <strong>Zero Blockers or Disqualifiers Found</strong>
                               <span>Your profile satisfies all key country work authorization, experience, and primary skill requirements.</span>
                             </div>
                           </div>
@@ -445,7 +524,19 @@ export default function JobEligibilityModal({
                               >
                                 <div className="factor-card-header">
                                   <span className={`factor-icon-bubble ${factor.isBlocker ? 'blocker-bubble' : 'gap-bubble'}`}>
-                                    {factor.icon}
+                                    {factor.isBlocker ? (
+                                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                        <circle cx="12" cy="12" r="10" />
+                                        <line x1="15" y1="9" x2="9" y2="15" />
+                                        <line x1="9" y1="9" x2="15" y2="15" />
+                                      </svg>
+                                    ) : (
+                                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                        <circle cx="12" cy="12" r="10" />
+                                        <line x1="12" y1="8" x2="12" y2="12" />
+                                        <line x1="12" y1="16" x2="12.01" y2="16" />
+                                      </svg>
+                                    )}
                                   </span>
                                   <div className="factor-title-box">
                                     <span className="factor-category">{factor.category}</span>
@@ -471,7 +562,13 @@ export default function JobEligibilityModal({
 
                                 {factor.recommendation && (
                                   <div className="factor-recommendation-note">
-                                    <span className="rec-icon">💡</span>
+                                    <span className="rec-icon">
+                                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                        <circle cx="12" cy="12" r="10" />
+                                        <line x1="12" y1="16" x2="12" y2="12" />
+                                        <line x1="12" y1="8" x2="12.01" y2="8" />
+                                      </svg>
+                                    </span>
                                     <span className="rec-text">{factor.recommendation}</span>
                                   </div>
                                 )}
@@ -495,7 +592,12 @@ export default function JobEligibilityModal({
                 <div className={`eligibility-verdict-banner ${eligibility.indiaEligibility?.badgeTone || 'success'}`}>
                   <div className="verdict-banner-left">
                     <div className="verdict-icon-box">
-                      <span className="verdict-emoji">{eligibility.indiaEligibility?.badgeIcon || '🇮🇳'}</span>
+                      <span className="verdict-emoji">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                          <path d="M9 12l2 2 4-4" />
+                        </svg>
+                      </span>
                     </div>
                     <div className="verdict-text-group">
                       <div className="verdict-status-pill">
@@ -516,7 +618,12 @@ export default function JobEligibilityModal({
                   {/* Card 1: Seniority & Freshers */}
                   <div className="eligibility-card">
                     <div className="card-header-line">
-                      <div className="card-icon-bubble bubble-purple">🎓</div>
+                      <div className="card-icon-bubble bubble-purple">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M22 10v6M2 10l10-5 10 5-10 5z" />
+                          <path d="M6 12v5c3 3 9 3 12 0v-5" />
+                        </svg>
+                      </div>
                       <span className="card-header-label">Seniority &amp; Experience</span>
                     </div>
 
@@ -525,7 +632,7 @@ export default function JobEligibilityModal({
                         {eligibility.seniority?.isFresher ? 'Freshers Allowed' : 'Experience Required'}
                       </span>
                       <span className={`fresher-tag ${eligibility.seniority?.isFresher ? 'fresher-yes' : 'fresher-no'}`}>
-                        {eligibility.seniority?.isFresher ? '✓ Freshers Eligible' : 'Experienced Role'}
+                        {eligibility.seniority?.isFresher ? 'Freshers Eligible' : 'Experienced Role'}
                       </span>
                     </div>
 
@@ -544,7 +651,10 @@ export default function JobEligibilityModal({
                   <div className="eligibility-card">
                     <div className="card-header-line">
                       <div className="card-icon-bubble bubble-blue">
-                        {eligibility.workplace?.mode === 'Remote' ? '💻' : (eligibility.workplace?.mode === 'Hybrid' ? '🏢' : '📍')}
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+                          <circle cx="12" cy="10" r="3" />
+                        </svg>
                       </div>
                       <span className="card-header-label">Work Mode &amp; Region</span>
                     </div>
@@ -572,7 +682,12 @@ export default function JobEligibilityModal({
                   {/* Card 3: Key Skills & Tech Stack */}
                   <div className="eligibility-card span-two-cols">
                     <div className="card-header-line">
-                      <div className="card-icon-bubble bubble-green">⚡</div>
+                      <div className="card-icon-bubble bubble-green">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="16 18 22 12 16 6" />
+                          <polyline points="8 6 2 12 8 18" />
+                        </svg>
+                      </div>
                       <span className="card-header-label">Required Tech Stack &amp; Skills</span>
                       <span className="skills-count-pill">{eligibility.skills?.length || 0} Identified</span>
                     </div>
@@ -591,7 +706,12 @@ export default function JobEligibilityModal({
 
                     {eligibility.education && (
                       <div className="education-note-row">
-                        <span className="edu-icon">📜</span>
+                        <span className="edu-icon">
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+                            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+                          </svg>
+                        </span>
                         <span className="edu-text">
                           <strong>Education:</strong> {eligibility.education}
                         </span>
@@ -613,7 +733,11 @@ export default function JobEligibilityModal({
                   <div className="takeaways-grid">
                     {eligibility.keyHighlights?.map((item, idx) => (
                       <div key={`th-${idx}`} className="takeaway-item">
-                        <span className="takeaway-icon">{item.icon}</span>
+                        <span className="takeaway-icon">
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                            <polyline points="20 6 9 17 4 12" />
+                          </svg>
+                        </span>
                         <div className="takeaway-text-col">
                           <span className="takeaway-label">{item.label}</span>
                           <strong className="takeaway-val">{item.value}</strong>
@@ -681,7 +805,7 @@ export default function JobEligibilityModal({
                 onClick={() => setViewTab('tailor')}
                 title="Modify and optimize your CV for this job"
               >
-                <span>✨ Tailor CV</span>
+                <span>Tailor CV</span>
               </button>
             )}
           </div>

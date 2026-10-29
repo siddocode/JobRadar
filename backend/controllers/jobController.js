@@ -31,6 +31,10 @@ async function getJobs(req, res) {
       status,
       company,
       techOnly,
+      corridor,
+      fresherFriendly,
+      seniority,
+      expMax,
       limit = 50,
       page = 1
     } = req.query;
@@ -58,10 +62,55 @@ async function getJobs(req, res) {
       }
     }
 
-    // Filter by city
+    // Helper to safely append $or clauses without collision
+    const addOrFilter = (conds) => {
+      if (filter.$or) {
+        if (!filter.$and) filter.$and = [];
+        filter.$and.push({ $or: filter.$or });
+        delete filter.$or;
+      }
+      if (filter.$and) {
+        filter.$and.push({ $or: conds });
+      } else {
+        filter.$or = conds;
+      }
+    };
+
+    // Filter by city (with multi-name alias support)
     if (city && typeof city === 'string' && city.trim() && city !== 'all') {
-      const sanitizedCity = city.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      filter.city = { $regex: new RegExp(`^${sanitizedCity}$`, 'i') };
+      const cLower = city.trim().toLowerCase();
+      let cityRegexPattern = `^${city.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`;
+      if (cLower === 'gurugram' || cLower === 'gurgaon') cityRegexPattern = '^(gurugram|gurgaon)$';
+      else if (cLower === 'bengaluru' || cLower === 'bangalore') cityRegexPattern = '^(bengaluru|bangalore)$';
+      else if (cLower === 'delhi' || cLower === 'new delhi' || cLower === 'delhi-ncr' || cLower === 'delhi ncr') cityRegexPattern = '^(delhi|new delhi|delhi-ncr|delhi ncr)$';
+      else if (cLower === 'noida' || cLower === 'greater noida') cityRegexPattern = '^(noida|greater noida)$';
+      filter.city = { $regex: new RegExp(cityRegexPattern, 'i') };
+    }
+
+    // Filter by tech corridor (e.g. orr_bellandur, hitec_city, cyber_city, hinjawadi)
+    if (corridor && typeof corridor === 'string' && corridor.trim() && corridor !== 'all') {
+      filter.techCorridor = corridor.trim();
+    }
+
+    // Filter by fresher / early career friendly
+    if (fresherFriendly === 'true' || fresherFriendly === true) {
+      addOrFilter([
+        { fresherFriendly: true },
+        { seniority: 'entry' },
+        { seniority: 'intern' },
+        { expMin: { $lte: 1 } }
+      ]);
+    }
+
+    // Filter by seniority ('entry' | 'mid' | 'senior' | 'lead_staff' | 'manager' | 'director_plus')
+    if (seniority && typeof seniority === 'string' && seniority.trim() && seniority !== 'all') {
+      filter.seniority = seniority.trim().toLowerCase();
+    }
+
+    // Filter by max required experience
+    if (expMax && !isNaN(parseInt(expMax, 10))) {
+      const maxExp = parseInt(expMax, 10);
+      filter.expMin = { $lte: maxExp };
     }
 
     // Filter by state
@@ -87,10 +136,12 @@ async function getJobs(req, res) {
     // Filter by raw location text search
     if (location && typeof location === 'string' && location.trim()) {
       const sanitizedLoc = location.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      filter.$or = [
+      addOrFilter([
         { locationRaw: { $regex: sanitizedLoc, $options: 'i' } },
-        { location: { $regex: sanitizedLoc, $options: 'i' } }
-      ];
+        { location: { $regex: sanitizedLoc, $options: 'i' } },
+        { locality: { $regex: sanitizedLoc, $options: 'i' } },
+        { officeName: { $regex: sanitizedLoc, $options: 'i' } }
+      ]);
     }
 
     // Filter by status ('open', 'closed', 'all') - default: 'open'
@@ -100,9 +151,10 @@ async function getJobs(req, res) {
       }
     }
 
-    // Filter by company
+    // Filter by company (case-insensitive regex)
     if (company && typeof company === 'string' && company.trim() && company !== 'all') {
-      filter.company = company.trim();
+      const sanitizedCompany = company.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      filter.company = { $regex: new RegExp(`^${sanitizedCompany}$`, 'i') };
     }
 
     const parsedLimit = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 500);
@@ -115,7 +167,7 @@ async function getJobs(req, res) {
         .sort({ lastSeenAt: -1, updatedAt: -1 })
         .skip(skip)
         .limit(parsedLimit)
-        .select('source sourceJobId company title location locationRaw city state country workMode fingerprint applyUrl updatedAt firstSeenAt lastSeenAt status descriptionHtml')
+        .select('source sourceJobId company title location locationRaw city state country techCorridor locality officeName officeAddress coordinates roleFamily seniority fresherFriendly expMin expMax workMode fingerprint applyUrl updatedAt firstSeenAt lastSeenAt status descriptionHtml')
         .lean(),
       Job.countDocuments(filter),
       Job.countDocuments({ status: 'open' }),
@@ -240,6 +292,127 @@ async function getCities(req, res) {
     return res.status(500).json({
       success: false,
       error: 'Failed to retrieve cities',
+      message: error.message
+    });
+  }
+}
+
+/**
+ * GET /api/corridors
+ * Query param: city (e.g. "Bengaluru", "Hyderabad", "Gurugram", "Pune", "Noida", "New Delhi", "Mumbai", "Chennai")
+ * Returns configured tech corridors for the city with active job counts.
+ */
+async function getCorridors(req, res) {
+  try {
+    const { city, status = 'open' } = req.query;
+    const techHubCorridors = require('../config/techHubCorridors.json');
+
+    // Return all corridors across all cities if requested
+    if (req.query.allCorridors === 'true') {
+      const match = {};
+      if (status !== 'all') match.status = status;
+
+      const corridorCounts = await Job.aggregate([
+        { $match: match },
+        { $group: { _id: '$techCorridor', count: { $sum: 1 } } }
+      ]);
+      const countMap = new Map();
+      for (const item of corridorCounts) {
+        if (item._id) countMap.set(item._id, item.count);
+      }
+
+      const allCorridors = [];
+      for (const [cityName, cityData] of Object.entries(techHubCorridors.cities)) {
+        for (const [corridorKey, cData] of Object.entries(cityData.corridors || {})) {
+          allCorridors.push({
+            city: cityName,
+            key: corridorKey,
+            name: cData.name,
+            shortName: cData.shortName,
+            center: cData.center,
+            count: countMap.get(corridorKey) || 0
+          });
+        }
+      }
+
+      return res.status(200).json({
+        success: true,
+        city: 'all',
+        corridors: allCorridors
+      });
+    }
+
+    if (!city || city === 'all') {
+      const match = {};
+      if (status !== 'all') match.status = status;
+
+      const cityCounts = await Job.aggregate([
+        { $match: match },
+        { $group: { _id: '$city', count: { $sum: 1 } } }
+      ]);
+      const countMap = new Map();
+      for (const item of cityCounts) {
+        if (item._id) countMap.set(item._id.toLowerCase(), item.count);
+      }
+
+      const hubs = Object.entries(techHubCorridors.cities).map(([cityName, data]) => ({
+        key: cityName.toLowerCase(),
+        city: cityName,
+        state: data.state,
+        country: data.country,
+        center: data.center,
+        count: countMap.get(cityName.toLowerCase()) || 0,
+        corridorsCount: Object.keys(data.corridors || {}).length
+      })).sort((a, b) => b.count - a.count);
+
+      return res.status(200).json({ success: true, city: 'all', hubs, corridors: [] });
+    }
+
+    const canonicalKey = Object.keys(techHubCorridors.cities).find(
+      c => c.toLowerCase() === city.trim().toLowerCase()
+    );
+
+    if (!canonicalKey || !techHubCorridors.cities[canonicalKey]?.corridors) {
+      return res.status(200).json({ success: true, city, corridors: [] });
+    }
+
+    const configuredCorridors = techHubCorridors.cities[canonicalKey].corridors;
+
+    const match = {
+      city: { $regex: new RegExp(`^${canonicalKey}$`, 'i') }
+    };
+    if (status !== 'all') {
+      match.status = status;
+    }
+
+    const corridorCounts = await Job.aggregate([
+      { $match: match },
+      { $group: { _id: '$techCorridor', count: { $sum: 1 } } }
+    ]);
+
+    const countMap = new Map();
+    for (const item of corridorCounts) {
+      if (item._id) countMap.set(item._id, item.count);
+    }
+
+    const result = Object.entries(configuredCorridors).map(([key, data]) => ({
+      key,
+      name: data.name,
+      shortName: data.shortName,
+      center: data.center,
+      count: countMap.get(key) || 0
+    }));
+
+    return res.status(200).json({
+      success: true,
+      city: canonicalKey,
+      corridors: result
+    });
+  } catch (error) {
+    console.error('[jobController:getCorridors] Error:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to retrieve corridors',
       message: error.message
     });
   }
@@ -637,42 +810,72 @@ async function tailorCvForJob(req, res) {
     let candidateProfile = null;
     let rawCvText = '';
 
-    // If PDF file was uploaded with this tailoring request
-    if (req.file) {
-      rawCvText = await parseCvPdf(req.file.buffer);
-      candidateProfile = extractCandidateProfile(rawCvText, {
-        sourceType: 'pdf',
-        sourceName: req.file.originalname || 'Uploaded CV'
-      });
-    } else if (req.body && req.body.portfolioUrl && req.body.portfolioUrl.trim()) {
-      const pUrl = req.body.portfolioUrl.trim();
-      rawCvText = await parsePortfolioUrl(pUrl);
-      candidateProfile = extractCandidateProfile(rawCvText, {
-        sourceType: 'url',
-        sourceName: pUrl
-      });
-      candidateProfile.portfolio = pUrl;
-    } else {
-      // Check body
-      if (req.body && req.body.candidateProfile) {
-        candidateProfile = typeof req.body.candidateProfile === 'string'
-          ? JSON.parse(req.body.candidateProfile)
-          : req.body.candidateProfile;
-      }
-      if (req.body && req.body.rawCvText) {
-        rawCvText = req.body.rawCvText;
-      }
-    }
-
-    // Fallback to authenticated user's profile if available
-    if (!candidateProfile && req.user && req.user.id) {
+    // 1. Fetch authenticated user data if available
+    let authUser = null;
+    if (req.user && req.user.id) {
       try {
         const User = require('../models/User');
-        const user = await User.findById(req.user.id).lean();
-        if (user && user.candidateProfile) {
-          candidateProfile = user.candidateProfile;
-        }
+        authUser = await User.findById(req.user.id).lean();
       } catch (_) {}
+    }
+
+    // 2. Base candidateProfile from body or user record
+    if (req.body && req.body.candidateProfile) {
+      candidateProfile = typeof req.body.candidateProfile === 'string'
+        ? JSON.parse(req.body.candidateProfile)
+        : req.body.candidateProfile;
+    } else if (authUser && authUser.candidateProfile) {
+      candidateProfile = { ...authUser.candidateProfile };
+    }
+
+    // 3. Process CV file or Portfolio URL
+    if (req.file) {
+      rawCvText = await parseCvPdf(req.file.buffer);
+      const parsed = extractCandidateProfile(rawCvText, {
+        sourceType: 'pdf',
+        sourceName: req.file.originalname || 'Uploaded CV',
+        name: authUser?.name || candidateProfile?.name
+      });
+      candidateProfile = { ...(candidateProfile || {}), ...parsed };
+    } else if (req.body && req.body.portfolioUrl && req.body.portfolioUrl.trim()) {
+      const pUrl = req.body.portfolioUrl.trim();
+      try {
+        const fetchedText = await parsePortfolioUrl(pUrl);
+        if (fetchedText && fetchedText.length > 50) {
+          rawCvText = fetchedText;
+          const parsed = extractCandidateProfile(fetchedText, {
+            sourceType: 'url',
+            sourceName: pUrl,
+            name: authUser?.name || candidateProfile?.name
+          });
+          candidateProfile = { ...(candidateProfile || {}), ...parsed };
+        }
+      } catch (urlErr) {
+        console.warn('[jobController:tailorCvForJob] Portfolio scraping warning:', urlErr.message);
+        // If candidate already has a profile or user record, gracefully proceed instead of failing
+        if (!candidateProfile && (!authUser || !authUser.candidateProfile)) {
+          throw urlErr;
+        }
+      }
+      if (candidateProfile) {
+        candidateProfile.portfolio = pUrl;
+      }
+    } else if (req.body && req.body.rawCvText) {
+      rawCvText = req.body.rawCvText;
+    }
+
+    if (!rawCvText && candidateProfile?.rawCvText) {
+      rawCvText = candidateProfile.rawCvText;
+    }
+
+    // 4. Ensure candidateProfile has valid identity metadata
+    if (candidateProfile) {
+      if ((!candidateProfile.name || candidateProfile.name.toLowerCase() === 'candidate') && authUser?.name) {
+        candidateProfile.name = authUser.name;
+      }
+      if (!candidateProfile.email && authUser?.email) {
+        candidateProfile.email = authUser.email;
+      }
     }
 
     // Sync candidateProfile back to user if authenticated
@@ -727,9 +930,637 @@ async function tailorCvForJob(req, res) {
   }
 }
 
+/**
+ * POST /api/jobs/harvest?city={cityName}
+ * Automatically discovers & harvests live jobs across public ATS boards for all employers in that city.
+ */
+async function harvestJobs(req, res) {
+  try {
+    const { harvestCityJobs, getHarvestStatus } = require('../services/autoJobHarvester');
+    const { city } = req.query;
+
+    if (!city || city === 'all') {
+      return res.status(400).json({
+        success: false,
+        message: 'Please specify a valid city name (e.g. ?city=Hyderabad or ?city=Pune)'
+      });
+    }
+
+    const currentStatus = getHarvestStatus();
+    if (currentStatus.isRunning) {
+      return res.status(200).json({
+        success: true,
+        message: `Auto-harvester is already active for "${currentStatus.activeCity}".`,
+        status: currentStatus
+      });
+    }
+
+    // Trigger asynchronously in the background
+    harvestCityJobs(city)
+      .then((summary) => console.log(`[AutoHarvest] Finished harvest run for ${city}:`, summary))
+      .catch((err) => console.error(`[AutoHarvest] Failed harvest run for ${city}:`, err.message));
+
+    return res.status(202).json({
+      success: true,
+      message: `Started automated public ATS harvest for ${city}. Live jobs will automatically populate MongoDB and map.`,
+      city
+    });
+  } catch (error) {
+    console.error('[jobController:harvestJobs] Error:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to trigger automated job harvest',
+      message: error.message
+    });
+  }
+}
+
+/**
+ * GET /api/jobs/harvest/status
+ * Returns current automated harvest status
+ */
+function getHarvestState(req, res) {
+  const { getHarvestStatus } = require('../services/autoJobHarvester');
+  return res.status(200).json({
+    success: true,
+    status: getHarvestStatus()
+  });
+}
+
+/**
+ * POST /api/jobs/re-enrich
+ * Re-runs corridorResolver on existing jobs so that newly added corridor aliases are applied
+ */
+async function reEnrichJobs(req, res) {
+  try {
+    const { resolveCorridor } = require('../utils/corridorResolver');
+    const { slugify } = require('../utils/companyUtils');
+    const Company = require('../models/Company');
+    const Office = require('../models/Office');
+    const City = require('../models/City');
+
+    let reclassifiedCount = 0;
+    let linkedCompaniesCount = 0;
+
+    // 1. Reclassify misclassified jobs (e.g. Speechify or other jobs where locationRaw points to another city/country)
+    const misclassifiedJobs = await Job.find({
+      city: 'Noida',
+      locationRaw: { $exists: true, $ne: '' }
+    }).lean();
+
+    const reclassOps = [];
+    for (const job of misclassifiedJobs) {
+      const loc = (job.locationRaw || '').toLowerCase();
+      const hasNoida = loc.includes('noida') || loc.includes('greater noida');
+      const reLoc = resolveCorridor(job.locationRaw);
+      const isActualNoida = (reLoc.city && reLoc.city.toLowerCase() === 'noida') || hasNoida;
+
+      if (!isActualNoida) {
+        reclassOps.push({
+          updateOne: {
+            filter: { _id: job._id },
+            update: {
+              $set: {
+                city: reLoc.city || 'Other',
+                state: reLoc.state || null,
+                country: reLoc.country || (reLoc.city ? 'India' : 'International'),
+                techCorridor: reLoc.techCorridor || null
+              }
+            }
+          }
+        });
+        reclassifiedCount++;
+      }
+    }
+
+    if (reclassOps.length > 0) {
+      await Job.bulkWrite(reclassOps, { ordered: false });
+    }
+
+    // 2. Link companyId and Directory for all Noida jobs where companyId is missing
+    const noidaJobsWithoutCompId = await Job.find({
+      city: 'Noida',
+      companyId: null
+    }).select('_id company').lean();
+
+    if (noidaJobsWithoutCompId.length > 0) {
+      const distinctNames = [...new Set(noidaJobsWithoutCompId.map(j => j.company).filter(Boolean))];
+      const noidaCityDoc = await City.findOne({ slug: 'noida' });
+
+      for (const compName of distinctNames) {
+        const slug = slugify(compName);
+        let compDoc = await Company.findOne({
+          $or: [{ slug }, { name: new RegExp(`^${compName}$`, 'i') }]
+        });
+
+        if (!compDoc) {
+          compDoc = await Company.create({
+            name: compName,
+            slug,
+            city: 'Noida',
+            isTech: true,
+            isHiring: true,
+            category: 'Tech / Startups'
+          });
+        } else {
+          await Company.updateOne(
+            { _id: compDoc._id },
+            { $set: { isHiring: true, isTech: true } }
+          );
+        }
+
+        if (noidaCityDoc && compDoc) {
+          await Office.findOneAndUpdate(
+            { companyId: compDoc._id, cityId: noidaCityDoc._id },
+            {
+              $set: {
+                companyId: compDoc._id,
+                cityId: noidaCityDoc._id,
+                name: compName,
+                address: `Noida, Uttar Pradesh, India`
+              }
+            },
+            { upsert: true }
+          );
+        }
+
+        const linkRes = await Job.updateMany(
+          { company: compName, city: 'Noida' },
+          { $set: { companyId: compDoc._id } }
+        );
+        linkedCompaniesCount += (linkRes.modifiedCount || 0);
+      }
+    }
+
+    // 3. Normal corridor re-enrichment for jobs with missing techCorridor
+    const query = { techCorridor: null };
+    if (req.query.city) {
+      query.city = new RegExp(`^${req.query.city}$`, 'i');
+    }
+    const jobs = await Job.find(query).limit(500).lean();
+    let updated = 0;
+    const bulkOps = [];
+
+    for (const job of jobs) {
+      const locData = resolveCorridor(job.locationRaw || job.location, {
+        localityHint: job.locality,
+        officeAddress: job.officeAddress,
+        companyName: job.company
+      });
+      if (locData.techCorridor) {
+        bulkOps.push({
+          updateOne: {
+            filter: { _id: job._id },
+            update: {
+              $set: {
+                techCorridor: locData.techCorridor,
+                locality: locData.locality || job.locality,
+                coordinates: locData.coordinates || job.coordinates
+              }
+            }
+          }
+        });
+        updated++;
+      }
+    }
+
+    if (bulkOps.length > 0) {
+      await Job.bulkWrite(bulkOps, { ordered: false });
+    }
+
+    // Fix Workday deep-link URLs missing /en-US/{site}
+    const fixMastercard = await Job.updateMany(
+      { applyUrl: { $regex: '^https://mastercard\\.wd1\\.myworkdayjobs\\.com/job/' } },
+      [
+        {
+          $set: {
+            applyUrl: {
+              $replaceOne: {
+                input: '$applyUrl',
+                find: 'mastercard.wd1.myworkdayjobs.com/job/',
+                replacement: 'mastercard.wd1.myworkdayjobs.com/en-US/CorporateCareers/job/'
+              }
+            }
+          }
+        }
+      ]
+    );
+
+    const fixSalesforce = await Job.updateMany(
+      { applyUrl: { $regex: 'salesforce\\.wd1\\.myworkdayjobs\\.com' } },
+      { $set: { applyUrl: 'https://salesforce.wd12.myworkdayjobs.com/en-US/External_Career_Site' } }
+    );
+
+    return res.status(200).json({
+      success: true,
+      reclassifiedCount,
+      linkedCompaniesCount,
+      corridorUpdated: updated,
+      totalProcessed: jobs.length,
+      workdayFixed: (fixMastercard.modifiedCount || 0) + (fixSalesforce.modifiedCount || 0)
+    });
+  } catch (err) {
+    console.error('[jobController:reEnrichJobs] Error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+}
+
+/**
+ * GET /api/jobs/audit-urls
+ * Inspects all job applyUrl domains and patterns across the database
+ */
+async function auditUrls(req, res) {
+  try {
+    const totalJobs = await Job.countDocuments();
+    
+    // Group by source
+    const bySource = await Job.aggregate([
+      { $group: { _id: '$source', count: { $sum: 1 } } }
+    ]);
+
+    // Check invalid / non-http URLs
+    const invalidSchemeCount = await Job.countDocuments({
+      $or: [
+        { applyUrl: { $exists: false } },
+        { applyUrl: null },
+        { applyUrl: '' },
+        { applyUrl: { $not: /^https?:\/\//i } }
+      ]
+    });
+    const invalidSchemeSamples = await Job.find({
+      $or: [
+        { applyUrl: { $exists: false } },
+        { applyUrl: null },
+        { applyUrl: '' },
+        { applyUrl: { $not: /^https?:\/\//i } }
+      ]
+    }).select('company title source applyUrl').limit(10).lean();
+
+    // Search engines (google, bing, yahoo search)
+    const searchEngineJobs = await Job.countDocuments({
+      applyUrl: { $regex: 'google\\.com/search|bing\\.com/search|duckduckgo\\.com', $options: 'i' }
+    });
+
+    // Check myworkdayjobs without /en-US/
+    const brokenWorkday = await Job.countDocuments({
+      applyUrl: { $regex: 'myworkdayjobs\\.com/job/' }
+    });
+    const brokenWorkdayComps = await Job.distinct('company', {
+      applyUrl: { $regex: 'myworkdayjobs\\.com/job/' }
+    });
+
+    // Check SmartRecruiters with %20 or spaces in company name path
+    const brokenSmartRecruiters = await Job.countDocuments({
+      applyUrl: { $regex: 'jobs\\.smartrecruiters\\.com/[^/]*(%20|\\s)' }
+    });
+    const brokenSmartRecruitersComps = await Job.distinct('company', {
+      applyUrl: { $regex: 'jobs\\.smartrecruiters\\.com/[^/]*(%20|\\s)' }
+    });
+
+    // Check guessed fake domains: careers.<name>.com (where path is empty or just /)
+    const fakeCareersCount = await Job.countDocuments({
+      applyUrl: { $regex: '^https?://careers\\.[a-z0-9-]+\\.com/?$' }
+    });
+    const fakeCareersComps = await Job.distinct('company', {
+      applyUrl: { $regex: '^https?://careers\\.[a-z0-9-]+\\.com/?$' }
+    });
+
+    // Distinct hostnames / domain patterns
+    const sampleJobs = await Job.find({}).select('source company applyUrl title').lean();
+    const domainCounts = {};
+    const samplesBySource = {};
+
+    for (const j of sampleJobs) {
+      const src = j.source || 'unknown';
+      if (!samplesBySource[src]) samplesBySource[src] = [];
+      if (samplesBySource[src].length < 4) {
+        samplesBySource[src].push({
+          company: j.company,
+          title: j.title,
+          applyUrl: j.applyUrl
+        });
+      }
+
+      if (j.applyUrl) {
+        try {
+          const u = new URL(j.applyUrl);
+          const host = u.hostname;
+          domainCounts[host] = (domainCounts[host] || 0) + 1;
+        } catch {
+          domainCounts['__INVALID_URL__'] = (domainCounts['__INVALID_URL__'] || 0) + 1;
+        }
+      } else {
+        domainCounts['__EMPTY__'] = (domainCounts['__EMPTY__'] || 0) + 1;
+      }
+    }
+
+    // Sort top domains
+    const sortedDomains = Object.entries(domainCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 35)
+      .map(([domain, count]) => ({ domain, count }));
+
+    return res.status(200).json({
+      success: true,
+      totalJobs,
+      bySource,
+      invalidSchemeCount,
+      invalidSchemeSamples,
+      searchEngineJobs,
+      brokenWorkday,
+      brokenWorkdayComps,
+      brokenSmartRecruiters,
+      brokenSmartRecruitersComps,
+      fakeCareersCount,
+      fakeCareersComps,
+      topDomains: sortedDomains,
+      samplesBySource
+    });
+  } catch (err) {
+    console.error('[jobController:auditUrls] Error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+}
+
+/**
+ * POST /api/jobs/fix-urls
+ * Reconstructs accurate direct URLs for jobs with broken/guessed apply URLs
+ */
+async function fixBrokenUrls(req, res) {
+  try {
+    const Company = require('../models/Company');
+    const portals = require('../config/companyCareerPortals.json');
+    const companySeeds = require('../config/companies.json');
+
+    // Build company lookup maps
+    const allCompanies = await Company.find({}).lean();
+    const companyMap = new Map();
+    for (const c of allCompanies) {
+      if (c.name) companyMap.set(c.name.toLowerCase().trim(), c);
+      if (c.slug) companyMap.set(c.slug.toLowerCase().trim(), c);
+    }
+
+    const seedMap = new Map();
+    for (const s of companySeeds) {
+      if (s.name) seedMap.set(s.name.toLowerCase().trim(), s);
+      if (s.slug) seedMap.set(s.slug.toLowerCase().trim(), s);
+    }
+
+    const portalMap = new Map();
+    for (const [name, url] of Object.entries(portals)) {
+      portalMap.set(name.toLowerCase().trim(), url);
+    }
+
+    // 1. Fix broken Workday URLs missing /en-US/{site}
+    const fixMastercard = await Job.updateMany(
+      { applyUrl: { $regex: 'mastercard\\.wd1\\.myworkdayjobs\\.com/job/' } },
+      [
+        {
+          $set: {
+            applyUrl: {
+              $replaceOne: {
+                input: '$applyUrl',
+                find: 'mastercard.wd1.myworkdayjobs.com/job/',
+                replacement: 'mastercard.wd1.myworkdayjobs.com/en-US/CorporateCareers/job/'
+              }
+            }
+          }
+        }
+      ]
+    );
+
+    const fixVisa = await Job.updateMany(
+      { applyUrl: { $regex: 'visa\\.wd5\\.myworkdayjobs\\.com/job/' } },
+      [
+        {
+          $set: {
+            applyUrl: {
+              $replaceOne: {
+                input: '$applyUrl',
+                find: 'visa.wd5.myworkdayjobs.com/job/',
+                replacement: 'visa.wd5.myworkdayjobs.com/en-US/Visa/job/'
+              }
+            }
+          }
+        }
+      ]
+    );
+
+    const fixSalesforce = await Job.updateMany(
+      { applyUrl: { $regex: 'salesforce\\.wd12?\\.myworkdayjobs\\.com/job/' } },
+      [
+        {
+          $set: {
+            applyUrl: {
+              $replaceOne: {
+                input: '$applyUrl',
+                find: 'myworkdayjobs.com/job/',
+                replacement: 'myworkdayjobs.com/en-US/External_Career_Site/job/'
+              }
+            }
+          }
+        }
+      ]
+    );
+
+    const fixAdobe = await Job.updateMany(
+      { applyUrl: { $regex: 'adobe\\.wd5\\.myworkdayjobs\\.com/job/' } },
+      [
+        {
+          $set: {
+            applyUrl: {
+              $replaceOne: {
+                input: '$applyUrl',
+                find: 'adobe.wd5.myworkdayjobs.com/job/',
+                replacement: 'adobe.wd5.myworkdayjobs.com/en-US/external_experienced/job/'
+              }
+            }
+          }
+        }
+      ]
+    );
+
+    const fixEurofins = await Job.updateMany(
+      { company: 'Eurofins' },
+      { $set: { applyUrl: 'https://www.eurofins.com/careers/' } }
+    );
+
+    // Fix SmartRecruiters URLs with space or %20 (like ServiceNow India, Brainwonders Delhi, Harbinger Group)
+    await Job.updateMany(
+      { applyUrl: { $regex: 'jobs\\.smartrecruiters\\.com/ServiceNow(%20|\\s)India/' } },
+      [
+        {
+          $set: {
+            applyUrl: {
+              $replaceOne: {
+                input: '$applyUrl',
+                find: 'jobs.smartrecruiters.com/ServiceNow%20India/',
+                replacement: 'jobs.smartrecruiters.com/ServiceNow/'
+              }
+            }
+          }
+        }
+      ]
+    );
+
+    await Job.updateMany(
+      { applyUrl: { $regex: 'jobs\\.smartrecruiters\\.com/Brainwonders(%20|\\s)Delhi/' } },
+      [
+        {
+          $set: {
+            applyUrl: {
+              $replaceOne: {
+                input: '$applyUrl',
+                find: 'jobs.smartrecruiters.com/Brainwonders%20Delhi/',
+                replacement: 'jobs.smartrecruiters.com/Brainwonders/'
+              }
+            }
+          }
+        }
+      ]
+    );
+
+    await Job.updateMany(
+      { applyUrl: { $regex: 'jobs\\.smartrecruiters\\.com/Harbinger(%20|\\s)Group/' } },
+      [
+        {
+          $set: {
+            applyUrl: {
+              $replaceOne: {
+                input: '$applyUrl',
+                find: 'jobs.smartrecruiters.com/Harbinger%20Group/',
+                replacement: 'jobs.smartrecruiters.com/HarbingerGroup/'
+              }
+            }
+          }
+        }
+      ]
+    );
+
+    // Fix Vatika Tech Hub and invalid schemes (e.g. 'https:/')
+    await Job.updateMany(
+      { company: 'Vatika Tech Hub' },
+      { $set: { applyUrl: 'https://careers.vatikagroup.com' } }
+    );
+    await Company.updateOne(
+      { slug: 'vatika-tech-hub' },
+      { $set: { website: 'https://careers.vatikagroup.com', careerPage: 'https://careers.vatikagroup.com' } }
+    );
+
+    await Job.updateMany(
+      {
+        $or: [
+          { applyUrl: { $exists: false } },
+          { applyUrl: null },
+          { applyUrl: '' },
+          { applyUrl: 'https:/' },
+          { applyUrl: { $not: /^https?:\/\//i } }
+        ]
+      },
+      { $set: { applyUrl: 'https://www.linkedin.com/jobs/' } }
+    );
+
+    // 2. Find jobs with fake guessed careers.<name>.com URLs
+    const fakeJobs = await Job.find({
+      applyUrl: { $regex: 'careers\\.[a-z0-9]+\\.com' }
+    }).select('_id company source sourceJobId applyUrl').lean();
+
+    let repairedFakes = 0;
+    const bulkOps = [];
+
+    for (const j of fakeJobs) {
+      const compName = (j.company || '').trim();
+      const compLower = compName.toLowerCase();
+      let realUrl = null;
+
+      // Check verified portals map
+      if (portalMap.has(compLower)) {
+        realUrl = portalMap.get(compLower);
+      } else {
+        for (const [key, pUrl] of portalMap.entries()) {
+          if (compLower.includes(key) || key.includes(compLower)) {
+            realUrl = pUrl;
+            break;
+          }
+        }
+      }
+
+      // Check seeds config
+      if (!realUrl && seedMap.has(compLower)) {
+        const seed = seedMap.get(compLower);
+        if (seed.ats === 'greenhouse' && seed.slug) {
+          realUrl = `https://boards.greenhouse.io/${seed.slug}/jobs/${j.sourceJobId || ''}`.replace(/\/+$/, '');
+        } else if (seed.ats === 'lever' && seed.slug) {
+          realUrl = `https://jobs.lever.co/${seed.slug}/${j.sourceJobId || ''}`.replace(/\/+$/, '');
+        } else if (seed.ats === 'ashby' && seed.slug) {
+          realUrl = `https://jobs.ashbyhq.com/${seed.slug}/${j.sourceJobId || ''}`.replace(/\/+$/, '');
+        } else if (seed.ats === 'smartrecruiters' && seed.slug) {
+          realUrl = `https://jobs.smartrecruiters.com/${seed.slug}/${j.sourceJobId || ''}`.replace(/\/+$/, '');
+        }
+      }
+
+      // Check Company model
+      if (!realUrl && companyMap.has(compLower)) {
+        const comp = companyMap.get(compLower);
+        if (comp.careersUrl) {
+          realUrl = comp.careersUrl;
+        } else if (comp.website) {
+          realUrl = comp.website;
+        }
+      }
+
+      // If sourceJobId is a valid ATS format (e.g. greenhouse_{slug}_{id} or smartrecruiters)
+      if (!realUrl && j.sourceJobId) {
+        if (j.source === 'greenhouse' && j.sourceJobId.includes('_')) {
+          const parts = j.sourceJobId.split('_');
+          const slug = parts[1];
+          const id = parts[2];
+          if (slug && id) realUrl = `https://boards.greenhouse.io/${slug}/jobs/${id}`;
+        } else if (j.source === 'smartrecruiters' && j.sourceJobId.includes('_')) {
+          const parts = j.sourceJobId.split('_');
+          const id = parts[parts.length - 1];
+          const cleanSlug = compName.replace(/\s+(india|pvt|ltd|limited|group|delhi)/gi, '').replace(/\s+/g, '');
+          realUrl = `https://jobs.smartrecruiters.com/${cleanSlug}/${id}`;
+        }
+      }
+
+      // If still not resolved, point to official search on LinkedIn or Google Careers rather than a dead DNS domain
+      if (!realUrl) {
+        const query = encodeURIComponent(`${compName} careers openings`);
+        realUrl = `https://www.linkedin.com/jobs/search/?keywords=${encodeURIComponent(compName)}`;
+      }
+
+      if (realUrl && realUrl !== j.applyUrl) {
+        bulkOps.push({
+          updateOne: {
+            filter: { _id: j._id },
+            update: { $set: { applyUrl: realUrl } }
+          }
+        });
+        repairedFakes++;
+      }
+    }
+
+    if (bulkOps.length > 0) {
+      await Job.bulkWrite(bulkOps, { ordered: false });
+    }
+
+    return res.status(200).json({
+      success: true,
+      fakeJobsFound: fakeJobs.length,
+      repairedFakes,
+      workdayFixed: (fixMastercard.modifiedCount || 0) + (fixSalesforce.modifiedCount || 0)
+    });
+  } catch (err) {
+    console.error('[jobController:fixBrokenUrls] Error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+}
+
 module.exports = {
   getJobs,
   getCities,
+  getCorridors,
   getCountries,
   getJobStats,
   triggerSync,
@@ -739,6 +1570,11 @@ module.exports = {
   parseCandidateUrl,
   checkCandidateEligibility,
   evaluateDirectMatch,
-  tailorCvForJob
+  tailorCvForJob,
+  harvestJobs,
+  getHarvestState,
+  reEnrichJobs,
+  auditUrls,
+  fixBrokenUrls
 };
 

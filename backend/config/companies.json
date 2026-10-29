@@ -351,6 +351,36 @@
       "site": "external_experienced"
     },
     "verifiedAt": "2026-10-16T10:20:00.000Z"
+  },
+  {
+    "name": "Level AI",
+    "ats": "lever",
+    "slug": "levelai",
+    "verifiedAt": "2026-10-29T11:00:00.000Z"
+  },
+  {
+    "name": "Bitwarden",
+    "ats": "greenhouse",
+    "slug": "bitwarden",
+    "verifiedAt": "2026-10-29T11:00:00.000Z"
+  },
+  {
+    "name": "Sumo Logic",
+    "ats": "greenhouse",
+    "slug": "sumologic",
+    "verifiedAt": "2026-10-29T11:00:00.000Z"
+  },
+  {
+    "name": "ShyftLabs",
+    "ats": "lever",
+    "slug": "shyftlabs",
+    "verifiedAt": "2026-10-29T11:00:00.000Z"
+  },
+  {
+    "name": "Speechify",
+    "ats": "greenhouse",
+    "slug": "speechify",
+    "verifiedAt": "2026-10-29T11:00:00.000Z"
   }
 ]
 

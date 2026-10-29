@@ -13,9 +13,10 @@ const { normalizeLocation, generateFingerprint } = require('../utils/normalizeLo
  * @param {Object} rawJob - Raw job posting object from Workday CXS
  * @param {string} companyName - Display name of the company
  * @param {string} host - Hostname e.g. "visa.wd5.myworkdayjobs.com"
+ * @param {string} site - Career site identifier e.g. "CorporateCareers"
  * @returns {Object} Normalized job object
  */
-function normalizeWorkdayJob(rawJob, companyName, host) {
+function normalizeWorkdayJob(rawJob, companyName, host, site = '') {
   const sourceJobId = String(
     (rawJob.bulletFields && rawJob.bulletFields[0]) ||
     rawJob.externalPath ||
@@ -27,7 +28,14 @@ function normalizeWorkdayJob(rawJob, companyName, host) {
 
   const isRemote = /remote/i.test(rawLoc) || /remote/i.test(title);
   const isHybrid = /hybrid/i.test(rawLoc) || /hybrid/i.test(title);
-  const applyUrl = `https://${host}${rawJob.externalPath}`;
+
+  // Workday requires /en-US/{site} prefix in external URLs.
+  // Without it, Workday returns 404 (This webpage is not available).
+  let extPath = rawJob.externalPath || '';
+  if (!extPath.startsWith('/')) extPath = `/${extPath}`;
+
+  const siteSegment = site ? `/en-US/${site}` : '';
+  const applyUrl = `https://${host}${siteSegment}${extPath}`;
 
   const locNorm = normalizeLocation(rawLoc, {
     workplaceType: isRemote ? 'remote' : (isHybrid ? 'hybrid' : null),
@@ -138,7 +146,7 @@ async function fetchWorkdayJobs(config, companyName, maxPages = 5) {
       if (postings.length === 0) break;
 
       for (const raw of postings) {
-        allJobs.push(normalizeWorkdayJob(raw, companyName, host));
+        allJobs.push(normalizeWorkdayJob(raw, companyName, host, site));
       }
 
       // If we reached total available, stop paginating

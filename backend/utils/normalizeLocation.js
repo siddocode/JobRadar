@@ -155,7 +155,8 @@ function normalizeLocation(rawLocation, hints = {}) {
     if (/\bindia\b|\bdelhi\b|\bbangalore\b|\bbengaluru\b|\bhyderabad\b|\bpune\b|\bmumbai\b|\bchennai\b|\bkolkata\b|\bnoida\b|\bgurugram\b|\bgurgaon\b/i.test(effectiveRaw) || effectiveRaw.endsWith(', in') || effectiveRaw.endsWith(', in/')) {
       matchedCountry = 'India';
     } else if (/\b(united states|usa|u\.s\.a?|u\.s\b|us remote|america)\b/i.test(effectiveRaw) ||
-               /,\s*(ca|ny|tx|wa|ma|il|co|ga|nc|va|fl|nj|pa|oh|mi|mn|md|az|or|ut|dc|tn|mo|wi|ct|sc|ky|la|al|ia|ks|nv|ok|ne|nm|id|hi|me|nh|ri|vt|de|mt|nd|sd|ak|wv|wy)\b/i.test(effectiveRaw) ||
+               /,\s*(ca|ny|tx|wa|ma|il|co|ga|nc|va|fl|nj|pa|oh|mi|mn|md|az|or|ut|dc|tn|mo|wi|ct|sc|ky|la|al|ia|ks|nv|ok|ne|nm|id|hi|me|nh|ri|vt|de|mt|nd|sd|ak|wv|wy|us)\b/i.test(effectiveRaw) ||
+               /\b(remote\s*-\s*us|remote,\s*us|us\s+remote)\b/i.test(effectiveRaw) ||
                /\b(san francisco|san jose|new york|seattle|austin|sunnyvale|los angeles|chicago|boston|atlanta|denver|mountain view|palo alto|redwood city|santa clara|dallas|houston|pittsburgh|menlo park|cupertino|kirkland|bellevue|boulder|brooklyn|manhattan|raleigh|durham|san diego|philadelphia|detroit|minneapolis|miami|portland|salt lake city|arlington|reston|mclean)\b/i.test(effectiveRaw)) {
       matchedCountry = 'United States';
     } else if (/\b(united kingdom|great britain|england|scotland|wales|london|manchester|birmingham|reading|edinburgh|cambridge|oxford|bristol|glasgow|belfast|cardiff|leeds|sheffield|newcastle|nottingham)\b/i.test(effectiveRaw) || /\b(uk|gbr)\b/i.test(effectiveRaw)) {

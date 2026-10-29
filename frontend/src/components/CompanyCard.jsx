@@ -472,7 +472,7 @@ export default function CompanyCard({ company, onUpdate, onPersonalize }) {
 
           {notes && notes.startsWith('Pitch drafted') && (
             <span className="pitch-drafted-tag" title="Cold outreach pitch drafted">
-              ✨ Pitch drafted
+              Pitch drafted
             </span>
           )}
         </div>

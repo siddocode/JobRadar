@@ -56,6 +56,56 @@ const jobSchema = new mongoose.Schema(
       default: null,
       trim: true
     },
+    techCorridor: {
+      type: String,
+      default: null,
+      trim: true,
+      index: true
+    },
+    locality: {
+      type: String,
+      default: null,
+      trim: true
+    },
+    officeName: {
+      type: String,
+      default: null,
+      trim: true
+    },
+    officeAddress: {
+      type: String,
+      default: null,
+      trim: true
+    },
+    coordinates: {
+      lat: { type: Number, default: null },
+      lng: { type: Number, default: null }
+    },
+    roleFamily: {
+      type: String,
+      default: 'sde_general',
+      trim: true,
+      index: true
+    },
+    seniority: {
+      type: String,
+      enum: ['intern', 'entry', 'mid', 'senior', 'lead_staff', 'manager', 'director_plus'],
+      default: 'mid',
+      index: true
+    },
+    fresherFriendly: {
+      type: Boolean,
+      default: false,
+      index: true
+    },
+    expMin: {
+      type: Number,
+      default: null
+    },
+    expMax: {
+      type: Number,
+      default: null
+    },
     workMode: {
       type: String,
       enum: ['onsite', 'hybrid', 'remote', 'unknown'],
@@ -106,9 +156,13 @@ jobSchema.index({ source: 1, sourceJobId: 1 }, { unique: true });
 jobSchema.index({ status: 1, lastSeenAt: -1 });
 jobSchema.index({ company: 1, status: 1 });
 jobSchema.index({ companyId: 1, status: 1 });
+jobSchema.index({ city: 1, techCorridor: 1, status: 1 });
 jobSchema.index({ city: 1, status: 1 });
 jobSchema.index({ country: 1, status: 1 });
 jobSchema.index({ workMode: 1, status: 1 });
+jobSchema.index({ fresherFriendly: 1, status: 1 });
+jobSchema.index({ seniority: 1, status: 1 });
+jobSchema.index({ roleFamily: 1, status: 1 });
 jobSchema.index({ fingerprint: 1, status: 1 });
 
 module.exports = mongoose.model('Job', jobSchema);

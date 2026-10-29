@@ -35,6 +35,7 @@ const { fetchUniversalJobs } = require('../adapters/universalFeed');
 const { fetchAdzunaJobs } = require('../adapters/adzuna');
 const Job = require('../models/Job');
 const SourceRun = require('../models/SourceRun');
+const { resolveCorridor, classifyRole } = require('../utils/corridorResolver');
 
 /**
  * Connect to MongoDB with timeout settings, retry logic, and CI environment detection.
@@ -203,6 +204,12 @@ async function collectForCompany(company) {
 
       const bulkOps = uniqueJobs.map((job) => {
         activeIds.push(job.sourceJobId);
+        const corridorData = resolveCorridor(job.locationRaw || job.location, {
+          companyName: job.company
+        });
+        const roleData = classifyRole(job.title, job.descriptionHtml || '');
+        const isFresher = roleData.seniority === 'entry' || (roleData.expMin != null && roleData.expMin <= 1);
+
         return {
           updateOne: {
             filter: { source: job.source, sourceJobId: job.sourceJobId },
@@ -212,10 +219,18 @@ async function collectForCompany(company) {
                 title: job.title,
                 location: job.location,
                 locationRaw: job.locationRaw,
-                city: job.city,
-                state: job.state,
-                country: job.country,
-                workMode: job.workMode,
+                city: corridorData.city || job.city,
+                state: corridorData.state || job.state,
+                country: corridorData.country || job.country || 'India',
+                techCorridor: corridorData.techCorridor || null,
+                locality: corridorData.locality || null,
+                coordinates: corridorData.coordinates || null,
+                roleFamily: roleData.roleFamily,
+                seniority: roleData.seniority,
+                fresherFriendly: isFresher,
+                expMin: roleData.expMin,
+                expMax: roleData.expMax,
+                workMode: (job.workMode && job.workMode !== 'unknown') ? job.workMode : corridorData.workMode,
                 fingerprint: job.fingerprint,
                 descriptionHtml: job.descriptionHtml,
                 applyUrl: job.applyUrl,

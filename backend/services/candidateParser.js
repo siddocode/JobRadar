@@ -62,9 +62,11 @@ const EXTENDED_SKILL_KEYWORDS = [
   { name: 'System Design', regex: /\bsystem design|distributed systems|microservices\b/i }
 ];
 
-const INDIAN_LOCATIONS_REGEX = /\b(india|bengaluru|bangalore|hyderabad|noida|gurgaon|gurugram|delhi|new delhi|ncr|pune|mumbai|chennai|kolkata|ahmedabad|kochi|indore|chandigarh|jaipur|trivandrum|thiruvananthapuram|coimbatore|karnataka|telangana|maharashtra|tamil nadu|uttar pradesh|haryana|kerala|gujarat)\b/i;
+const INDIAN_CITIES_REGEX = /\b(bengaluru|bangalore|hyderabad|noida|gurgaon|gurugram|delhi|new delhi|ncr|pune|mumbai|chennai|kolkata|ahmedabad|kochi|indore|chandigarh|jaipur|trivandrum|thiruvananthapuram|coimbatore)\b/i;
+const INDIAN_LOCATIONS_REGEX = /\b(india|karnataka|telangana|maharashtra|tamil nadu|uttar pradesh|haryana|kerala|gujarat)\b/i;
 
-const US_LOCATIONS_REGEX = /\b(united states|usa|\bus\b|california|san francisco|san jose|seattle|austin|texas|new york|boston|chicago|washington|los angeles|colorado|florida)\b/i;
+const US_CITIES_REGEX = /\b(san francisco|san jose|seattle|austin|new york|boston|chicago|los angeles)\b/i;
+const US_LOCATIONS_REGEX = /\b(united states|usa|\bus\b|california|texas|washington|colorado|florida)\b/i;
 
 const OTHER_COUNTRIES = [
   { name: 'United Kingdom', regex: /\b(united kingdom|\buk\b|london|manchester|england|scotland)\b/i },
@@ -267,18 +269,20 @@ function extractCandidateProfile(rawText = '', meta = {}) {
     hasUSWorkAuth = true;
   }
 
-  // Check explicit country markers
-  const indianMatch = text.match(INDIAN_LOCATIONS_REGEX);
-  const usMatch = text.match(US_LOCATIONS_REGEX);
+  // Check explicit country & city markers
+  const indCityMatch = text.match(INDIAN_CITIES_REGEX);
+  const indLocMatch = text.match(INDIAN_LOCATIONS_REGEX);
+  const usCityMatch = text.match(US_CITIES_REGEX);
+  const usLocMatch = text.match(US_LOCATIONS_REGEX);
 
-  if (indianMatch) {
+  if (indCityMatch || indLocMatch) {
     country = 'India';
-    city = capitalize(indianMatch[0]);
+    city = indCityMatch ? capitalize(indCityMatch[0]) : '';
     isIndiaResident = true;
     workAuthNotes = `Candidate based in ${city || 'India'}. Eligible for direct employment in India.`;
-  } else if (usMatch && !indianMatch) {
+  } else if (usCityMatch || usLocMatch) {
     country = 'United States';
-    city = capitalize(usMatch[0]);
+    city = usCityMatch ? capitalize(usCityMatch[0]) : '';
     isIndiaResident = false;
     workAuthNotes = hasUSWorkAuth
       ? 'Located in US with US Work Authorization'
@@ -491,7 +495,7 @@ function extractCandidateProfile(rawText = '', meta = {}) {
   let education = 'B.Tech / B.E. in Computer Science or Equivalent';
   if (/\b(?:ph\.?d|doctorate)\b/i.test(text)) {
     education = 'Ph.D. / Doctorate in Computer Science or quantitative field';
-  } else if (/\b(?:master['’]s|m\.?tech|m\.?s\.?|mca)\b/i.test(text)) {
+  } else if (/\b(?:master['’]s(?:\s+degree)?|m\.?tech|m\.s\b|mca)\b/i.test(text) && !/\b(?:scrum\s*master|master\s*branch|webmaster|ms\s*office|\d+\s*ms)\b/i.test(text)) {
     education = "Master's Degree (M.Tech / M.S. / MCA) in Computer Science";
   } else if (/\b(?:b\.?tech|b\.?e\.?|bachelor of technology|bachelor of engineering)\b/i.test(text)) {
     education = 'B.Tech / B.E. in Computer Science or Information Technology';
@@ -522,7 +526,8 @@ function extractCandidateProfile(rawText = '', meta = {}) {
     skillsCount: candidateSkills.length,
     education,
     textLength: text.length,
-    rawSnippet: text.slice(0, 300).replace(/\s+/g, ' ').trim()
+    rawSnippet: text.slice(0, 300).replace(/\s+/g, ' ').trim(),
+    rawCvText: text
   };
 }
 

@@ -35,6 +35,21 @@ router.post('/sync', jobController.triggerSync);
 // GET /api/jobs/sync/status - Check ongoing sync status
 router.get('/sync/status', jobController.getSyncStatus);
 
+// POST /api/jobs/harvest?city={cityName} - Automated public ATS job harvest for a city
+router.post('/harvest', jobController.harvestJobs);
+
+// GET /api/jobs/harvest/status - Check ongoing automated harvest status
+router.get('/harvest/status', jobController.getHarvestState);
+
+// POST /api/jobs/re-enrich - Re-enrich corridor and metadata on existing jobs
+router.post('/re-enrich', jobController.reEnrichJobs);
+
+// GET /api/jobs/audit-urls - Audit applyUrl patterns across all jobs
+router.get('/audit-urls', jobController.auditUrls);
+
+// POST /api/jobs/fix-urls - Fix broken or guessed applyUrls across all jobs
+router.post('/fix-urls', jobController.fixBrokenUrls);
+
 // GET /api/jobs/:id/eligibility - Analyze job eligibility, freshers suitability, skills & work auth
 router.get('/:id/eligibility', jobController.getJobEligibility);
 

@@ -67,6 +67,47 @@ const companySchema = new mongoose.Schema(
       default: null,
       trim: true
     },
+    officeName: {
+      type: String,
+      default: null,
+      trim: true
+    },
+    locality: {
+      type: String,
+      default: null,
+      trim: true
+    },
+    techCorridor: {
+      type: String,
+      default: null,
+      trim: true
+    },
+    address: {
+      type: String,
+      default: null,
+      trim: true
+    },
+    latitude: {
+      type: Number,
+      default: null
+    },
+    longitude: {
+      type: Number,
+      default: null
+    },
+    logoUrl: {
+      type: String,
+      default: null,
+      trim: true
+    },
+    jobCount: {
+      type: Number,
+      default: 0
+    },
+    fresherCount: {
+      type: Number,
+      default: 0
+    },
     contact: {
       emails: {
         type: [contactItemSchema],
