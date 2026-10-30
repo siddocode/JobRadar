@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { getCompanyOfficeDetails } from '../utils/companyOfficeRegistry';
 
 // Fix Leaflet's default icon path issues in bundlers
 delete L.Icon.Default.prototype._getIconUrl;
@@ -105,21 +106,37 @@ export default function TechCorridorMapView({
     for (const job of corridorJobs) {
       const name = job.company;
       if (!name) continue;
+
       if (!map.has(name)) {
+        const details = getCompanyOfficeDetails(
+          name,
+          job.city || selectedCity || 'Bengaluru',
+          job.coordinates || activeCorridorMeta?.center
+        );
+
+        const hasValidDistinctCoords = job.coordinates?.lat && 
+          job.coordinates?.lng && 
+          !(Math.abs(job.coordinates.lat - 12.9716) < 0.0001 && Math.abs(job.coordinates.lng - 77.5946) < 0.0001);
+
         map.set(name, {
           company: name,
-          officeName: job.officeName || job.locality || activeCorridorMeta?.name || 'Corporate Office',
-          officeAddress: job.officeAddress || `${job.locality || ''}, ${job.city || selectedCity || 'India'}`.replace(/^,\s*/, ''),
-          locality: job.locality || activeCorridorMeta?.shortName || activeCorridorMeta?.name || '',
-          coordinates: job.coordinates || activeCorridorMeta?.center || null,
-          techCorridor: job.techCorridor || activeCorridorKey,
+          officeName: job.officeName || details.officeName,
+          officeAddress: job.officeAddress || details.officeAddress,
+          locality: job.locality || details.locality,
+          coordinates: hasValidDistinctCoords ? job.coordinates : details.coordinates,
+          techCorridor: job.techCorridor || details.techCorridor || activeCorridorKey,
           jobsCount: 1,
           sampleJob: job
         });
       } else {
         const item = map.get(name);
         item.jobsCount += 1;
-        if (!item.coordinates && job.coordinates) item.coordinates = job.coordinates;
+        if (job.coordinates?.lat && job.coordinates?.lng) {
+          const isGeneric = Math.abs(job.coordinates.lat - 12.9716) < 0.0001 && Math.abs(job.coordinates.lng - 77.5946) < 0.0001;
+          if (!isGeneric) {
+            item.coordinates = job.coordinates;
+          }
+        }
         if (!item.officeAddress && job.officeAddress) item.officeAddress = job.officeAddress;
         if (!item.officeName && job.officeName) item.officeName = job.officeName;
       }
@@ -271,24 +288,30 @@ export default function TechCorridorMapView({
     if (!map) return;
 
     const job = sampleJob || companyObj.sampleJob || {};
+    const companyName = companyObj.company || job.company;
+
+    const details = getCompanyOfficeDetails(
+      companyName,
+      job.city || selectedCity || 'Bengaluru',
+      companyObj.coordinates || job.coordinates || activeCorridorMeta?.center
+    );
 
     let targetCoords = companyObj.coordinates;
-    if (!targetCoords || !targetCoords.lat || !targetCoords.lng) {
-      if (job.coordinates?.lat && job.coordinates?.lng) {
+    const isGenericCenter = !targetCoords || !targetCoords.lat || !targetCoords.lng ||
+      (Math.abs(targetCoords.lat - 12.9716) < 0.0001 && Math.abs(targetCoords.lng - 77.5946) < 0.0001);
+
+    if (isGenericCenter) {
+      if (job.coordinates?.lat && !(Math.abs(job.coordinates.lat - 12.9716) < 0.0001 && Math.abs(job.coordinates.lng - 77.5946) < 0.0001)) {
         targetCoords = job.coordinates;
-      } else if (activeCorridorMeta?.center) {
-        targetCoords = activeCorridorMeta.center;
       } else {
-        const cityKey = (job.city || selectedCity || 'all').toLowerCase();
-        targetCoords = CITY_CENTERS[cityKey] || CITY_CENTERS.all;
+        targetCoords = details.coordinates;
       }
     }
 
     if (!targetCoords || !targetCoords.lat || !targetCoords.lng) return;
 
-    const companyName = companyObj.company || job.company;
-    const officeName = companyObj.officeName || job.officeName || job.locality || activeCorridorMeta?.name || 'Regional Office';
-    const address = companyObj.officeAddress || job.officeAddress || `${job.locality || ''}, ${job.city || selectedCity || 'India'}`.replace(/^,\s*/, '');
+    const officeName = companyObj.officeName || job.officeName || details.officeName;
+    const address = companyObj.officeAddress || job.officeAddress || details.officeAddress;
 
     setSelectedOffice({
       company: companyName,
@@ -303,9 +326,12 @@ export default function TechCorridorMapView({
       officeMarkerRef.current = null;
     }
 
-    // Google Maps Direction navigation URL
+    // Google Maps Direction and Search URLs
     const destQuery = encodeURIComponent(`${companyName}, ${officeName}, ${address}`);
     const directionsUrl = `https://www.google.com/maps/dir/?api=1&destination=${destQuery}`;
+    const mapsSearchUrl = targetCoords?.lat && targetCoords?.lng
+      ? `https://www.google.com/maps/search/?api=1&query=${targetCoords.lat},${targetCoords.lng}`
+      : `https://www.google.com/maps/search/?api=1&query=${destQuery}`;
 
     // Custom Glowing Office Beacon Icon
     const officeIcon = L.divIcon({
@@ -346,11 +372,18 @@ export default function TechCorridorMapView({
         </div>
         <p class="popup-address">${address}</p>
         <div class="popup-actions">
+          <a href="${mapsSearchUrl}" target="_blank" rel="noopener noreferrer" class="popup-map-btn">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+              <circle cx="12" cy="10" r="3" />
+            </svg>
+            View on Map
+          </a>
           <a href="${directionsUrl}" target="_blank" rel="noopener noreferrer" class="popup-directions-btn">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <polygon points="3 11 22 2 13 21 11 13 3 11" />
             </svg>
-            Get Directions (Google Maps)
+            Get Directions
           </a>
         </div>
       </div>
@@ -478,6 +511,9 @@ export default function TechCorridorMapView({
               corridorCompanies.map((c) => {
                 const destQuery = encodeURIComponent(`${c.company}, ${c.officeName}, ${c.officeAddress}`);
                 const directionsUrl = `https://www.google.com/maps/dir/?api=1&destination=${destQuery}`;
+                const mapsSearchUrl = c.coordinates?.lat && c.coordinates?.lng
+                  ? `https://www.google.com/maps/search/?api=1&query=${c.coordinates.lat},${c.coordinates.lng}`
+                  : `https://www.google.com/maps/search/?api=1&query=${destQuery}`;
                 const isPinpointed = selectedOffice?.company === c.company;
 
                 return (
@@ -510,15 +546,29 @@ export default function TechCorridorMapView({
                           <circle cx="12" cy="12" r="10" />
                           <polygon points="12 8 8 12 12 16 16 12 12 8" />
                         </svg>
-                        Locate Office
+                        Locate
                       </button>
+
+                      <a
+                        href={mapsSearchUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="map-open-maps-btn"
+                        title="Open exact office in Google Maps"
+                      >
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                          <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+                          <circle cx="12" cy="10" r="3" />
+                        </svg>
+                        Open Map
+                      </a>
 
                       <a
                         href={directionsUrl}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="map-directions-btn"
-                        title="Open Google Maps Route"
+                        title="Open Google Maps Route (see where to go)"
                       >
                         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                           <polygon points="3 11 22 2 13 21 11 13 3 11" />

@@ -37,15 +37,15 @@ async function fetchOverpassWithFallback(query) {
     try {
       console.log(`[Overpass] Querying ${endpoint}...`);
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000);
+      const timeoutId = setTimeout(() => controller.abort(), 28000);
 
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
-          'Content-Type': 'text/plain',
-          'User-Agent': 'JobRadar/1.0 (contact: sid@jobradar.local)'
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'User-Agent': 'JobRadar/2.0 (contact: support@jobradar.local)'
         },
-        body: query,
+        body: 'data=' + encodeURIComponent(query),
         signal: controller.signal
       });
       clearTimeout(timeoutId);
@@ -116,18 +116,23 @@ async function importOsmForCity(citySlug, forceRefresh = false) {
   const cacheFile = path.join(CACHE_DIR, `osm_${city.slug}.json`);
   let elements = [];
 
-  // Check disk cache (max 24 hours TTL)
-  const isCacheValid =
-    !forceRefresh &&
-    fs.existsSync(cacheFile) &&
-    (Date.now() - fs.statSync(cacheFile).mtimeMs < 24 * 60 * 60 * 1000);
+  // Check disk cache (max 24 hours TTL, must have at least 25 elements to be considered a complete scan)
+  let isCacheValid = false;
+  if (!forceRefresh && fs.existsSync(cacheFile) && (Date.now() - fs.statSync(cacheFile).mtimeMs < 24 * 60 * 60 * 1000)) {
+    try {
+      const raw = fs.readFileSync(cacheFile, 'utf8');
+      const cachedData = JSON.parse(raw);
+      if (Array.isArray(cachedData.elements) && cachedData.elements.length >= 25) {
+        isCacheValid = true;
+        elements = cachedData.elements;
+        console.log(`[Cache] Reading ${elements.length} verified cached Overpass results from ${cacheFile}`);
+      } else {
+        console.log(`[Cache] Cache file ${cacheFile} has only ${cachedData.elements?.length || 0} items; bypassing stub cache to run full scan.`);
+      }
+    } catch (_) {}
+  }
 
-  if (isCacheValid) {
-    console.log(`[Cache] Reading cached Overpass results from ${cacheFile}`);
-    const raw = fs.readFileSync(cacheFile, 'utf8');
-    const cachedData = JSON.parse(raw);
-    elements = cachedData.elements || [];
-  } else {
+  if (!isCacheValid) {
     console.log(`[Cache] Cache miss or expired. Querying Overpass API...`);
     const [south, west, north, east] = city.bbox;
     const query = `[out:json][timeout:25];
@@ -168,7 +173,7 @@ out center;`;
       }
     }
 
-    if (elements.length > 0) {
+    if (elements.length >= 20) {
       fs.writeFileSync(cacheFile, JSON.stringify({ elements }, null, 2), 'utf8');
       console.log(`[Cache] Cached ${elements.length} elements to ${cacheFile}`);
     }

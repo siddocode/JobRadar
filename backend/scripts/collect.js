@@ -224,6 +224,8 @@ async function collectForCompany(company) {
                 country: corridorData.country || job.country || 'India',
                 techCorridor: corridorData.techCorridor || null,
                 locality: corridorData.locality || null,
+                officeName: corridorData.officeName || null,
+                officeAddress: corridorData.officeAddress || null,
                 coordinates: corridorData.coordinates || null,
                 roleFamily: roleData.roleFamily,
                 seniority: roleData.seniority,

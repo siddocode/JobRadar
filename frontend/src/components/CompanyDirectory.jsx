@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import CompanyCard from './CompanyCard';
 import PersonalizeModal from './PersonalizeModal';
+import DiscoveredPlacesMap from './DiscoveredPlacesMap';
 import { useAuth } from '../context/AuthContext';
 
 const AVAILABLE_INDIAN_HUBS = [
@@ -68,6 +69,8 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
   const [isScanning, setIsScanning] = useState(false);
   const [scanStatus, setScanStatus] = useState(null);
   const [copiedPreviewId, setCopiedPreviewId] = useState(null);
+  const [selectedPreviewPlace, setSelectedPreviewPlace] = useState(null);
+  const [placesViewMode, setPlacesViewMode] = useState('split'); // 'split' | 'list' | 'map'
 
   const handleCopyPreviewText = (text, id) => {
     if (!text) return;
@@ -667,7 +670,7 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
       {/* Dual-Engine Map-Wise Discovery Modal */}
       {showDiscoveryModal && (
         <div className="modal-backdrop" onClick={() => !isScanning && setShowDiscoveryModal(false)}>
-          <div className="discovery-modal-card" onClick={(e) => e.stopPropagation()}>
+          <div className="discovery-modal-card discovery-scanner-modal-card" onClick={(e) => e.stopPropagation()}>
             <div className="discovery-modal-header">
               <div className="discovery-header-top-row">
                 <div className="discovery-modal-badge">
@@ -700,9 +703,11 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
             </div>
 
             <div className="discovery-modal-body">
-              {/* Engine Switcher Tabs */}
-              <div className="discovery-form-group">
-                <label className="discovery-label">Discovery Engine</label>
+              {/* 2-Column Responsive Config Grid for Discovery Engine & Target City */}
+              <div className="discovery-config-grid">
+                {/* Engine Switcher Tabs */}
+                <div className="discovery-form-group">
+                  <label className="discovery-label">Discovery Engine</label>
                 <div className="engine-tabs">
                   <button
                     type="button"
@@ -802,6 +807,7 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
                   </select>
                 </div>
               </div>
+            </div>
 
               {/* Engine Specific Options */}
               {scannerEngine === 'google_places' ? (
@@ -939,6 +945,48 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
                 </>
               )}
 
+              {/* Initial Ready-to-Scan Radar Briefing Card */}
+              {!isScanning && !scanStatus?.lastSummary && (
+                <div className="discovery-prescan-card">
+                  <div className="prescan-left">
+                    <div className="prescan-hub-badge">
+                      <span className="prescan-pulse-dot" />
+                      <span>
+                        {AVAILABLE_INDIAN_HUBS.find(h => h.slug === discoveryCitySlug)?.tier
+                          ? `Tier ${AVAILABLE_INDIAN_HUBS.find(h => h.slug === discoveryCitySlug)?.tier} Hub`
+                          : 'Tech Hub'}
+                      </span>
+                    </div>
+                    <h4 className="prescan-title">
+                      Ready to scan {AVAILABLE_INDIAN_HUBS.find(h => h.slug === discoveryCitySlug)?.name || discoveryCitySlug}
+                    </h4>
+                    <p className="prescan-desc">
+                      {scannerEngine === 'google_places'
+                        ? `Radar will query Google Places across a ${scanRadius / 1000} km radius from ${AVAILABLE_INDIAN_HUBS.find(h => h.slug === discoveryCitySlug)?.name || discoveryCitySlug}'s IT corridors. Discovered companies and physical office coordinates will appear side-by-side on an interactive map preview.`
+                        : `Overpass API will extract physical IT campuses, registered tech offices & software co-working spaces directly from OpenStreetMap.`}
+                    </p>
+                  </div>
+                  <div className="prescan-metrics-col">
+                    <div className="prescan-metric-item">
+                      <span className="prescan-metric-val">
+                        {cities.find(c => c.slug === discoveryCitySlug)?.officeCount || 0}
+                      </span>
+                      <span className="prescan-metric-lbl">Offices in DB</span>
+                    </div>
+                    <div className="prescan-metric-item">
+                      <span className="prescan-metric-val">
+                        {scannerEngine === 'google_places' ? `${scanRadius / 1000} km` : 'Full Hub'}
+                      </span>
+                      <span className="prescan-metric-lbl">Radar Radius</span>
+                    </div>
+                    <div className="prescan-metric-item">
+                      <span className="prescan-metric-val">Live Map</span>
+                      <span className="prescan-metric-lbl">Interactive Pinpoint</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Progress State */}
               {isScanning && (
                 <div className="discovery-scanning-box">
@@ -1000,202 +1048,271 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
                     </div>
                   </div>
 
-                  {/* Discovered Places Preview List */}
+                  {/* Discovered Places Preview List & Interactive Map View */}
                   {Array.isArray(scanStatus?.discoveredPreview) && scanStatus.discoveredPreview.length > 0 && (
-                    <div className="places-preview-container">
+                    <div className={`places-preview-container mode-${placesViewMode}`}>
                       <div className="places-preview-header">
                         <div className="places-preview-title-wrap">
                           <span className="places-preview-title">Discovered Places Preview</span>
                           <span className="places-preview-badge">{scanStatus.discoveredPreview.length} places</span>
                         </div>
-                        <span className="places-preview-hint">Click phone or website to copy instantly</span>
+
+                        {/* Interactive View Switcher: Split vs List vs Map */}
+                        <div className="scanner-view-toggle">
+                          <button
+                            type="button"
+                            className={`scanner-toggle-btn ${placesViewMode === 'split' ? 'active' : ''}`}
+                            onClick={() => setPlacesViewMode('split')}
+                            title="Split View: Places list and interactive map side-by-side"
+                          >
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <rect x="3" y="3" width="8" height="18" rx="1" />
+                              <rect x="13" y="3" width="8" height="18" rx="1" />
+                            </svg>
+                            <span>Split</span>
+                          </button>
+                          <button
+                            type="button"
+                            className={`scanner-toggle-btn ${placesViewMode === 'list' ? 'active' : ''}`}
+                            onClick={() => setPlacesViewMode('list')}
+                            title="Places list only"
+                          >
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <line x1="8" y1="6" x2="21" y2="6" />
+                              <line x1="8" y1="12" x2="21" y2="12" />
+                              <line x1="8" y1="18" x2="21" y2="18" />
+                              <line x1="3" y1="6" x2="3.01" y2="6" />
+                              <line x1="3" y1="12" x2="3.01" y2="12" />
+                              <line x1="3" y1="18" x2="3.01" y2="18" />
+                            </svg>
+                            <span>List</span>
+                          </button>
+                          <button
+                            type="button"
+                            className={`scanner-toggle-btn ${placesViewMode === 'map' ? 'active' : ''}`}
+                            onClick={() => setPlacesViewMode('map')}
+                            title="Full Interactive Map view only"
+                          >
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6" />
+                              <line x1="8" y1="2" x2="8" y2="18" />
+                              <line x1="16" y1="6" x2="16" y2="22" />
+                            </svg>
+                            <span>Map</span>
+                          </button>
+                        </div>
                       </div>
-                      <div className="places-preview-scroll">
-                        {scanStatus.discoveredPreview.map((place, idx) => {
-                          const cleanPhone = cleanPhoneDisplay(place.phone);
-                          const telPhone = cleanPhoneForTel(place.phone);
-                          return (
-                            <div key={idx} className="place-preview-card">
-                              <div className="place-card-top-row">
-                                <h5 className="place-card-name" title={place.name}>
-                                  {place.name}
-                                </h5>
-                                {place.rating && (
-                                  <div className="place-card-rating" title={`Google rating: ${place.rating} (${place.reviewsCount || 0} reviews)`}>
-                                    <span className="rating-num">Rating: {place.rating}</span>
-                                    {place.reviewsCount ? <span className="rating-count">({place.reviewsCount})</span> : null}
+
+                      <div className="places-preview-body-layout">
+                        {/* Scrollable Places Cards Panel */}
+                        {placesViewMode !== 'map' && (
+                          <div className={`places-preview-scroll ${placesViewMode === 'split' ? 'is-split' : 'is-full'}`}>
+                            {scanStatus.discoveredPreview.map((place, idx) => {
+                              const cleanPhone = cleanPhoneDisplay(place.phone);
+                              const telPhone = cleanPhoneForTel(place.phone);
+                              const isPinpointed = selectedPreviewPlace?.name === place.name;
+
+                              const placeDirectionsUrl = (place.lat != null && place.lng != null)
+                                ? `https://www.google.com/maps/dir/?api=1&destination=${place.lat},${place.lng}`
+                                : `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(`${place.name}, ${place.address || place.locality || ''}`)}`;
+
+                              return (
+                                <div key={idx} className={`place-preview-card ${isPinpointed ? 'is-pinpointed' : ''}`}>
+                                  <div className="place-card-top-row">
+                                    <h5
+                                      className="place-card-name clickable-name"
+                                      title="Click to pinpoint on interactive map"
+                                      onClick={() => {
+                                        setSelectedPreviewPlace(place);
+                                        if (placesViewMode === 'list') setPlacesViewMode('split');
+                                      }}
+                                    >
+                                      {place.name}
+                                    </h5>
+                                    {place.rating && (
+                                      <div className="place-card-rating" title={`Google rating: ${place.rating} (${place.reviewsCount || 0} reviews)`}>
+                                        <span className="rating-num">Rating: {place.rating}</span>
+                                        {place.reviewsCount ? <span className="rating-count">({place.reviewsCount})</span> : null}
+                                      </div>
+                                    )}
                                   </div>
-                                )}
-                              </div>
 
-                              <div style={{ display: 'flex', gap: '6px', margin: '4px 0 6px 0', flexWrap: 'wrap' }}>
-                                {place.category && (
-                                  <span style={{ fontSize: '11px', padding: '1px 7px', borderRadius: '10px', background: 'rgba(59, 130, 246, 0.1)', color: 'var(--primary)', fontWeight: 600 }}>
-                                    {place.category}
-                                  </span>
-                                )}
-                                {place.isTech && (
-                                  <span style={{ fontSize: '11px', padding: '1px 7px', borderRadius: '10px', background: 'rgba(16, 185, 129, 0.12)', color: '#059669', fontWeight: 600 }}>
-                                    Verified Tech
-                                  </span>
-                                )}
-                              </div>
+                                  <div style={{ display: 'flex', gap: '6px', margin: '4px 0 6px 0', flexWrap: 'wrap' }}>
+                                    {place.category && (
+                                      <span style={{ fontSize: '11px', padding: '1px 7px', borderRadius: '10px', background: 'rgba(59, 130, 246, 0.1)', color: 'var(--primary)', fontWeight: 600 }}>
+                                        {place.category}
+                                      </span>
+                                    )}
+                                    {place.isTech && (
+                                      <span style={{ fontSize: '11px', padding: '1px 7px', borderRadius: '10px', background: 'rgba(16, 185, 129, 0.12)', color: '#059669', fontWeight: 600 }}>
+                                        Verified Tech
+                                      </span>
+                                    )}
+                                  </div>
 
-                              {place.address && (
-                                <div className="place-card-address" title={place.address}>
-                                  <svg className="place-pin-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
-                                    <circle cx="12" cy="10" r="3" />
-                                  </svg>
-                                  <span className="address-text">{place.address}</span>
-                                </div>
-                              )}
+                                  {place.address && (
+                                    <div
+                                      className="place-card-address clickable-address"
+                                      title="Click to view and pinpoint on interactive map right here"
+                                      onClick={() => {
+                                        setSelectedPreviewPlace(place);
+                                        if (placesViewMode === 'list') setPlacesViewMode('split');
+                                      }}
+                                    >
+                                      <svg className="place-pin-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+                                        <circle cx="12" cy="10" r="3" />
+                                      </svg>
+                                      <span className="address-text">{place.address}</span>
+                                    </div>
+                                  )}
 
-                              <div className="place-card-actions">
-                                {cleanPhone && (
-                                  <div className="place-action-pill phone-action-pill" title={cleanPhone}>
-                                    <svg className="action-pill-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                                      <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z" />
-                                    </svg>
-                                    <a href={`tel:${telPhone}`} className="action-pill-link">
-                                      {cleanPhone}
-                                    </a>
+                                  <div className="place-card-actions">
+                                    {cleanPhone && (
+                                      <div className="place-action-pill phone-action-pill" title={cleanPhone}>
+                                        <svg className="action-pill-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                                          <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z" />
+                                        </svg>
+                                        <a href={`tel:${telPhone}`} className="action-pill-link">
+                                          {cleanPhone}
+                                        </a>
+                                        <button
+                                          type="button"
+                                          className={`pill-copy-icon-btn ${copiedPreviewId === `ph-${idx}` ? 'is-copied' : ''}`}
+                                          onClick={() => handleCopyPreviewText(cleanPhone, `ph-${idx}`)}
+                                          title={copiedPreviewId === `ph-${idx}` ? 'Copied phone!' : 'Copy phone'}
+                                          aria-label="Copy phone"
+                                        >
+                                          {copiedPreviewId === `ph-${idx}` ? (
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                              <polyline points="20 6 9 17 4 12" />
+                                            </svg>
+                                          ) : (
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                              <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                                              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                                            </svg>
+                                          )}
+                                        </button>
+                                      </div>
+                                    )}
+
+                                    {place.website && (
+                                      <div className="place-action-pill web-action-pill">
+                                        <svg className="action-pill-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                                          <circle cx="12" cy="12" r="10" />
+                                          <line x1="2" y1="12" x2="22" y2="12" />
+                                          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                                        </svg>
+                                        <a
+                                          href={ensureHttp(place.website)}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="action-pill-link"
+                                          title={`Visit ${place.website}`}
+                                        >
+                                          {formatDomain(place.website)}
+                                        </a>
+                                        <button
+                                          type="button"
+                                          className={`pill-copy-icon-btn ${copiedPreviewId === `web-${idx}` ? 'is-copied' : ''}`}
+                                          onClick={() => handleCopyPreviewText(ensureHttp(place.website), `web-${idx}`)}
+                                          title={copiedPreviewId === `web-${idx}` ? 'Copied website!' : 'Copy website'}
+                                          aria-label="Copy website"
+                                        >
+                                          {copiedPreviewId === `web-${idx}` ? (
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                              <polyline points="20 6 9 17 4 12" />
+                                            </svg>
+                                          ) : (
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                              <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                                              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                                            </svg>
+                                          )}
+                                        </button>
+                                      </div>
+                                    )}
+
+                                    {/* View Map: Opens interactive map right here in-place */}
                                     <button
                                       type="button"
-                                      className={`pill-copy-icon-btn ${copiedPreviewId === `ph-${idx}` ? 'is-copied' : ''}`}
-                                      onClick={() => handleCopyPreviewText(cleanPhone, `ph-${idx}`)}
-                                      title={copiedPreviewId === `ph-${idx}` ? 'Copied phone!' : 'Copy phone'}
-                                      aria-label="Copy phone"
+                                      className={`place-action-pill map-action-pill ${isPinpointed ? 'is-selected' : ''}`}
+                                      onClick={() => {
+                                        setSelectedPreviewPlace(place);
+                                        if (placesViewMode === 'list') setPlacesViewMode('split');
+                                      }}
+                                      title="Open map right here and pinpoint this office"
                                     >
-                                      {copiedPreviewId === `ph-${idx}` ? (
-                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                          <polyline points="20 6 9 17 4 12" />
-                                        </svg>
-                                      ) : (
-                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                          <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                                          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                                        </svg>
-                                      )}
+                                      <svg className="action-pill-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+                                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+                                        <circle cx="12" cy="10" r="3" />
+                                      </svg>
+                                      <span className="action-pill-link">View Map</span>
                                     </button>
-                                  </div>
-                                )}
 
-                                {place.website && (
-                                  <div className="place-action-pill web-action-pill">
-                                    <svg className="action-pill-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                                      <circle cx="12" cy="12" r="10" />
-                                      <line x1="2" y1="12" x2="22" y2="12" />
-                                      <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-                                    </svg>
+                                    {/* Directions: Redirects to Google Maps navigation route */}
                                     <a
-                                      href={ensureHttp(place.website)}
+                                      href={placeDirectionsUrl}
                                       target="_blank"
                                       rel="noopener noreferrer"
-                                      className="action-pill-link"
-                                      title={`Visit ${place.website}`}
+                                      className="place-action-pill directions-action-pill"
+                                      title="Redirect to Google Maps for turn-by-turn route navigation"
                                     >
-                                      {formatDomain(place.website)}
+                                      <svg className="action-pill-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+                                        <polygon points="3 11 22 2 13 21 11 13 3 11" />
+                                      </svg>
+                                      <span className="action-pill-link">Directions</span>
                                     </a>
-                                    <button
-                                      type="button"
-                                      className={`pill-copy-icon-btn ${copiedPreviewId === `web-${idx}` ? 'is-copied' : ''}`}
-                                      onClick={() => handleCopyPreviewText(ensureHttp(place.website), `web-${idx}`)}
-                                      title={copiedPreviewId === `web-${idx}` ? 'Copied website!' : 'Copy website'}
-                                      aria-label="Copy website"
-                                    >
-                                      {copiedPreviewId === `web-${idx}` ? (
-                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                          <polyline points="20 6 9 17 4 12" />
-                                        </svg>
-                                      ) : (
-                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                          <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                                          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                                        </svg>
-                                      )}
-                                    </button>
-                                  </div>
-                                )}
 
-                                {place.email && (
-                                  <div className="place-action-pill email-action-pill" title={place.email}>
-                                    <svg className="action-pill-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                                      <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
-                                      <polyline points="22,6 12,13 2,6" />
-                                    </svg>
-                                    <a href={`mailto:${place.email}`} className="action-pill-link">
-                                      {place.email}
+                                    <a
+                                      href={place.searchUrl || `https://www.google.com/search?q=${encodeURIComponent(place.name + ' ' + (place.locality || selectedCity?.name || 'India') + ' contact phone website official')}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="place-action-pill search-action-pill"
+                                      title="Search Google for verified office website and contact phone"
+                                    >
+                                      <svg className="action-pill-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                                        <circle cx="11" cy="11" r="8" />
+                                        <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                                      </svg>
+                                      <span className="action-pill-link">Search Info</span>
                                     </a>
-                                    <button
-                                      type="button"
-                                      className={`pill-copy-icon-btn ${copiedPreviewId === `em-${idx}` ? 'is-copied' : ''}`}
-                                      onClick={() => handleCopyPreviewText(place.email, `em-${idx}`)}
-                                      title={copiedPreviewId === `em-${idx}` ? 'Copied email!' : 'Copy email'}
-                                      aria-label="Copy email"
+
+                                    <a
+                                      href={place.linkedinUrl || `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(place.name + ' hr recruiter talent acquisition')}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="place-action-pill linkedin-action-pill"
+                                      title="Find talent acquisition and HR recruiters at this company on LinkedIn"
                                     >
-                                      {copiedPreviewId === `em-${idx}` ? (
-                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                          <polyline points="20 6 9 17 4 12" />
-                                        </svg>
-                                      ) : (
-                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                          <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                                          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                                        </svg>
-                                      )}
-                                    </button>
+                                      <svg className="action-pill-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                                        <path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z" />
+                                        <rect x="2" y="9" width="4" height="12" />
+                                        <circle cx="4" cy="4" r="2" />
+                                      </svg>
+                                      <span className="action-pill-link">Find HR</span>
+                                    </a>
                                   </div>
-                                )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
 
-                                {(place.mapsUrl || (place.lat != null && place.lng != null)) && (
-                                  <a
-                                    href={place.mapsUrl || `https://www.google.com/maps/search/?api=1&query=${place.lat},${place.lng}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="place-action-pill map-action-pill"
-                                    title="View exact building location on Google Maps"
-                                  >
-                                    <svg className="action-pill-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                                      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
-                                      <circle cx="12" cy="10" r="3" />
-                                    </svg>
-                                    <span className="action-pill-link">Map Pin</span>
-                                  </a>
-                                )}
-
-                                <a
-                                  href={place.searchUrl || `https://www.google.com/search?q=${encodeURIComponent(place.name + ' ' + (place.locality || selectedCity?.name || 'India') + ' contact phone website official')}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="place-action-pill search-action-pill"
-                                  title="Search Google for verified office website and contact phone"
-                                >
-                                  <svg className="action-pill-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                                    <circle cx="11" cy="11" r="8" />
-                                    <line x1="21" y1="21" x2="16.65" y2="16.65" />
-                                  </svg>
-                                  <span className="action-pill-link">Search Info</span>
-                                </a>
-
-                                <a
-                                  href={place.linkedinUrl || `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(place.name + ' hr recruiter talent acquisition')}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="place-action-pill linkedin-action-pill"
-                                  title="Find talent acquisition and HR recruiters at this company on LinkedIn"
-                                >
-                                  <svg className="action-pill-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                                    <path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z" />
-                                    <rect x="2" y="9" width="4" height="12" />
-                                    <circle cx="4" cy="4" r="2" />
-                                  </svg>
-                                  <span className="action-pill-link">Find HR on LinkedIn</span>
-                                </a>
-                              </div>
-                            </div>
-                          );
-                        })}
+                        {/* Right Side: Interactive Leaflet Map right inside the modal */}
+                        {placesViewMode !== 'list' && (
+                          <div className={`places-map-pane ${placesViewMode === 'map' ? 'is-full' : 'is-split'}`}>
+                            <DiscoveredPlacesMap
+                              places={scanStatus.discoveredPreview}
+                              selectedPlace={selectedPreviewPlace}
+                              onSelectPlace={(place) => setSelectedPreviewPlace(place)}
+                              cityName={scanStatus.lastSummary?.city || discoveryCitySlug}
+                              citySlug={discoveryCitySlug}
+                              centerCoords={scanStatus.lastSummary?.center}
+                            />
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
@@ -1267,7 +1384,7 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
       {/* Add Company Modal */}
       {showAddModal && (
         <div className="modal-backdrop" onClick={() => !isAddingCompany && setShowAddModal(false)}>
-          <div className="discovery-modal-card" onClick={(e) => e.stopPropagation()}>
+          <div className="discovery-modal-card add-company-modal-card" onClick={(e) => e.stopPropagation()}>
             <div className="discovery-modal-header">
               <div className="discovery-modal-title-group">
                 <div className="discovery-modal-badge">Manual & Google Import</div>

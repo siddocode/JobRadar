@@ -1092,12 +1092,18 @@ async function reEnrichJobs(req, res) {
       }
     }
 
-    // 3. Normal corridor re-enrichment for jobs with missing techCorridor
-    const query = { techCorridor: null };
+    // 3. Normal corridor & office re-enrichment for jobs with missing techCorridor or officeName
+    const query = {};
     if (req.query.city) {
       query.city = new RegExp(`^${req.query.city}$`, 'i');
     }
-    const jobs = await Job.find(query).limit(500).lean();
+    if (req.query.company) {
+      query.company = new RegExp(`^${req.query.company}$`, 'i');
+    }
+    query.$or = [{ officeName: null }, { techCorridor: null }, { 'coordinates.lat': 12.9716 }];
+
+    const limit = parseInt(req.query.limit, 10) || 5000;
+    const jobs = await Job.find(query).limit(limit).lean();
     let updated = 0;
     const bulkOps = [];
 
@@ -1105,16 +1111,19 @@ async function reEnrichJobs(req, res) {
       const locData = resolveCorridor(job.locationRaw || job.location, {
         localityHint: job.locality,
         officeAddress: job.officeAddress,
-        companyName: job.company
+        companyName: job.company,
+        title: job.title
       });
-      if (locData.techCorridor) {
+      if (locData.techCorridor || locData.officeName || locData.coordinates) {
         bulkOps.push({
           updateOne: {
             filter: { _id: job._id },
             update: {
               $set: {
-                techCorridor: locData.techCorridor,
+                techCorridor: locData.techCorridor || job.techCorridor,
                 locality: locData.locality || job.locality,
+                officeName: locData.officeName || job.officeName,
+                officeAddress: locData.officeAddress || job.officeAddress,
                 coordinates: locData.coordinates || job.coordinates
               }
             }

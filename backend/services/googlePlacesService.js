@@ -61,19 +61,35 @@ async function getUniqueSlug(baseName) {
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 /**
- * Fetch Google Places with API Key
+ * Fetch Google Places with API Key (supports next_page_token pagination up to 3 pages)
  */
 async function fetchGooglePlacesApi(query, lat, lng, radius, apiKey) {
-  const url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(query)}&location=${lat},${lng}&radius=${radius}&key=${apiKey}`;
-  const res = await fetch(url);
-  if (!res.ok) {
-    throw new Error(`Google Places API returned HTTP ${res.status}: ${res.statusText}`);
+  const allResults = [];
+  let pageToken = null;
+  let pageCount = 0;
+
+  try {
+    do {
+      let url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(query)}&location=${lat},${lng}&radius=${radius}&key=${apiKey}`;
+      if (pageToken) {
+        url += `&pagetoken=${pageToken}`;
+        await sleep(2000); // Google requires delay before next_page_token activates
+      }
+      const res = await fetch(url);
+      if (!res.ok) break;
+      const json = await res.json();
+      if (json.status !== 'OK' && json.status !== 'ZERO_RESULTS') break;
+      if (Array.isArray(json.results)) {
+        allResults.push(...json.results);
+      }
+      pageToken = json.next_page_token || null;
+      pageCount++;
+    } while (pageToken && pageCount < 3);
+  } catch (err) {
+    console.warn(`[GooglePlaces] Error fetching Places for query "${query}":`, err.message);
   }
-  const json = await res.json();
-  if (json.status !== 'OK' && json.status !== 'ZERO_RESULTS') {
-    throw new Error(`Google Places API error status "${json.status}": ${json.error_message || 'Unknown error'}`);
-  }
-  return json.results || [];
+
+  return allResults;
 }
 
 /**
@@ -101,11 +117,12 @@ async function fetchFallbackPlaces(city) {
   const cacheFile = path.join(__dirname, '../data/cache', `osm_${city.slug}.json`);
   let elements = [];
 
+  // Check cache: must have at least 25 elements to be considered a complete scan
   if (fs.existsSync(cacheFile)) {
     try {
       const raw = fs.readFileSync(cacheFile, 'utf8');
       const cached = JSON.parse(raw);
-      if (cached && Array.isArray(cached.elements) && cached.elements.length > 0) {
+      if (cached && Array.isArray(cached.elements) && cached.elements.length >= 25) {
         // Strict filter: Exclude all government, educational boards, municipal, or non-tech offices
         elements = cached.elements.filter(el => {
           const tags = el.tags || {};
@@ -116,7 +133,13 @@ async function fetchFallbackPlaces(city) {
             tags
           });
         });
-        console.log(`[GooglePlaces Fallback] Loaded ${elements.length} verified non-gov entities from cache (${cacheFile})`);
+        if (elements.length >= 20) {
+          console.log(`[GooglePlaces Fallback] Loaded ${elements.length} verified non-gov entities from valid cache (${cacheFile})`);
+        } else {
+          elements = []; // Stale or filtered too low, re-query live Overpass
+        }
+      } else {
+        console.log(`[GooglePlaces Fallback] Cache file ${cacheFile} has only ${cached?.elements?.length || 0} items; bypassing stub to query live.`);
       }
     } catch (e) {
       console.warn(`[GooglePlaces Fallback] Could not read cache:`, e.message);
@@ -127,39 +150,43 @@ async function fetchFallbackPlaces(city) {
     const [south, west, north, east] = city.bbox;
     const OVERPASS_ENDPOINTS = [
       'https://overpass-api.de/api/interpreter',
-      'https://overpass.kumi.systems/api/interpreter',
-      'https://lz4.overpass-api.de/api/interpreter'
+      'https://lz4.overpass-api.de/api/interpreter',
+      'https://z.overpass-api.de/api/interpreter',
+      'https://overpass.kumi.systems/api/interpreter'
     ];
 
     // Fast, structured query targeting real tech offices & coworking spaces
-    const query = `[out:json][timeout:15];
+    const query = `[out:json][timeout:25];
 (
   node["office"~"it|software|telecommunication|coworking|research|company|consulting"](${south},${west},${north},${east});
   way["office"~"it|software|telecommunication|coworking|research|company|consulting"](${south},${west},${north},${east});
   node["amenity"="coworking_space"](${south},${west},${north},${east});
   way["amenity"="coworking_space"](${south},${west},${north},${east});
-  node["office"]["name"~"Software|Tech|Technologies|Solutions|Infotech|Labs|Digital|Consultancy|Cloud|Systems|AI|Analytics",i](${south},${west},${north},${east});
-  way["office"]["name"~"Software|Tech|Technologies|Solutions|Infotech|Labs|Digital|Consultancy|Cloud|Systems|AI|Analytics",i](${south},${west},${north},${east});
-  node["building"="office"]["name"~"Software|Tech|Technologies|Solutions|Infotech|Labs|Digital|Consultancy|Cloud|Systems|AI|Analytics",i](${south},${west},${north},${east});
-  way["building"="office"]["name"~"Software|Tech|Technologies|Solutions|Infotech|Labs|Digital|Consultancy|Cloud|Systems|AI|Analytics",i](${south},${west},${north},${east});
+  node["office"]["name"~"Software|Tech|Technologies|Solutions|Infotech|Labs|Digital|Consultancy|Cloud|Systems|AI|Analytics|Data",i](${south},${west},${north},${east});
+  way["office"]["name"~"Software|Tech|Technologies|Solutions|Infotech|Labs|Digital|Consultancy|Cloud|Systems|AI|Analytics|Data",i](${south},${west},${north},${east});
+  node["building"="office"]["name"~"Software|Tech|Technologies|Solutions|Infotech|Labs|Digital|Consultancy|Cloud|Systems|AI|Analytics|Data",i](${south},${west},${north},${east});
+  way["building"="office"]["name"~"Software|Tech|Technologies|Solutions|Infotech|Labs|Digital|Consultancy|Cloud|Systems|AI|Analytics|Data",i](${south},${west},${north},${east});
 );
 out center;`;
 
     for (const endpoint of OVERPASS_ENDPOINTS) {
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 6000);
+        const timeoutId = setTimeout(() => controller.abort(), 28000);
         const response = await fetch(endpoint, {
           method: 'POST',
-          headers: { 'Content-Type': 'text/plain', 'User-Agent': 'JobRadar/1.0 (contact: sid@jobradar.local)' },
-          body: query,
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'User-Agent': 'JobRadar/2.0 (contact: support@jobradar.local)'
+          },
+          body: 'data=' + encodeURIComponent(query),
           signal: controller.signal
         });
         clearTimeout(timeoutId);
         if (response.ok) {
           const json = await response.json();
           if (json && Array.isArray(json.elements) && json.elements.length > 0) {
-            elements = json.elements.filter(el => {
+            const verified = json.elements.filter(el => {
               const tags = el.tags || {};
               if (!tags.name) return false;
               return !isGovernmentOrNonTechEntity({
@@ -168,10 +195,14 @@ out center;`;
                 tags
               });
             });
-            try {
-              fs.writeFileSync(cacheFile, JSON.stringify({ elements }, null, 2), 'utf8');
-            } catch (_) {}
-            break;
+            if (verified.length >= 10) {
+              elements = verified;
+              try {
+                fs.writeFileSync(cacheFile, JSON.stringify({ elements: json.elements }, null, 2), 'utf8');
+                console.log(`[GooglePlaces Fallback] Cached ${json.elements.length} raw Overpass elements (${verified.length} verified) to ${cacheFile}`);
+              } catch (_) {}
+              break;
+            }
           }
         }
       } catch (err) {
@@ -200,7 +231,9 @@ out center;`;
             office: 'it'
           }
         }));
-        fs.writeFileSync(cacheFile, JSON.stringify({ elements: seedElements }, null, 2), 'utf8');
+        if (seedElements.length >= 25) {
+          fs.writeFileSync(cacheFile, JSON.stringify({ elements: seedElements }, null, 2), 'utf8');
+        }
       } catch (_) {}
 
       return seeds.map(s => ({
@@ -297,6 +330,135 @@ out center;`;
 }
 
 /**
+ * Get corridor-targeted search queries for Google Places discovery
+ */
+function getCityCorridorQueries(citySlug, cityName) {
+  const map = {
+    hyderabad: [
+      `software companies in HITEC City Hyderabad`,
+      `IT companies in Gachibowli Hyderabad`,
+      `software company in Madhapur Hyderabad`,
+      `IT companies in Financial District Nanakramguda Hyderabad`,
+      `tech startups in Kondapur Hyderabad`,
+      `software companies in Raidurg Knowledge City Hyderabad`,
+      `IT company in Begumpet Hyderabad`,
+      `software companies in Uppal IT Park Hyderabad`
+    ],
+    bengaluru: [
+      `software companies in Electronic City Bengaluru`,
+      `software companies in Whitefield Bengaluru`,
+      `IT companies in Outer Ring Road Bellandur Bengaluru`,
+      `tech startups in Koramangala Bengaluru`,
+      `software companies in HSR Layout Bengaluru`,
+      `IT companies in Manyata Tech Park Bengaluru`,
+      `software companies in Indiranagar Bengaluru`
+    ],
+    pune: [
+      `software companies in Hinjawadi IT Park Pune`,
+      `IT companies in Magarpatta City Pune`,
+      `software companies in EON Free Zone Kharadi Pune`,
+      `IT companies in Viman Nagar Pune`,
+      `software companies in Baner Pune`,
+      `tech startups in Senapati Bapat Road Pune`
+    ],
+    gurgaon: [
+      `software companies in DLF Cyber City Gurugram`,
+      `IT companies in Udyog Vihar Gurugram`,
+      `software companies in Golf Course Road Gurugram`,
+      `tech startups in Sector 44 Gurugram`,
+      `IT companies in Sohna Road Gurugram`
+    ],
+    noida: [
+      `software companies in Sector 62 Noida`,
+      `IT companies in Sector 125 Noida Expressway`,
+      `software companies in Sector 16 Film City Noida`,
+      `IT companies in Sector 135 Noida`,
+      `tech startups in Noida Sector 63`
+    ],
+    'delhi-ncr': [
+      `software companies in Okhla Phase 3 Delhi`,
+      `tech startups in Connaught Place Delhi`,
+      `IT companies in Nehru Place Delhi`,
+      `software companies in Mohan Cooperative Industrial Estate Delhi`
+    ],
+    mumbai: [
+      `software companies in Powai Mumbai`,
+      `IT companies in Mindspace Airoli Navi Mumbai`,
+      `software companies in SEEPZ Andheri East Mumbai`,
+      `IT companies in Bandra Kurla Complex BKC Mumbai`,
+      `tech startups in Goregaon West Mumbai`,
+      `IT companies in Millennium Business Park Mahape Navi Mumbai`
+    ],
+    chennai: [
+      `software companies in OMR Sholinganallur Chennai`,
+      `IT companies in TIDEL Park Taramani Chennai`,
+      `software companies in Siruseri SIPCOT IT Park Chennai`,
+      `IT companies in Guindy Olympia Tech Park Chennai`,
+      `software companies in Global Infocity Perungudi Chennai`,
+      `IT companies in DLF Cybercity Porur Chennai`
+    ],
+    kolkata: [
+      `software companies in Salt Lake Sector 5 Kolkata`,
+      `IT companies in New Town Rajarhat Kolkata`,
+      `software companies in DLF IT Park New Town Kolkata`,
+      `tech startups in Sector V Bidhannagar Kolkata`,
+      `IT companies in Electronics Complex Salt Lake Kolkata`
+    ],
+    chandigarh: [
+      `software companies in Rajiv Gandhi IT Park Chandigarh`,
+      `IT companies in Phase 8 Mohali IT Corridor`,
+      `software companies in Industrial Area Phase 1 Chandigarh`,
+      `tech startups in Chandigarh Mohali`
+    ],
+    ahmedabad: [
+      `software companies in SG Highway Ahmedabad`,
+      `IT companies in GIFT City Gandhinagar`,
+      `software companies in Prahlad Nagar Ahmedabad`,
+      `tech startups in Science City Ahmedabad`
+    ],
+    kochi: [
+      `software companies in Infopark Kakkanad Kochi`,
+      `IT companies in SmartCity Kochi`,
+      `tech startups in Kinfra Hi-Tech Park Kochi`
+    ],
+    jaipur: [
+      `software companies in Mahindra World City SEZ Jaipur`,
+      `IT companies in Sitapura Industrial Area Jaipur`,
+      `software companies in Malviya Nagar Jaipur`
+    ],
+    indore: [
+      `software companies in Crystal IT Park Indore`,
+      `IT companies in Super Corridor Indore`,
+      `tech startups in Vijay Nagar Indore`
+    ],
+    coimbatore: [
+      `software companies in TIDEL Park Coimbatore`,
+      `IT companies in CHIL SEZ Saravanampatti Coimbatore`
+    ],
+    thiruvananthapuram: [
+      `software companies in Technopark Phase 1 Thiruvananthapuram`,
+      `IT companies in Technopark Phase 3 Trivandrum`
+    ],
+    bhubaneswar: [
+      `software companies in Infocity Chandrasekharpur Bhubaneswar`,
+      `IT companies in Infovalley Bhubaneswar`
+    ],
+    lucknow: [
+      `software companies in Vibhuti Khand Gomti Nagar Lucknow`,
+      `IT companies in HCL IT City Lucknow`
+    ]
+  };
+
+  return map[citySlug] || [
+    `software companies in ${cityName}`,
+    `IT services consultancy in ${cityName}`,
+    `web development company in ${cityName}`,
+    `tech startups in ${cityName}`,
+    `technology park in ${cityName}`
+  ];
+}
+
+/**
  * Scan Google Places map-wise for a target city
  */
 async function scanGooglePlacesCity({ citySlug, customApiKey = null, radius = 25000, keywords = null }) {
@@ -343,14 +505,9 @@ async function scanGooglePlacesCity({ citySlug, customApiKey = null, radius = 25
 
   try {
     if (isRealGoogleApi) {
-      // Sweeps through tech queries
-      const searchQueries = keywords && keywords.length > 0 ? keywords : [
-        `software company in ${city.name}`,
-        `IT services consultancy in ${city.name}`,
-        `web development company in ${city.name}`,
-        `tech startups in ${city.name}`,
-        `app development in ${city.name}`
-      ];
+      // Sweeps through corridor-targeted tech queries
+      const corridorQueries = getCityCorridorQueries(city.slug, city.name);
+      const searchQueries = keywords && keywords.length > 0 ? keywords : corridorQueries;
 
       const seenPlaceIds = new Set();
 

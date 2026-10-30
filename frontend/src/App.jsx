@@ -23,7 +23,7 @@ const PRIMARY_TECH_HUBS = [
 
 export default function App() {
   const { user, isAuthenticated, logout, openAuthModal, authFetch, candidateProfile } = useAuth();
-  const [activeTab, setActiveTab] = useState('directory'); // 'directory' | 'jobs' | 'reachout'
+  const [activeTab, setActiveTab] = useState('jobs'); // 'jobs' | 'directory' | 'reachout'
   const [theme, setTheme] = useState(() => localStorage.getItem('jobradar_theme') || 'light');
 
   const [directoryCities, setDirectoryCities] = useState([]);
@@ -643,11 +643,28 @@ export default function App() {
     }
   };
 
+  const handleGoHome = () => {
+    setActiveTab('jobs');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   return (
     <div className="app-shell" data-theme={theme}>
       {/* Sidebar Navigation */}
       <aside className="app-sidebar">
-        <div className="sidebar-brand">
+        <div
+          className="sidebar-brand"
+          onClick={handleGoHome}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              handleGoHome();
+            }
+          }}
+          role="button"
+          tabIndex={0}
+          title="Go to Home (Live jobs)"
+        >
           <div className="brand-logo-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <circle cx="12" cy="12" r="9" />
@@ -664,6 +681,21 @@ export default function App() {
         </div>
 
         <nav className="sidebar-nav">
+          <button
+            className={`nav-item ${activeTab === 'jobs' ? 'active' : ''}`}
+            onClick={() => setActiveTab('jobs')}
+            id="tab-jobs"
+          >
+            <span className="nav-item-icon">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
+                <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
+              </svg>
+            </span>
+            <span className="nav-item-text">Live jobs</span>
+            {meta.totalInDb > 0 && <span className="nav-item-badge">{meta.totalInDb.toLocaleString()}</span>}
+          </button>
+
           <button
             className={`nav-item ${activeTab === 'directory' ? 'active' : ''}`}
             onClick={() => setActiveTab('directory')}
@@ -689,21 +721,6 @@ export default function App() {
           </button>
 
           <button
-            className={`nav-item ${activeTab === 'jobs' ? 'active' : ''}`}
-            onClick={() => setActiveTab('jobs')}
-            id="tab-jobs"
-          >
-            <span className="nav-item-icon">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2">
-                <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
-                <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
-              </svg>
-            </span>
-            <span className="nav-item-text">Live jobs</span>
-            {meta.totalInDb > 0 && <span className="nav-item-badge">{meta.totalInDb.toLocaleString()}</span>}
-          </button>
-
-          <button
             className={`nav-item ${activeTab === 'reachout' ? 'active' : ''}`}
             onClick={() => setActiveTab('reachout')}
             id="tab-reachout"
@@ -726,13 +743,13 @@ export default function App() {
         <header className="main-topbar">
           <div className="topbar-title-block">
             <h1 className="page-heading">
-              {activeTab === 'directory' && 'Company directory'}
               {activeTab === 'jobs' && 'Live jobs'}
+              {activeTab === 'directory' && 'Company directory'}
               {activeTab === 'reachout' && 'Outreach pipeline'}
             </h1>
             <p className="page-subheading">
-              {activeTab === 'directory' && 'Discover verified employers and track your outreach.'}
               {activeTab === 'jobs' && 'Real-time verified job openings directly from ATS boards.'}
+              {activeTab === 'directory' && 'Discover verified employers and track your outreach.'}
               {activeTab === 'reachout' && 'Proactive outreach to companies before jobs are posted publicly.'}
             </p>
           </div>
@@ -879,7 +896,10 @@ export default function App() {
 
           {/* View 1: Company Directory */}
           {activeTab === 'directory' && (
-            <CompanyDirectory cities={directoryCities} onRefreshMeta={fetchDirectoryMeta} />
+            <CompanyDirectory
+              cities={directoryCities}
+              onRefreshMeta={fetchDirectoryMeta}
+            />
           )}
 
           {/* View 2: Reach Out View */}
@@ -930,11 +950,12 @@ export default function App() {
                   {PRIMARY_TECH_HUBS.map((hub) => {
                     const isSelected = (hub.key === 'all' && selectedCity === 'all') || selectedCity.toLowerCase() === hub.key.toLowerCase();
                     const count = hubCityCounts[hub.key] || 0;
+                    const hubClass = `hub-pill-${hub.key.toLowerCase().replace(/[^a-z0-9]/g, '-')}`;
                     return (
                       <button
                         key={hub.key}
                         type="button"
-                        className={`tech-hub-pill ${isSelected ? 'active' : ''}`}
+                        className={`tech-hub-pill ${isSelected ? 'active' : ''} ${hubClass}`}
                         onClick={() => {
                           if (hub.key === 'all') {
                             setSelectedCity('all');
@@ -947,7 +968,7 @@ export default function App() {
                           setPage(1);
                         }}
                       >
-                        <span>{hub.name}</span>
+                        <span className="tech-hub-name">{hub.name}</span>
                         {count > 0 && (
                           <span className="tech-hub-count">
                             {count > 999 ? `${(count / 1000).toFixed(1)}k` : count}
@@ -1020,12 +1041,17 @@ export default function App() {
               <section className="filter-card" aria-label="Filters">
                 <div className="filter-card-header">
                   <div className="filter-header-title">
-                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                      <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
-                    </svg>
-                    <span>Filter Openings</span>
+                    <span className="filter-header-icon-badge">
+                      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                        <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+                      </svg>
+                    </span>
+                    <span className="filter-header-title-text">Filter Openings</span>
                     {activeFilters.length > 0 && (
-                      <span className="filter-active-count-badge">{activeFilters.length} active</span>
+                      <span className="filter-active-count-badge">
+                        <span className="filter-pulse-dot" />
+                        {activeFilters.length} active
+                      </span>
                     )}
                   </div>
                   {hasNonDefaultFilters && (
@@ -1048,7 +1074,7 @@ export default function App() {
                 <div className="filter-grid">
                   {/* Search Box */}
                   <div className="input-group">
-                    <label htmlFor="search-title-input" className="input-label">Job Title / Keyword</label>
+                    <label htmlFor="search-title-input" className="native-sr-only">Job Title / Keyword</label>
                     <div className="input-field-wrapper">
                       <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <circle cx="11" cy="11" r="8" />
@@ -1070,149 +1096,211 @@ export default function App() {
 
                   {/* Country Dropdown */}
                   <div className="input-group">
-                    <label htmlFor="filter-country-select" className="input-label">Country</label>
-                    <select
-                      id="filter-country-select"
-                      className="custom-select"
-                      value={selectedCountry}
-                      onChange={(e) => {
-                        const nextCountry = e.target.value;
-                        setSelectedCountry(nextCountry);
-                        setSelectedCity('all');
-                        setSelectedCorridor('all');
-                        setPage(1);
-                      }}
-                    >
-                      <option value="all">All Countries (Global)</option>
-                      <option value="India">
-                        India ({countries.find(c => c.country === 'India')?.count || 0} jobs)
-                      </option>
-                      <optgroup label="International Countries">
-                        {countries
-                          .filter(c => c.country && c.country !== 'India')
-                          .map(c => (
-                            <option key={c.country} value={c.country}>
-                              {c.country} ({c.count} {c.count === 1 ? 'job' : 'jobs'})
-                            </option>
-                          ))}
-                      </optgroup>
-                    </select>
+                    <label htmlFor="filter-country-select" className="native-sr-only">Country</label>
+                    <div className="filter-dropdown-wrapper">
+                      <span className="filter-select-icon icon-country" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                      </span>
+                      <select
+                        id="filter-country-select"
+                        className="custom-select custom-select-with-icon"
+                        value={selectedCountry}
+                        onChange={(e) => {
+                          const nextCountry = e.target.value;
+                          setSelectedCountry(nextCountry);
+                          setSelectedCity('all');
+                          setSelectedCorridor('all');
+                          setPage(1);
+                        }}
+                      >
+                        <option value="all">All Countries (Global)</option>
+                        <option value="India">
+                          India ({countries.find(c => c.country === 'India')?.count || 0} jobs)
+                        </option>
+                        <optgroup label="International Countries">
+                          {countries
+                            .filter(c => c.country && c.country !== 'India')
+                            .map(c => (
+                              <option key={c.country} value={c.country}>
+                                {c.country} ({c.count} {c.count === 1 ? 'job' : 'jobs'})
+                              </option>
+                            ))}
+                        </optgroup>
+                      </select>
+                    </div>
                   </div>
 
                   {/* City Dropdown */}
                   <div className="input-group">
-                    <label htmlFor="filter-city-select" className="input-label">
-                      {selectedCountry === 'India' ? 'Indian City' : (selectedCountry !== 'all' ? `${selectedCountry} City` : 'City')}
-                    </label>
-                    <select
-                      id="filter-city-select"
-                      className="custom-select"
-                      value={selectedCity}
-                      onChange={(e) => {
-                        setSelectedCity(e.target.value);
-                        setPage(1);
-                      }}
-                    >
-                      <option value="all">
-                        {selectedCountry === 'India'
-                          ? `All Indian Cities (${totalCityJobs} jobs)`
-                          : selectedCountry !== 'all'
-                            ? `All Cities in ${selectedCountry} (${totalCityJobs} jobs)`
-                            : `All Cities Worldwide (${totalCityJobs} jobs)`}
-                      </option>
-                      {cityGroups.remote.length > 0 && (
-                        <optgroup label="Remote and Distributed">
-                          {cityGroups.remote.map((c) => (
-                            <option key={c.city} value={c.city}>
-                              {c.city} ({c.count} {c.count === 1 ? 'job' : 'jobs'})
-                            </option>
-                          ))}
-                        </optgroup>
-                      )}
-                      {cityGroups.major.length > 0 && (
-                        <optgroup label={selectedCountry === 'India' ? 'Major Indian Tech Hubs' : (selectedCountry !== 'all' ? `Major Tech Hubs in ${selectedCountry}` : 'Major Hubs')}>
-                          {cityGroups.major.map((c) => (
-                            <option key={c.city} value={c.city}>
-                              {c.city} {c.state ? `(${c.state})` : ''} ({c.count} {c.count === 1 ? 'job' : 'jobs'})
-                            </option>
-                          ))}
-                        </optgroup>
-                      )}
-                      {cityGroups.other.length > 0 && (
-                        <optgroup label={selectedCountry === 'India' ? 'Other Cities and Tech Clusters' : 'Other Locations'}>
-                          {cityGroups.other.slice(0, 100).map((c) => (
-                            <option key={c.city} value={c.city}>
-                              {c.city} ({c.count} {c.count === 1 ? 'job' : 'jobs'})
-                            </option>
-                          ))}
-                        </optgroup>
-                      )}
-                    </select>
-                  </div>
-
-                  {/* Work Mode Filter */}
-                  <div className="input-group">
-                    <label htmlFor="filter-workmode-select" className="input-label">Work Mode</label>
-                    <select
-                      id="filter-workmode-select"
-                      className="custom-select"
-                      value={workModeFilter}
-                      onChange={(e) => {
-                        setWorkModeFilter(e.target.value);
-                        setPage(1);
-                      }}
-                    >
-                      <option value="all">All Work Modes</option>
-                      <option value="onsite">On-site Work</option>
-                      <option value="hybrid">Hybrid (Office + Remote)</option>
-                      <option value="remote">Remote</option>
-                      <option value="unknown">Unspecified Location</option>
-                    </select>
-                  </div>
-
-                  {/* Company Filter */}
-                  {stats && stats.companies && stats.companies.length > 0 && (
-                    <div className="input-group">
-                      <label htmlFor="filter-company-select" className="input-label">Company</label>
+                    <label htmlFor="filter-city-select" className="native-sr-only">City</label>
+                    <div className="filter-dropdown-wrapper">
+                      <span className="filter-select-icon icon-city" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                      </span>
                       <select
-                        id="filter-company-select"
-                        className="custom-select"
-                        value={companyFilter}
+                        id="filter-city-select"
+                        className="custom-select custom-select-with-icon"
+                        value={selectedCity}
                         onChange={(e) => {
-                          setCompanyFilter(e.target.value);
+                          setSelectedCity(e.target.value);
                           setPage(1);
                         }}
                       >
-                        <option value="all">All Companies ({stats.companies.length})</option>
-                        {companyGroups.tier1.length > 0 && (
-                          <optgroup label="Tier-1 Product Companies">
-                            {companyGroups.tier1.map((comp) => (
-                              <option key={comp} value={comp}>{comp}</option>
+                        <option value="all">
+                          {selectedCountry === 'India'
+                            ? `All Indian Cities (${totalCityJobs} jobs)`
+                            : selectedCountry !== 'all'
+                              ? `All Cities in ${selectedCountry} (${totalCityJobs} jobs)`
+                              : `All Cities Worldwide (${totalCityJobs} jobs)`}
+                        </option>
+                        {cityGroups.remote.length > 0 && (
+                          <optgroup label="Remote and Distributed">
+                            {cityGroups.remote.map((c) => (
+                              <option key={c.city} value={c.city}>
+                                {c.city} ({c.count} {c.count === 1 ? 'job' : 'jobs'})
+                              </option>
                             ))}
                           </optgroup>
                         )}
-                        {companyGroups.other.length > 0 && (
-                          <optgroup label="Other Tech Companies">
-                            {companyGroups.other.map((comp) => (
-                              <option key={comp} value={comp}>{comp}</option>
+                        {cityGroups.major.length > 0 && (
+                          <optgroup label={selectedCountry === 'India' ? 'Major Indian Tech Hubs' : (selectedCountry !== 'all' ? `Major Tech Hubs in ${selectedCountry}` : 'Major Hubs')}>
+                            {cityGroups.major.map((c) => (
+                              <option key={c.city} value={c.city}>
+                                {c.city} {c.state ? `(${c.state})` : ''} ({c.count} {c.count === 1 ? 'job' : 'jobs'})
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
+                        {cityGroups.other.length > 0 && (
+                          <optgroup label={selectedCountry === 'India' ? 'Other Cities and Tech Clusters' : 'Other Locations'}>
+                            {cityGroups.other.slice(0, 100).map((c) => (
+                              <option key={c.city} value={c.city}>
+                                {c.city} ({c.count} {c.count === 1 ? 'job' : 'jobs'})
+                              </option>
                             ))}
                           </optgroup>
                         )}
                       </select>
                     </div>
+                  </div>
+
+                  {/* Work Mode Filter */}
+                  <div className="input-group">
+                    <label htmlFor="filter-workmode-select" className="native-sr-only">Work Mode</label>
+                    <div className="filter-dropdown-wrapper">
+                      <span className="filter-select-icon icon-workmode" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                      </span>
+                      <select
+                        id="filter-workmode-select"
+                        className="custom-select custom-select-with-icon"
+                        value={workModeFilter}
+                        onChange={(e) => {
+                          setWorkModeFilter(e.target.value);
+                          setPage(1);
+                        }}
+                      >
+                        <option value="all">All Work Modes</option>
+                        <option value="onsite">On-site Work</option>
+                        <option value="hybrid">Hybrid (Office + Remote)</option>
+                        <option value="remote">Remote</option>
+                        <option value="unknown">Unspecified Location</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Company Filter */}
+                  {stats && stats.companies && stats.companies.length > 0 && (
+                    <div className="input-group">
+                      <label htmlFor="filter-company-select" className="native-sr-only">Company</label>
+                      <div className="filter-dropdown-wrapper">
+                        <span className="filter-select-icon icon-company" aria-hidden="true">
+                          <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+                        </span>
+                        <select
+                          id="filter-company-select"
+                          className="custom-select custom-select-with-icon"
+                          value={companyFilter}
+                          onChange={(e) => {
+                            setCompanyFilter(e.target.value);
+                            setPage(1);
+                          }}
+                        >
+                          <option value="all">All Companies ({stats.companies.length})</option>
+                          {companyGroups.tier1.length > 0 && (
+                            <optgroup label="Tier-1 Product Companies">
+                              {companyGroups.tier1.map((comp) => (
+                                <option key={comp} value={comp}>{comp}</option>
+                              ))}
+                            </optgroup>
+                          )}
+                          {companyGroups.other.length > 0 && (
+                            <optgroup label="Other Tech Companies">
+                              {companyGroups.other.map((comp) => (
+                                <option key={comp} value={comp}>{comp}</option>
+                              ))}
+                            </optgroup>
+                          )}
+                        </select>
+                      </div>
+                    </div>
                   )}
 
-                  {/* Experience Level Filter */}
-                  <div className="input-group">
-                    <label htmlFor="filter-experience-select" className="input-label">Experience Level</label>
+                  {/* Experience Level Filter (Integrated Classy Segmented Control) */}
+                  <div className="input-group filter-group-experience">
+                    <label htmlFor="filter-experience-select" className="native-sr-only">Experience Level</label>
+                    <div className="experience-segmented" role="group" aria-label="Experience level filter">
+                      <button
+                        type="button"
+                        className={`segmented-option exp-option-all ${experienceLevel === 'all' ? 'active' : ''}`}
+                        onClick={() => { setExperienceLevel('all'); setPage(1); }}
+                        title="Show all verified roles across all seniority levels"
+                      >
+                        <span className="exp-sig-dot dot-all" />
+                        <span>All Exp</span>
+                      </button>
+                      <button
+                        type="button"
+                        className={`segmented-option exp-option-freshers ${experienceLevel === 'freshers' ? 'active' : ''}`}
+                        onClick={() => { setExperienceLevel('freshers'); setPage(1); }}
+                        title="Filter entry-level &amp; fresher roles (0 to 1 year experience)"
+                      >
+                        <span className="exp-sig-dot dot-freshers" />
+                        <span>Freshers (0–1y)</span>
+                        <span className="exp-badge-pill badge-freshers">Entry</span>
+                      </button>
+                      <button
+                        type="button"
+                        className={`segmented-option exp-option-mid ${experienceLevel === 'mid' ? 'active' : ''}`}
+                        onClick={() => { setExperienceLevel('mid'); setPage(1); }}
+                        title="Filter mid-level roles (2 to 5 years experience)"
+                      >
+                        <span className="exp-sig-dot dot-mid" />
+                        <span>Mid (2–5y)</span>
+                      </button>
+                      <button
+                        type="button"
+                        className={`segmented-option exp-option-senior ${experienceLevel === 'senior' ? 'active' : ''}`}
+                        onClick={() => { setExperienceLevel('senior'); setPage(1); }}
+                        title="Filter senior, lead, and staff roles (5+ years experience)"
+                      >
+                        <span className="exp-sig-dot dot-senior" />
+                        <span>Senior (5y+)</span>
+                        <span className="exp-badge-pill badge-senior">Lead</span>
+                      </button>
+                    </div>
+
+                    {/* Preserved accessible select for automated tests & form identification */}
                     <select
                       id="filter-experience-select"
-                      className="custom-select"
+                      className="native-checkbox-sr"
                       value={experienceLevel}
                       onChange={(e) => {
                         setExperienceLevel(e.target.value);
                         setPage(1);
                       }}
+                      tabIndex={-1}
+                      aria-hidden="true"
                     >
                       <option value="all">All Experience Levels</option>
                       <option value="freshers">Freshers &amp; Early Career (0–1y)</option>
@@ -1223,20 +1311,25 @@ export default function App() {
 
                   {/* Status Filter */}
                   <div className="input-group">
-                    <label htmlFor="filter-status-select" className="input-label">Status</label>
-                    <select
-                      id="filter-status-select"
-                      className="custom-select"
-                      value={statusFilter}
-                      onChange={(e) => {
-                        setStatusFilter(e.target.value);
-                        setPage(1);
-                      }}
-                    >
-                      <option value="open">Active and Open Postings Only</option>
-                      <option value="all">All Postings (Active + Archived)</option>
-                      <option value="closed">Closed Postings Only</option>
-                    </select>
+                    <label htmlFor="filter-status-select" className="native-sr-only">Status</label>
+                    <div className="filter-dropdown-wrapper">
+                      <span className="filter-select-icon icon-status" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                      </span>
+                      <select
+                        id="filter-status-select"
+                        className="custom-select custom-select-with-icon"
+                        value={statusFilter}
+                        onChange={(e) => {
+                          setStatusFilter(e.target.value);
+                          setPage(1);
+                        }}
+                      >
+                        <option value="open">Active and Open Postings Only</option>
+                        <option value="all">All Postings (Active + Archived)</option>
+                        <option value="closed">Closed Postings Only</option>
+                      </select>
+                    </div>
                   </div>
                 </div>
 
@@ -1249,7 +1342,7 @@ export default function App() {
                         <button
                           key={f.id}
                           type="button"
-                          className="active-filter-chip"
+                          className={`active-filter-chip chip-${f.id}`}
                           onClick={f.onRemove}
                           title={`Click to remove ${f.label} filter`}
                         >
@@ -1273,9 +1366,9 @@ export default function App() {
                 )}
 
                 {/* Secondary Filter Row: Tech & Coding Roles Toggle + Only Eligible Toggle + CV Match Bar */}
-                <div className="filter-row-secondary" style={{ marginTop: '14px', paddingTop: '12px', borderTop: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
-                    <label className="tech-checkbox-label" htmlFor="tech-jobs-toggle" style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '8px', fontWeight: 600, fontSize: '13.5px', color: 'var(--text-primary)' }}>
+                <div className="filter-row-secondary">
+                  <div className="secondary-toggles-cluster">
+                    <label className={`tech-toggle-pill ${techOnlyJobs ? 'active' : ''}`} htmlFor="tech-jobs-toggle">
                       <input
                         id="tech-jobs-toggle"
                         type="checkbox"
@@ -1284,33 +1377,23 @@ export default function App() {
                           setTechOnlyJobs(e.target.checked);
                           setPage(1);
                         }}
-                        style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: 'var(--primary)' }}
+                        className="native-checkbox-sr"
                       />
-                      <span>Tech & Engineering Roles Only</span>
+                      <span className="toggle-pill-icon">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                          <polyline points="16 18 22 12 16 6" />
+                          <polyline points="8 6 2 12 8 18" />
+                        </svg>
+                      </span>
+                      <span className="toggle-pill-text">Tech & Engineering Roles Only</span>
                       {techOnlyJobs && (
-                        <span style={{ fontSize: '12px', color: 'var(--success)', fontWeight: 600, marginLeft: '4px' }}>
-                          (Active)
-                        </span>
+                        <span className="toggle-active-badge">Active</span>
                       )}
                     </label>
 
                     <label
-                      className={`tech-checkbox-label eligible-toggle-pill ${onlyEligibleJobs ? 'active' : ''}`}
+                      className={`eligible-toggle-pill ${onlyEligibleJobs ? 'active' : ''}`}
                       htmlFor="eligible-jobs-toggle"
-                      style={{
-                        cursor: 'pointer',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                        fontWeight: 700,
-                        fontSize: '13px',
-                        color: onlyEligibleJobs ? '#047857' : '#059669',
-                        background: onlyEligibleJobs ? 'rgba(16, 185, 129, 0.16)' : 'rgba(16, 185, 129, 0.08)',
-                        padding: '4px 12px',
-                        borderRadius: '20px',
-                        border: '1px solid rgba(16, 185, 129, 0.35)',
-                        transition: 'all 0.2s ease'
-                      }}
                       title={
                         !isAuthenticated
                           ? 'Sign in required to filter by eligibility'
@@ -1334,13 +1417,16 @@ export default function App() {
                           setOnlyEligibleJobs(checked);
                           setPage(1);
                         }}
-                        style={{ width: '15px', height: '15px', cursor: 'pointer', accentColor: '#10b981' }}
+                        className="native-checkbox-sr"
                       />
-                      <span>Show Eligible Roles Only</span>
+                      <span className="toggle-pill-icon">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                        </svg>
+                      </span>
+                      <span className="toggle-pill-text">Show Eligible Roles Only</span>
                       {isAuthenticated && onlyEligibleJobs && (
-                        <span style={{ fontSize: '11px', background: '#10b981', color: '#fff', padding: '1px 6px', borderRadius: '10px', fontWeight: 600 }}>
-                          Active
-                        </span>
+                        <span className="toggle-active-badge eligible-badge">Active</span>
                       )}
                     </label>
                   </div>
@@ -1376,6 +1462,7 @@ export default function App() {
                     <span className="profile-trigger-content">
                       {isAuthenticated && candidateProfile ? (
                         <>
+                          <span className="cv-status-pulse" />
                           <span className="trigger-lead">CV Active:</span>
                           <span className="trigger-detail">
                             {candidateProfile.country} • {candidateProfile.experienceDisplay || (candidateProfile.totalExperienceMonths ? `${candidateProfile.totalExperienceMonths} Mos` : `${candidateProfile.totalYearsExperience || 0} Yrs`)} • {candidateProfile.skills?.length || 0} Skills
@@ -1395,86 +1482,54 @@ export default function App() {
 
               {/* Results Container */}
               <div className="results-container" id="results-header-anchor">
-                <div className="results-header" style={{ flexWrap: 'wrap', gap: '12px' }}>
+                <div className="results-header">
                   <div className="results-count" id="results-count-text">
                     Showing <strong>{displayedJobs.length}</strong> of <strong>{meta.total}</strong> verified roles
-                    {selectedCity !== 'all' && <span className="active-tag">{selectedCity}</span>}
-                    {selectedCorridor !== 'all' && (
-                      <span className="active-tag" style={{ background: 'var(--primary-light)', color: 'var(--primary)', borderColor: 'var(--primary-border)' }}>
-                        {availableCorridors.find(c => c.key === selectedCorridor)?.shortName || selectedCorridor}
-                      </span>
-                    )}
-                    {experienceLevel !== 'all' && (
-                      <span className="active-tag" style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', borderColor: 'rgba(16, 185, 129, 0.3)' }}>
-                        {experienceLevel === 'freshers' ? 'Freshers Open' : experienceLevel}
-                      </span>
-                    )}
-                    {workModeFilter !== 'all' && <span className="active-tag">{workModeFilter}</span>}
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                    {/* Experience Level Segmented Control */}
-                    <div className="experience-segmented">
-                      <button
-                        type="button"
-                        className={`segmented-option ${experienceLevel === 'all' ? 'active' : ''}`}
-                        onClick={() => { setExperienceLevel('all'); setPage(1); }}
-                      >
-                        All Exp
-                      </button>
-                      <button
-                        type="button"
-                        className={`segmented-option ${experienceLevel === 'freshers' ? 'active' : ''}`}
-                        onClick={() => { setExperienceLevel('freshers'); setPage(1); }}
-                      >
-                        Freshers (0–1y)
-                      </button>
-                      <button
-                        type="button"
-                        className={`segmented-option ${experienceLevel === 'mid' ? 'active' : ''}`}
-                        onClick={() => { setExperienceLevel('mid'); setPage(1); }}
-                      >
-                        Mid (2–5y)
-                      </button>
-                      <button
-                        type="button"
-                        className={`segmented-option ${experienceLevel === 'senior' ? 'active' : ''}`}
-                        onClick={() => { setExperienceLevel('senior'); setPage(1); }}
-                      >
-                        Senior (5y+)
-                      </button>
-                    </div>
+                  <div className="results-controls-cluster">
 
                     {/* View Mode Switcher */}
-                    <div className="view-mode-segmented">
+                    <div className="view-mode-segmented" role="group" aria-label="View layout switch">
                       <button
                         type="button"
-                        className={`segmented-option ${viewMode === 'grid' ? 'active' : ''}`}
+                        className={`segmented-option view-btn-grid ${viewMode === 'grid' ? 'active' : ''}`}
                         onClick={() => setViewMode('grid')}
-                        title="Radar Grid View"
+                        title="Switch to Radar Grid View"
                       >
-                        Radar Grid
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" style={{ marginRight: '5px', verticalAlign: '-1px' }}>
+                          <rect x="3" y="3" width="7" height="7" rx="1.5" />
+                          <rect x="14" y="3" width="7" height="7" rx="1.5" />
+                          <rect x="14" y="14" width="7" height="7" rx="1.5" />
+                          <rect x="3" y="14" width="7" height="7" rx="1.5" />
+                        </svg>
+                        <span>Radar Grid</span>
                       </button>
                       <button
                         type="button"
-                        className={`segmented-option ${viewMode === 'table' ? 'active' : ''}`}
+                        className={`segmented-option view-btn-table ${viewMode === 'table' ? 'active' : ''}`}
                         onClick={() => setViewMode('table')}
-                        title="Structured Table View"
+                        title="Switch to Structured Table View"
                       >
-                        Table
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" style={{ marginRight: '5px', verticalAlign: '-1px' }}>
+                          <line x1="3" y1="6" x2="21" y2="6" />
+                          <line x1="3" y1="12" x2="21" y2="12" />
+                          <line x1="3" y1="18" x2="21" y2="18" />
+                        </svg>
+                        <span>Table</span>
                       </button>
                       <button
                         type="button"
-                        className={`segmented-option ${viewMode === 'map' ? 'active' : ''}`}
+                        className={`segmented-option view-btn-map ${viewMode === 'map' ? 'active' : ''}`}
                         onClick={() => setViewMode('map')}
                         title="Interactive GIS Tech Corridor Map"
                       >
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ marginRight: '4px', verticalAlign: '-1px' }}>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" style={{ marginRight: '5px', verticalAlign: '-1px' }}>
                           <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6" />
                           <line x1="8" y1="2" x2="8" y2="18" />
                           <line x1="16" y1="6" x2="16" y2="22" />
                         </svg>
-                        Corridor Map
+                        <span>Corridor Map</span>
                       </button>
                     </div>
 
@@ -1715,10 +1770,15 @@ export default function App() {
                                   </td>
                                   <td>
                                     <div className="company-wrapper">
-                                      <span className="job-company-pill">{job.company}</span>
-                                      <span className={`ats-pill ${getSourceBadgeClass(job.source)}`}>
-                                        {job.source}
-                                      </span>
+                                      <div className="table-company-avatar" aria-hidden="true">
+                                        {(job.company || 'JR').slice(0, 2).toUpperCase()}
+                                      </div>
+                                      <div className="table-company-meta">
+                                        <span className="job-company-pill">{job.company}</span>
+                                        <span className={`ats-pill ${getSourceBadgeClass(job.source)}`}>
+                                          {job.source}
+                                        </span>
+                                      </div>
                                     </div>
                                   </td>
                                   <td>
@@ -1768,7 +1828,11 @@ export default function App() {
                                         className="apply-button"
                                         id={`apply-link-${job.sourceJobId}`}
                                       >
-                                        Apply
+                                        <span>Apply</span>
+                                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft: '2px' }}>
+                                          <line x1="7" y1="17" x2="17" y2="7" />
+                                          <polyline points="7 7 17 7 17 17" />
+                                        </svg>
                                       </a>
                                     </div>
                                   </td>

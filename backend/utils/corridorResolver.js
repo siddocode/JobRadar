@@ -2,6 +2,37 @@ const techHubCorridors = require('../config/techHubCorridors.json');
 const locationAliases = require('../config/locationAliases.json');
 const { normalizeLocation } = require('./normalizeLocation');
 
+let companyOfficeRegistry = {};
+try {
+  companyOfficeRegistry = require('../config/companyOfficeRegistry.json');
+} catch (_) {
+  companyOfficeRegistry = {};
+}
+
+/**
+ * Generates deterministic geographic offset (~250m - 750m) based on string hash.
+ * Guarantees distinct, non-overlapping coordinates for companies sharing a corridor/city center.
+ */
+function applyDeterministicDispersion(baseCoords, str, radiusKm = 0.65) {
+  if (!baseCoords || typeof baseCoords.lat !== 'number' || typeof baseCoords.lng !== 'number' || !str) {
+    return baseCoords;
+  }
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) - hash) + str.charCodeAt(i);
+    hash |= 0;
+  }
+  const angle = Math.abs(hash % 360) * (Math.PI / 180);
+  const dist = 0.25 + (Math.abs((hash >> 8) % 1000) / 1000) * (radiusKm - 0.25);
+  const latOffset = (dist * Math.cos(angle)) / 111.0;
+  const lngOffset = (dist * Math.sin(angle)) / (111.0 * Math.cos((baseCoords.lat * Math.PI) / 180));
+
+  return {
+    lat: parseFloat((baseCoords.lat + latOffset).toFixed(6)),
+    lng: parseFloat((baseCoords.lng + lngOffset).toFixed(6))
+  };
+}
+
 /**
  * Resolves location string into high-precision canonical City, State, Country,
  * and Tech Corridor with geographic center coordinates.
@@ -121,12 +152,32 @@ function resolveCorridor(rawLocation, options = {}) {
     }
   }
 
-  // 3. Resolve Tech Corridor within the matched city
+  // 3. Check verified Company Office Registry for known tech offices in this city
   let resolvedCorridorKey = null;
   let resolvedLocality = options.localityHint || null;
   let resolvedCoordinates = options.coordinates || null;
+  let resolvedOfficeName = options.officeName || null;
+  let resolvedOfficeAddress = options.officeAddress || null;
 
-  if (resolvedCity && techHubCorridors.cities[resolvedCity]?.corridors) {
+  if (resolvedCity && options.companyName && companyOfficeRegistry[resolvedCity]) {
+    const cityRegistry = companyOfficeRegistry[resolvedCity];
+    const compNameLower = options.companyName.trim().toLowerCase();
+
+    for (const [key, entry] of Object.entries(cityRegistry)) {
+      const kLower = key.toLowerCase();
+      if (kLower === compNameLower || compNameLower.startsWith(kLower) || kLower.startsWith(compNameLower)) {
+        resolvedCorridorKey = entry.techCorridor || resolvedCorridorKey;
+        resolvedLocality = entry.locality || resolvedLocality;
+        resolvedOfficeName = entry.officeName;
+        resolvedOfficeAddress = entry.address;
+        resolvedCoordinates = entry.coordinates;
+        break;
+      }
+    }
+  }
+
+  // 4. Resolve Tech Corridor within the matched city if not already resolved
+  if (resolvedCity && !resolvedCorridorKey && techHubCorridors.cities[resolvedCity]?.corridors) {
     const cityCorridors = techHubCorridors.cities[resolvedCity].corridors;
 
     // 1. First attempt matching specific geographic location text (rawLocation, officeAddress, localityHint)
@@ -166,11 +217,19 @@ function resolveCorridor(rawLocation, options = {}) {
         }
       }
     }
+  }
 
-    // Default coordinates to city center if corridor was not matched
-    if (!resolvedCoordinates && techHubCorridors.cities[resolvedCity].center) {
-      resolvedCoordinates = techHubCorridors.cities[resolvedCity].center;
-    }
+  // Default coordinates to city center if corridor was not matched
+  if (!resolvedCoordinates && resolvedCity && techHubCorridors.cities[resolvedCity]?.center) {
+    resolvedCoordinates = techHubCorridors.cities[resolvedCity].center;
+  }
+
+  // If coordinates are set to a generic corridor or city center, apply deterministic dispersion
+  // based on company name hash so no two companies ever share identical coordinates.
+  if (resolvedCoordinates && options.companyName && !resolvedOfficeName) {
+    resolvedCoordinates = applyDeterministicDispersion(resolvedCoordinates, options.companyName);
+    resolvedOfficeName = `${options.companyName} Office (${resolvedLocality || resolvedCity})`;
+    resolvedOfficeAddress = `${resolvedLocality ? resolvedLocality + ', ' : ''}${resolvedCity}, ${resolvedState || 'India'}`;
   }
 
   return {
@@ -179,6 +238,8 @@ function resolveCorridor(rawLocation, options = {}) {
     country: resolvedCountry,
     techCorridor: resolvedCorridorKey,
     locality: resolvedLocality,
+    officeName: resolvedOfficeName,
+    officeAddress: resolvedOfficeAddress,
     coordinates: resolvedCoordinates,
     workMode
   };

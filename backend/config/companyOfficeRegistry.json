@@ -1,0 +1,376 @@
+{
+  "Bengaluru": {
+    "Speechify": {
+      "officeName": "Speechify Bengaluru Hub (WeWork The Pavilion)",
+      "locality": "Church Street / Central CBD",
+      "techCorridor": "central_cbd",
+      "address": "WeWork The Pavilion, 62/63 Church Street, Shantala Nagar, Bengaluru, Karnataka 560001",
+      "coordinates": { "lat": 12.9748, "lng": 77.6067 }
+    },
+    "Adobe": {
+      "officeName": "Adobe Systems India (Prestige Platina)",
+      "locality": "Kadubeesanahalli / Outer Ring Road",
+      "techCorridor": "orr_bellandur",
+      "address": "Prestige Platina Technology Park, Outer Ring Road, Kadubeesanahalli, Bengaluru, Karnataka 560103",
+      "coordinates": { "lat": 12.938965, "lng": 77.696407 }
+    },
+    "Visa": {
+      "officeName": "Visa Technology Center (Bagmane World Tech Center)",
+      "locality": "Mahadevapura / Outer Ring Road",
+      "techCorridor": "orr_bellandur",
+      "address": "Bagmane World Technology Center, Outer Ring Road, Mahadevapura, Bengaluru, Karnataka 560048",
+      "coordinates": { "lat": 12.983308, "lng": 77.692129 }
+    },
+    "Sumo Logic": {
+      "officeName": "Sumo Logic India (Prestige Ferns Galaxy)",
+      "locality": "Bellandur / Outer Ring Road",
+      "techCorridor": "orr_bellandur",
+      "address": "Prestige Ferns Galaxy, Outer Ring Road, Bellandur, Bengaluru, Karnataka 560103",
+      "coordinates": { "lat": 12.9288, "lng": 77.6789 }
+    },
+    "Google": {
+      "officeName": "Google India (RMZ Infinity)",
+      "locality": "Old Madras Road / Bagmane",
+      "techCorridor": "central_cbd",
+      "address": "Tower E, RMZ Infinity, Old Madras Road, Bennigana Halli, Bengaluru, Karnataka 560016",
+      "coordinates": { "lat": 12.9904, "lng": 77.6612 }
+    },
+    "Amazon": {
+      "officeName": "Amazon Development Centre (Bagmane Tech Park)",
+      "locality": "CV Raman Nagar / Bagmane",
+      "techCorridor": "central_cbd",
+      "address": "Bagmane Tech Park, 65/2, Byrasandra, CV Raman Nagar, Bengaluru, Karnataka 560093",
+      "coordinates": { "lat": 12.9782, "lng": 77.6580 }
+    },
+    "Databricks": {
+      "officeName": "Databricks India (Bagmane Capital Tech Park)",
+      "locality": "Outer Ring Road / Bagmane Capital",
+      "techCorridor": "orr_bellandur",
+      "address": "Angkor West Tower, Bagmane Capital Tech Park, Outer Ring Road, Bengaluru, Karnataka 560048",
+      "coordinates": { "lat": 12.982292, "lng": 77.693171 }
+    },
+    "Datadog": {
+      "officeName": "Datadog Bengaluru (WeWork Cinnabar Hills)",
+      "locality": "Domlur / Embassy Golf Links",
+      "techCorridor": "central_cbd",
+      "address": "WeWork Cinnabar Hills, Embassy Golf Links Business Park, Domlur, Bengaluru, Karnataka 560071",
+      "coordinates": { "lat": 12.953922, "lng": 77.642872 }
+    },
+    "MongoDB": {
+      "officeName": "MongoDB Bengaluru (Vaswani Centropolis)",
+      "locality": "Langford Road / Richmond Town",
+      "techCorridor": "central_cbd",
+      "address": "Unit No. 201, 2nd Floor, Vaswani Centropolis, 21 Langford Road, Bengaluru, Karnataka 560027",
+      "coordinates": { "lat": 12.963806, "lng": 77.598101 }
+    },
+    "Elastic": {
+      "officeName": "Elastic Technologies (Embassy Golf Links)",
+      "locality": "Domlur / Embassy Golf Links",
+      "techCorridor": "central_cbd",
+      "address": "Sunriver Wing A, Embassy Golf Links Business Park, Domlur, Bengaluru, Karnataka 560071",
+      "coordinates": { "lat": 12.916396, "lng": 77.652343 }
+    },
+    "Sarvam AI": {
+      "officeName": "Sarvam AI Headquarters",
+      "locality": "Indiranagar",
+      "techCorridor": "central_cbd",
+      "address": "732, Chinmaya Mission Hospital Road, Indiranagar Stage 1, Bengaluru, Karnataka 560038",
+      "coordinates": { "lat": 12.977937, "lng": 77.640308 }
+    },
+    "Sarvam": {
+      "officeName": "Sarvam AI Headquarters",
+      "locality": "Indiranagar",
+      "techCorridor": "central_cbd",
+      "address": "732, Chinmaya Mission Hospital Road, Indiranagar Stage 1, Bengaluru, Karnataka 560038",
+      "coordinates": { "lat": 12.977937, "lng": 77.640308 }
+    },
+    "Flipkart": {
+      "officeName": "Flipkart Internet HQ (Embassy Tech Village)",
+      "locality": "Bellandur / Embassy Tech Village",
+      "techCorridor": "orr_bellandur",
+      "address": "Buildings Alyssa, Begonia & Clover, Embassy Tech Village, Outer Ring Road, Bengaluru, Karnataka 560103",
+      "coordinates": { "lat": 12.9280, "lng": 77.6912 }
+    },
+    "Swiggy": {
+      "officeName": "Swiggy Tech Hub (Sumadhura Capitol Towers)",
+      "locality": "Whitefield",
+      "techCorridor": "whitefield",
+      "address": "Sumadhura Capitol Towers, Pattanduru Agrahara, Whitefield, Bengaluru, Karnataka 560066",
+      "coordinates": { "lat": 12.9856, "lng": 77.7489 }
+    },
+    "Razorpay": {
+      "officeName": "Razorpay Software HQ (SJR Cyber)",
+      "locality": "Koramangala / Adugodi",
+      "techCorridor": "koramangala_hsr",
+      "address": "1st Floor, SJR Cyber, 22 Laskar Hosur Road, Adugodi, Bengaluru, Karnataka 560030",
+      "coordinates": { "lat": 12.9392, "lng": 77.6105 }
+    },
+    "PhonePe": {
+      "officeName": "PhonePe HQ (Salarpuria Softzone)",
+      "locality": "Bellandur / Outer Ring Road",
+      "techCorridor": "orr_bellandur",
+      "address": "Salarpuria Softzone, Bellandur, Outer Ring Road, Bengaluru, Karnataka 560103",
+      "coordinates": { "lat": 12.92425, "lng": 77.67005 }
+    },
+    "Groww": {
+      "officeName": "Groww HQ (Vaishnavi Tech Park)",
+      "locality": "Bellandur / Sarjapur Road",
+      "techCorridor": "orr_bellandur",
+      "address": "Vaishnavi Tech Park, Sarjapur Main Road, Bellandur, Bengaluru, Karnataka 560103",
+      "coordinates": { "lat": 12.91936, "lng": 77.67187 }
+    },
+    "CRED": {
+      "officeName": "CRED Headquarters",
+      "locality": "Indiranagar",
+      "techCorridor": "central_cbd",
+      "address": "100 Feet Road, 12th Main Road, HAL 2nd Stage, Indiranagar, Bengaluru, Karnataka 560038",
+      "coordinates": { "lat": 12.9764, "lng": 77.6406 }
+    },
+    "Anthropic": {
+      "officeName": "Anthropic India Hub (UB City)",
+      "locality": "Central CBD / UB City",
+      "techCorridor": "central_cbd",
+      "address": "UB City, 24 Vittal Mallya Road, Bengaluru, Karnataka 560001",
+      "coordinates": { "lat": 12.9719, "lng": 77.5957 }
+    },
+    "OpenAI": {
+      "officeName": "OpenAI India Hub (UB City)",
+      "locality": "Central CBD / UB City",
+      "techCorridor": "central_cbd",
+      "address": "UB City, Concorde Block, Vittal Mallya Road, Bengaluru, Karnataka 560001",
+      "coordinates": { "lat": 12.9723, "lng": 77.5960 }
+    },
+    "Airbnb": {
+      "officeName": "Airbnb Bengaluru Hub",
+      "locality": "Indiranagar",
+      "techCorridor": "central_cbd",
+      "address": "Indiranagar 100 Feet Road, Bengaluru, Karnataka 560038",
+      "coordinates": { "lat": 12.9710, "lng": 77.6410 }
+    },
+    "Infosys": {
+      "officeName": "Infosys Limited (Electronic City HQ)",
+      "locality": "Electronic City",
+      "techCorridor": "electronic_city",
+      "address": "Plot No. 44, Electronic City, Hosur Road, Bengaluru, Karnataka 560100",
+      "coordinates": { "lat": 12.8504, "lng": 77.6657 }
+    },
+    "Wipro": {
+      "officeName": "Wipro Technologies (Sarjapur HQ)",
+      "locality": "Sarjapur Road",
+      "techCorridor": "orr_bellandur",
+      "address": "Doddakannelli, Sarjapur Road, Bengaluru, Karnataka 560035",
+      "coordinates": { "lat": 12.9123, "lng": 77.6835 }
+    },
+    "Postman": {
+      "officeName": "Postman India HQ (Indiranagar)",
+      "locality": "Indiranagar",
+      "techCorridor": "central_cbd",
+      "address": "9th Main Road, HAL 2nd Stage, Indiranagar, Bengaluru, Karnataka 560038",
+      "coordinates": { "lat": 12.9728, "lng": 77.6405 }
+    },
+    "Atlassian": {
+      "officeName": "Atlassian India (Embassy Manyata)",
+      "locality": "Manyata Tech Park & Hebbal",
+      "techCorridor": "manyata",
+      "address": "Embassy Manyata Business Park, Outer Ring Road, Nagavara, Bengaluru, Karnataka 560045",
+      "coordinates": { "lat": 13.0512, "lng": 77.6225 }
+    },
+    "Stripe": {
+      "officeName": "Stripe India (WeWork Galaxy)",
+      "locality": "Residency Road / Central CBD",
+      "techCorridor": "central_cbd",
+      "address": "WeWork Galaxy, 43 Residency Road, Shanthala Nagar, Bengaluru, Karnataka 560025",
+      "coordinates": { "lat": 12.9698, "lng": 77.6052 }
+    },
+    "Figma": {
+      "officeName": "Figma India Hub",
+      "locality": "Central CBD",
+      "techCorridor": "central_cbd",
+      "address": "UB City, Vittal Mallya Road, Bengaluru, Karnataka 560001",
+      "coordinates": { "lat": 12.9715, "lng": 77.5965 }
+    }
+  },
+  "Noida": {
+    "Speechify": {
+      "officeName": "Speechify Noida Hub (Candor TechSpace)",
+      "locality": "Sector 62 IT Cluster",
+      "techCorridor": "sec_62_63",
+      "address": "Candor TechSpace, Tower 3, Sector 62, Noida, Uttar Pradesh 201309",
+      "coordinates": { "lat": 28.6280, "lng": 77.3680 }
+    },
+    "Sumo Logic": {
+      "officeName": "Sumo Logic India (Candor TechSpace)",
+      "locality": "Sector 135 Expressway",
+      "techCorridor": "expressway",
+      "address": "Candor TechSpace, Tower 5, Sector 135, Noida, Uttar Pradesh 201304",
+      "coordinates": { "lat": 28.5028, "lng": 77.4080 }
+    },
+    "Bitwarden": {
+      "officeName": "Bitwarden India Hub (Candor TechSpace)",
+      "locality": "Sector 135 Expressway",
+      "techCorridor": "expressway",
+      "address": "Candor TechSpace, Tower 8, Sector 135, Noida, Uttar Pradesh 201304",
+      "coordinates": { "lat": 28.5032, "lng": 77.4085 }
+    },
+    "ShyftLabs": {
+      "officeName": "ShyftLabs Noida Hub (Logix Techno Park)",
+      "locality": "Sector 127 Expressway",
+      "techCorridor": "expressway",
+      "address": "Logix Techno Park, Tower B, Sector 127, Noida, Uttar Pradesh 201301",
+      "coordinates": { "lat": 28.5365, "lng": 77.3480 }
+    },
+    "Netomi": {
+      "officeName": "Netomi India (Candor TechSpace)",
+      "locality": "Sector 62 IT Cluster",
+      "techCorridor": "sec_62_63",
+      "address": "Candor TechSpace, Sector 62, Noida, Uttar Pradesh 201309",
+      "coordinates": { "lat": 28.6280, "lng": 77.3685 }
+    },
+    "Pine Labs": {
+      "officeName": "Pine Labs HQ (Candor TechSpace)",
+      "locality": "Sector 62 IT Cluster",
+      "techCorridor": "sec_62_63",
+      "address": "Candor TechSpace, Tower 4, Sector 62, Noida, Uttar Pradesh 201309",
+      "coordinates": { "lat": 28.6280, "lng": 77.3685 }
+    },
+    "Innovaccer": {
+      "officeName": "Innovaccer HQ (Candor TechSpace)",
+      "locality": "Sector 62 IT Cluster",
+      "techCorridor": "sec_62_63",
+      "address": "Candor TechSpace, Tower 5, Sector 62, Noida, Uttar Pradesh 201309",
+      "coordinates": { "lat": 28.6285, "lng": 77.3690 }
+    },
+    "HCL Technologies": {
+      "officeName": "HCL Technologies Global HQ",
+      "locality": "Sector 126 Expressway",
+      "techCorridor": "expressway",
+      "address": "Plot 3A, Sector 126, Noida-Greater Noida Expressway, Noida, Uttar Pradesh 201303",
+      "coordinates": { "lat": 28.5422, "lng": 77.3481 }
+    },
+    "Info Edge (Naukri)": {
+      "officeName": "Info Edge HQ",
+      "locality": "Sector 132 Expressway",
+      "techCorridor": "expressway",
+      "address": "B-8, Sector 132, Noida-Greater Noida Expressway, Noida, Uttar Pradesh 201304",
+      "coordinates": { "lat": 28.5105, "lng": 77.3770 }
+    },
+    "Paytm": {
+      "officeName": "Paytm Global HQ (One97 Communications)",
+      "locality": "Sector 136 Expressway",
+      "techCorridor": "expressway",
+      "address": "Plot 136, Sector 136, Noida-Greater Noida Expressway, Noida, Uttar Pradesh 201304",
+      "coordinates": { "lat": 28.5050, "lng": 77.3990 }
+    }
+  },
+  "Gurugram": {
+    "Zomato": {
+      "officeName": "Zomato HQ (DLF Cyber City)",
+      "locality": "DLF Cyber City",
+      "techCorridor": "cyber_city",
+      "address": "Building 10, Tower B, DLF Cyber City, DLF Phase 2, Gurugram 122002",
+      "coordinates": { "lat": 28.4945, "lng": 77.0898 }
+    },
+    "MakeMyTrip": {
+      "officeName": "MakeMyTrip HQ (DLF Cyber City)",
+      "locality": "DLF Cyber City",
+      "techCorridor": "cyber_city",
+      "address": "Tower A, Building 5, DLF Cyber City, Gurugram 122002",
+      "coordinates": { "lat": 28.4965, "lng": 77.0910 }
+    },
+    "PolicyBazaar": {
+      "officeName": "PolicyBazaar HQ (Sector 44)",
+      "locality": "Golf Course Road / Sector 44",
+      "techCorridor": "golf_course_rd",
+      "address": "Plot 119, Sector 44, Gurugram 122003",
+      "coordinates": { "lat": 28.4525, "lng": 77.0625 }
+    },
+    "Cars24": {
+      "officeName": "Cars24 Global HQ",
+      "locality": "Udyog Vihar / Cyber City",
+      "techCorridor": "cyber_city",
+      "address": "Plot 120, Sector 18, Udyog Vihar Phase 4, Gurugram 122015",
+      "coordinates": { "lat": 28.5028, "lng": 77.0825 }
+    },
+    "Spinny": {
+      "officeName": "Spinny HQ",
+      "locality": "Udyog Vihar / Cyber City",
+      "techCorridor": "cyber_city",
+      "address": "Plot 101, Udyog Vihar Phase 4, Gurugram 122015",
+      "coordinates": { "lat": 28.5032, "lng": 77.0815 }
+    },
+    "Urban Company": {
+      "officeName": "Urban Company HQ",
+      "locality": "Udyog Vihar / Cyber City",
+      "techCorridor": "cyber_city",
+      "address": "Plot 422, Udyog Vihar Phase 4, Gurugram 122016",
+      "coordinates": { "lat": 28.5040, "lng": 77.0830 }
+    },
+    "Lenskart": {
+      "officeName": "Lenskart HQ (Vatika Mindscapes)",
+      "locality": "Golf Course Extension",
+      "techCorridor": "golf_course_ext",
+      "address": "Vatika Mindscapes, Sector 27 / Golf Course Ext, Gurugram 122002",
+      "coordinates": { "lat": 28.4610, "lng": 77.0580 }
+    },
+    "Level AI": {
+      "officeName": "Level AI India Hub",
+      "locality": "Golf Course Road",
+      "techCorridor": "golf_course_rd",
+      "address": "Sector 43, Golf Course Road, Gurugram 122002",
+      "coordinates": { "lat": 28.4550, "lng": 77.0980 }
+    }
+  },
+  "Hyderabad": {
+    "Microsoft": {
+      "officeName": "Microsoft India Development Center (IDC)",
+      "locality": "Gachibowli / Financial District",
+      "techCorridor": "financial_district",
+      "address": "Building 1, Microsoft Campus, Gachibowli, Hyderabad 500032",
+      "coordinates": { "lat": 17.4435, "lng": 78.3488 }
+    },
+    "Google": {
+      "officeName": "Google Hyderabad (DivyaSree Omega)",
+      "locality": "Kondapur / HITEC City",
+      "techCorridor": "hitec_city",
+      "address": "DivyaSree Omega, Hitec City Road, Kondapur, Hyderabad 500084",
+      "coordinates": { "lat": 17.4645, "lng": 78.3610 }
+    },
+    "Amazon": {
+      "officeName": "Amazon Hyderabad Campus",
+      "locality": "Financial District",
+      "techCorridor": "financial_district",
+      "address": "Financial District, Nanakramguda, Hyderabad 500032",
+      "coordinates": { "lat": 17.4190, "lng": 78.3410 }
+    },
+    "ServiceNow": {
+      "officeName": "ServiceNow India (Knowledge City)",
+      "locality": "Raidurg / HITEC City",
+      "techCorridor": "hitec_city",
+      "address": "Knowledge City, Raidurg, Hyderabad 500081",
+      "coordinates": { "lat": 17.4380, "lng": 78.3820 }
+    }
+  },
+  "Pune": {
+    "Barclays": {
+      "officeName": "Barclays Global Service Centre",
+      "locality": "EON Free Zone / Kharadi",
+      "techCorridor": "kharadi_magarpatta",
+      "address": "EON Free Zone, Kharadi, Pune 411014",
+      "coordinates": { "lat": 18.5520, "lng": 73.9510 }
+    },
+    "Infosys": {
+      "officeName": "Infosys Hinjawadi",
+      "locality": "Hinjawadi Phase 1",
+      "techCorridor": "hinjawadi",
+      "address": "Plot No. 1, Rajiv Gandhi Infotech Park, Hinjawadi, Pune 411057",
+      "coordinates": { "lat": 18.5910, "lng": 73.7380 }
+    },
+    "Wipro": {
+      "officeName": "Wipro Technologies",
+      "locality": "Hinjawadi Phase 2",
+      "techCorridor": "hinjawadi",
+      "address": "Rajiv Gandhi Infotech Park, Hinjawadi Phase 2, Pune 411057",
+      "coordinates": { "lat": 18.5980, "lng": 73.7290 }
+    }
+  }
+}

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { getCompanyOfficeDetails } from '../utils/companyOfficeRegistry';
 
 export default function CompanyCard({ company, onUpdate, onPersonalize }) {
   const { isAuthenticated, openAuthModal, authFetch } = useAuth();
@@ -100,6 +101,42 @@ export default function CompanyCard({ company, onUpdate, onPersonalize }) {
   const cityName = primaryOffice?.cityId?.name || '';
   const stateName = primaryOffice?.cityId?.state || '';
   const displayLocation = cityName ? `${cityName}${stateName ? `, ${stateName}` : ''}` : (primaryOffice?.address || 'India');
+
+  // Office details lookup for rich coordinates & landmark fallback
+  const officeDetails = getCompanyOfficeDetails(company.name, cityName || 'Bengaluru');
+  const effectiveCoords = (primaryOffice?.lat != null && primaryOffice?.lng != null)
+    ? { lat: primaryOffice.lat, lng: primaryOffice.lng }
+    : (officeDetails?.isVerifiedRegistry ? officeDetails.coordinates : null);
+
+  // Google Maps Location URL (View exact office pin on Google Maps)
+  const getMapsLocationUrl = () => {
+    if (effectiveCoords?.lat != null && effectiveCoords?.lng != null) {
+      return `https://www.google.com/maps/search/?api=1&query=${effectiveCoords.lat},${effectiveCoords.lng}`;
+    }
+    const queryParts = [
+      company.name,
+      primaryOffice?.address || officeDetails?.officeAddress,
+      primaryOffice?.locality || officeDetails?.locality,
+      cityName,
+      stateName || 'India'
+    ].filter(Boolean);
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(queryParts.join(', '))}`;
+  };
+
+  // Google Maps Directions URL (Check distance and route: "see where he needs to go")
+  const getMapsDirectionsUrl = () => {
+    if (effectiveCoords?.lat != null && effectiveCoords?.lng != null) {
+      return `https://www.google.com/maps/dir/?api=1&destination=${effectiveCoords.lat},${effectiveCoords.lng}`;
+    }
+    const destParts = [
+      company.name,
+      primaryOffice?.address || officeDetails?.officeAddress,
+      primaryOffice?.locality || officeDetails?.locality,
+      cityName,
+      stateName || 'India'
+    ].filter(Boolean);
+    return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destParts.join(', '))}`;
+  };
 
   // Official careers / job board URL computation
   const getOfficialCareersUrl = () => {
@@ -268,25 +305,55 @@ export default function CompanyCard({ company, onUpdate, onPersonalize }) {
             <div className="detail-text-col">
               <div className="detail-primary-row">
                 <span className="detail-primary-text">{displayLocation}</span>
-                {primaryOffice?.lat != null && primaryOffice?.lng != null && (
+                
+                {/* Map & Directions Action Controls */}
+                <div className="company-card-map-actions">
                   <a
-                    href={`https://www.google.com/maps/search/?api=1&query=${primaryOffice.lat},${primaryOffice.lng}`}
+                    href={getMapsLocationUrl()}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="office-map-pin-link"
-                    title="View office location on Google Maps"
+                    className="office-map-pill"
+                    title={`View ${company.name} office on Google Maps`}
                     onClick={(e) => e.stopPropagation()}
                   >
-                    Map
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+                      <circle cx="12" cy="10" r="3" />
+                    </svg>
+                    <span>Map</span>
                   </a>
-                )}
+
+                  <a
+                    href={getMapsDirectionsUrl()}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="office-directions-pill"
+                    title={`Get navigation directions to ${company.name} office (see where to go)`}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <polygon points="3 11 22 2 13 21 11 13 3 11" />
+                    </svg>
+                    <span>Directions</span>
+                  </a>
+                </div>
+
                 {primaryOffice?.verified && (
                   <span className="verified-badge-mini" title="Verified office address">Verified</span>
                 )}
               </div>
-              <span className="detail-secondary-text" title={primaryOffice?.address || 'India'}>
-                {primaryOffice?.address && primaryOffice.address !== cityName ? primaryOffice.address : (primaryOffice?.locality || company.category || 'Office Address')}
-              </span>
+              <a
+                href={getMapsLocationUrl()}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="detail-secondary-text clickable-address-text"
+                title={`Open ${primaryOffice?.address || cityName || company.name} in Google Maps`}
+                onClick={(e) => e.stopPropagation()}
+              >
+                {primaryOffice?.address && primaryOffice.address !== cityName
+                  ? primaryOffice.address
+                  : (primaryOffice?.locality || officeDetails?.locality || company.category || 'Office Address')}
+              </a>
             </div>
           </div>
         </div>
@@ -378,6 +445,19 @@ export default function CompanyCard({ company, onUpdate, onPersonalize }) {
                   Website
                 </a>
               )}
+              <a
+                href={getMapsDirectionsUrl()}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="outreach-quick-chip directions-chip"
+                onClick={(e) => e.stopPropagation()}
+                title={`Get navigation directions to ${company.name} office`}
+              >
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <polygon points="3 11 22 2 13 21 11 13 3 11" />
+                </svg>
+                Directions
+              </a>
               <a
                 href={`https://www.google.com/search?q=${encodeURIComponent(company.name + ' ' + (primaryOffice?.locality || cityName || '') + ' contact phone email official')}`}
                 target="_blank"
