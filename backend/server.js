@@ -24,13 +24,30 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/jobradar';
 
-// Middleware
-app.use(cors({
+// Trust reverse proxy (Render / Cloudflare) for HTTPS cookie handling
+app.set('trust proxy', 1);
+
+// Middleware & CORS configuration for cross-domain requests (Vercel <-> Render)
+const corsOptions = {
   origin: true,
-  credentials: true
-}));
+  credentials: true,
+  methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin']
+};
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 app.use(cookieParser());
 app.use(express.json());
+
+// Root endpoint (verifies API is online when opening Render URL directly in browser)
+app.get('/', (req, res) => {
+  res.status(200).json({
+    name: 'JobRadar API',
+    status: 'online',
+    health: '/api/health',
+    timestamp: new Date().toISOString()
+  });
+});
 
 // Mount API routes
 app.use('/api/auth', authRoutes);

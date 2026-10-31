@@ -3,6 +3,8 @@
   "version": "1.0.0",
   "description": "Personal, local-only job-search tool aggregating Greenhouse, Lever, Ashby, and SmartRecruiters public job boards",
   "scripts": {
+    "start": "npm run --prefix backend start",
+    "build": "npm run --prefix frontend build",
     "dev": "npm run --prefix backend dev",
     "collect": "npm run --prefix backend collect",
     "discover": "npm run --prefix backend discover",

@@ -10,10 +10,11 @@ const pendingOtps = new Map();
 const AUTH_COOKIE_NAME = 'jobradar_auth_token';
 
 function setAuthCookie(res, token) {
+  const isProd = process.env.NODE_ENV === 'production' || process.env.RENDER === 'true';
   res.cookie(AUTH_COOKIE_NAME, token, {
     httpOnly: false,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
+    secure: isProd,
+    sameSite: isProd ? 'none' : 'lax',
     maxAge: 7 * 24 * 60 * 60 * 1000,
     path: '/'
   });
@@ -382,7 +383,12 @@ exports.loginWithOtp = async (req, res) => {
  * Clears the auth cookie
  */
 exports.logout = async (req, res) => {
-  res.clearCookie(AUTH_COOKIE_NAME, { path: '/' });
+  const isProd = process.env.NODE_ENV === 'production' || process.env.RENDER === 'true';
+  res.clearCookie(AUTH_COOKIE_NAME, {
+    path: '/',
+    sameSite: isProd ? 'none' : 'lax',
+    secure: isProd
+  });
   return res.status(200).json({ success: true, message: 'Logged out successfully' });
 };
 

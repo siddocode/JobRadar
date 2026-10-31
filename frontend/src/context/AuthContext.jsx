@@ -15,11 +15,17 @@ function setAuthCookie(token, days = 7) {
   const expires = new Date(Date.now() + days * 864e5).toUTCString();
   const secure = typeof window !== 'undefined' && window.location.protocol === 'https:' ? '; Secure' : '';
   document.cookie = `${AUTH_COOKIE_NAME}=${encodeURIComponent(token)}; expires=${expires}; path=/; SameSite=Lax${secure}`;
+  try {
+    localStorage.setItem(AUTH_COOKIE_NAME, token);
+  } catch (_) {}
 }
 
 function removeAuthCookie() {
   if (typeof document === 'undefined') return;
   document.cookie = `${AUTH_COOKIE_NAME}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; SameSite=Lax`;
+  try {
+    localStorage.removeItem(AUTH_COOKIE_NAME);
+  } catch (_) {}
 }
 
 export function AuthProvider({ children }) {
@@ -28,14 +34,10 @@ export function AuthProvider({ children }) {
     const cookieToken = getAuthCookie();
     if (cookieToken) return cookieToken;
 
-    // 2. One-time legacy migration from localStorage to cookie
+    // 2. Check localStorage backup
     try {
-      const legacyToken = localStorage.getItem(AUTH_COOKIE_NAME);
-      if (legacyToken) {
-        setAuthCookie(legacyToken);
-        localStorage.removeItem(AUTH_COOKIE_NAME);
-        return legacyToken;
-      }
+      const stored = localStorage.getItem(AUTH_COOKIE_NAME);
+      if (stored) return stored;
     } catch (_) {}
     return null;
   });
