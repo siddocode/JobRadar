@@ -3,6 +3,7 @@ import CompanyCard from './CompanyCard';
 import PersonalizeModal from './PersonalizeModal';
 import DiscoveredPlacesMap from './DiscoveredPlacesMap';
 import { useAuth } from '../context/AuthContext';
+import { useLocation, formatDistance, calculateDistanceKm } from '../context/LocationContext';
 import { useModalScrollLock } from '../utils/useModalScrollLock';
 
 const AVAILABLE_INDIAN_HUBS = [
@@ -51,6 +52,13 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
 
   // Auth & Personalize modal
   const { authFetch } = useAuth();
+  const {
+    userLocation,
+    sortByDistance,
+    setSortByDistance,
+    openLocationModal,
+    maxDistanceKm
+  } = useLocation();
   const [personalizeCompany, setPersonalizeCompany] = useState(null);
 
   // Filters
@@ -182,6 +190,16 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
       if (hiringFilter !== 'all') params.append('hiring', hiringFilter);
       if (searchQuery.trim()) params.append('q', searchQuery.trim());
       if (techOnly) params.append('techOnly', 'true');
+      if (userLocation && userLocation.lat != null && userLocation.lng != null) {
+        params.append('userLat', String(userLocation.lat));
+        params.append('userLng', String(userLocation.lng));
+        if (sortByDistance) {
+          params.append('sortBy', 'distance');
+        }
+        if (maxDistanceKm) {
+          params.append('maxDistanceKm', String(maxDistanceKm));
+        }
+      }
       params.append('page', String(page));
       params.append('limit', '30');
 
@@ -202,7 +220,7 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
     } finally {
       setLoading(false);
     }
-  }, [selectedCity, hiringFilter, searchQuery, techOnly, page]);
+  }, [selectedCity, hiringFilter, searchQuery, techOnly, page, userLocation, sortByDistance, maxDistanceKm]);
 
   useEffect(() => {
     fetchAggregateMetrics();
@@ -399,6 +417,20 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
 
   const hasActiveFilters = selectedCity !== 'all' || hiringFilter !== 'all' || searchQuery.trim() !== '' || !techOnly;
 
+  // Memoize and sort discovered preview places nearest-to-farthest if user location is set
+  const sortedDiscoveredPreview = useMemo(() => {
+    const list = scanStatus?.discoveredPreview;
+    if (!list || !Array.isArray(list)) return [];
+    if (userLocation && userLocation.lat != null && userLocation.lng != null) {
+      return [...list].sort((a, b) => {
+        const distA = calculateDistanceKm(userLocation.lat, userLocation.lng, a.lat, a.lng) ?? Infinity;
+        const distB = calculateDistanceKm(userLocation.lat, userLocation.lng, b.lat, b.lng) ?? Infinity;
+        return distA - distB;
+      });
+    }
+    return list;
+  }, [scanStatus?.discoveredPreview, userLocation]);
+
   return (
     <div className="directory-view-container">
       {/* Dynamic Metrics Cards Banner */}
@@ -578,18 +610,57 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
             </button>
           </div>
 
-          <label className="tech-checkbox-label">
-            <input
-              type="checkbox"
-              id="tech-only-checkbox"
-              checked={techOnly}
-              onChange={(e) => {
-                setTechOnly(e.target.checked);
-                setPage(1);
+          <div className="directory-filter-controls-right">
+            <button
+              type="button"
+              className={`directory-proximity-btn ${sortByDistance && userLocation ? 'is-active' : ''}`}
+              onClick={() => {
+                if (!userLocation) {
+                  openLocationModal();
+                } else {
+                  setSortByDistance(!sortByDistance);
+                }
               }}
-            />
-            <span>Tech & product roles only</span>
-          </label>
+              title={userLocation
+                ? (sortByDistance ? `Sorting by proximity to ${userLocation.label}. Click to switch to alphabetical` : `Click to sort nearest to ${userLocation.label}`)
+                : 'Set your location to see nearest companies first'}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+                <circle cx="12" cy="10" r="3" />
+              </svg>
+              <span className="proximity-btn-text">
+                {userLocation
+                  ? (sortByDistance ? `Nearest: ${userLocation.label?.split(',')[0]}` : 'Sort by Distance')
+                  : '📍 Set Location'}
+              </span>
+              {userLocation && (
+                <span
+                  className="proximity-btn-change"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openLocationModal();
+                  }}
+                  title="Change your active location"
+                >
+                  Change
+                </span>
+              )}
+            </button>
+
+            <label className="tech-checkbox-label">
+              <input
+                type="checkbox"
+                id="tech-only-checkbox"
+                checked={techOnly}
+                onChange={(e) => {
+                  setTechOnly(e.target.checked);
+                  setPage(1);
+                }}
+              />
+              <span>Tech & product roles only</span>
+            </label>
+          </div>
         </div>
       </div>
 
@@ -1110,10 +1181,13 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
                         {/* Scrollable Places Cards Panel */}
                         {placesViewMode !== 'map' && (
                           <div className={`places-preview-scroll ${placesViewMode === 'split' ? 'is-split' : 'is-full'}`}>
-                            {scanStatus.discoveredPreview.map((place, idx) => {
+                            {sortedDiscoveredPreview.map((place, idx) => {
                               const cleanPhone = cleanPhoneDisplay(place.phone);
                               const telPhone = cleanPhoneForTel(place.phone);
                               const isPinpointed = selectedPreviewPlace?.name === place.name;
+                              const previewDist = (userLocation && place.lat != null && place.lng != null)
+                                ? calculateDistanceKm(userLocation.lat, userLocation.lng, place.lat, place.lng)
+                                : null;
 
                               const placeDirectionsUrl = (place.lat != null && place.lng != null)
                                 ? `https://www.google.com/maps/dir/?api=1&destination=${place.lat},${place.lng}`
@@ -1140,7 +1214,15 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
                                     )}
                                   </div>
 
-                                  <div style={{ display: 'flex', gap: '6px', margin: '4px 0 6px 0', flexWrap: 'wrap' }}>
+                                  <div style={{ display: 'flex', gap: '6px', margin: '4px 0 6px 0', flexWrap: 'wrap', alignItems: 'center' }}>
+                                    {previewDist != null && (
+                                      <span
+                                        className="place-distance-tag"
+                                        title={`Approximately ${previewDist} km from your set location`}
+                                      >
+                                        📍 {formatDistance(previewDist)}
+                                      </span>
+                                    )}
                                     {place.category && (
                                       <span style={{ fontSize: '11px', padding: '1px 7px', borderRadius: '10px', background: 'rgba(59, 130, 246, 0.1)', color: 'var(--primary)', fontWeight: 600 }}>
                                         {place.category}
@@ -1307,12 +1389,13 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
                         {placesViewMode !== 'list' && (
                           <div className={`places-map-pane ${placesViewMode === 'map' ? 'is-full' : 'is-split'}`}>
                             <DiscoveredPlacesMap
-                              places={scanStatus.discoveredPreview}
+                              places={sortedDiscoveredPreview}
                               selectedPlace={selectedPreviewPlace}
                               onSelectPlace={(place) => setSelectedPreviewPlace(place)}
                               cityName={scanStatus.lastSummary?.city || discoveryCitySlug}
                               citySlug={discoveryCitySlug}
                               centerCoords={scanStatus.lastSummary?.center}
+                              userLocation={userLocation}
                             />
                           </div>
                         )}

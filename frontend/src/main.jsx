@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.jsx'
 import { AuthProvider } from './context/AuthContext'
+import { LocationProvider } from './context/LocationContext'
 
 // Default production Render backend endpoint
 const DEFAULT_PROD_API = 'https://jobradar-xled.onrender.com';
@@ -40,7 +41,9 @@ if (API_BASE) {
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <AuthProvider>
-      <App />
+      <LocationProvider>
+        <App />
+      </LocationProvider>
     </AuthProvider>
   </StrictMode>,
 )

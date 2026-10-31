@@ -22,6 +22,9 @@ router.get('/stats', directoryController.getDirectoryStats);
 router.get('/companies', optionalAuth, directoryController.getCompanies);
 router.post('/companies', directoryController.createCompany);
 
+// Places & address autocomplete search biased to GPS
+router.get('/places/search', directoryController.searchPlaces);
+
 
 
 

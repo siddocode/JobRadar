@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useLocation, formatDistance } from '../context/LocationContext';
 import { getCompanyOfficeDetails } from '../utils/companyOfficeRegistry';
 
 export default function CompanyCard({ company, onUpdate, onPersonalize }) {
@@ -96,6 +97,8 @@ export default function CompanyCard({ company, onUpdate, onPersonalize }) {
     return gradients[sum % gradients.length];
   };
 
+  const { userLocation, getDistanceTo } = useLocation();
+
   // Primary office location display
   const primaryOffice = company.offices && company.offices.length > 0 ? company.offices[0] : null;
   const cityName = primaryOffice?.cityId?.name || '';
@@ -107,6 +110,12 @@ export default function CompanyCard({ company, onUpdate, onPersonalize }) {
   const effectiveCoords = (primaryOffice?.lat != null && primaryOffice?.lng != null)
     ? { lat: primaryOffice.lat, lng: primaryOffice.lng }
     : (officeDetails?.isVerifiedRegistry ? officeDetails.coordinates : null);
+
+  // Compute distance from user location
+  let effectiveDistanceKm = company.distanceKm;
+  if (effectiveDistanceKm == null && userLocation && effectiveCoords?.lat != null && effectiveCoords?.lng != null) {
+    effectiveDistanceKm = getDistanceTo(effectiveCoords.lat, effectiveCoords.lng);
+  }
 
   // Google Maps Location URL (View exact office pin on Google Maps)
   const getMapsLocationUrl = () => {
@@ -305,6 +314,14 @@ export default function CompanyCard({ company, onUpdate, onPersonalize }) {
             <div className="detail-text-col">
               <div className="detail-primary-row">
                 <span className="detail-primary-text">{displayLocation}</span>
+                {effectiveDistanceKm != null && (
+                  <span
+                    className="company-distance-badge"
+                    title={`Approximately ${effectiveDistanceKm} km from ${userLocation?.label || 'your set location'}`}
+                  >
+                    📍 {formatDistance(effectiveDistanceKm)}
+                  </span>
+                )}
                 
                 {/* Map & Directions Action Controls */}
                 <div className="company-card-map-actions">

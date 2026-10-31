@@ -4,6 +4,7 @@ const { analyzeJobEligibility } = require('../services/eligibilityAnalyzer');
 const { parseCvPdf, parsePortfolioUrl, extractCandidateProfile } = require('../services/candidateParser');
 const { evaluateCandidateEligibility } = require('../services/eligibilityMatcher');
 const { tailorCandidateResume } = require('../services/cvTailorService');
+const { calculateDistanceKm, resolveItemCoordinates } = require('../utils/geoUtils');
 
 /**
  * GET /api/jobs
@@ -35,6 +36,10 @@ async function getJobs(req, res) {
       fresherFriendly,
       seniority,
       expMax,
+      userLat,
+      userLng,
+      sortBy,
+      maxDistanceKm,
       limit = 50,
       page = 1
     } = req.query;
@@ -161,18 +166,174 @@ async function getJobs(req, res) {
     const parsedPage = Math.max(parseInt(page, 10) || 1, 1);
     const skip = (parsedPage - 1) * parsedLimit;
 
-    // Execute queries in parallel
-    const [jobs, totalCount, openCount, totalInDb] = await Promise.all([
-      Job.find(filter)
-        .sort({ lastSeenAt: -1, updatedAt: -1 })
-        .skip(skip)
-        .limit(parsedLimit)
-        .select('source sourceJobId company title location locationRaw city state country techCorridor locality officeName officeAddress coordinates roleFamily seniority fresherFriendly expMin expMax workMode fingerprint applyUrl updatedAt firstSeenAt lastSeenAt status descriptionHtml')
-        .lean(),
-      Job.countDocuments(filter),
-      Job.countDocuments({ status: 'open' }),
-      Job.countDocuments()
-    ]);
+    // Proximity parameters
+    const numUserLat = userLat != null && userLat !== '' ? parseFloat(userLat) : null;
+    const numUserLng = userLng != null && userLng !== '' ? parseFloat(userLng) : null;
+    const hasUserLocation = numUserLat != null && numUserLng != null && !isNaN(numUserLat) && !isNaN(numUserLng);
+    const maxDist = maxDistanceKm ? parseFloat(maxDistanceKm) : null;
+    const isSortByDistance = hasUserLocation && (sortBy === 'distance' || maxDist != null);
+
+    let jobs = [];
+    let totalCount = 0;
+    let openCount = 0;
+    let totalInDb = 0;
+
+    if (isSortByDistance) {
+      // High-speed database-level proximity aggregation across all matching jobs
+      const proximityPipeline = [
+        { $match: filter },
+        {
+          $addFields: {
+            rawLat: {
+              $cond: [
+                { $and: [{ $ne: ['$coordinates.lat', null] }, { $isNumber: '$coordinates.lat' }] },
+                '$coordinates.lat',
+                {
+                  $switch: {
+                    branches: [
+                      { case: { $regexMatch: { input: { $ifNull: ['$city', ''] }, regex: /kolkata/i } }, then: 22.5726 },
+                      { case: { $regexMatch: { input: { $ifNull: ['$city', ''] }, regex: /bengaluru|bangalore/i } }, then: 12.9716 },
+                      { case: { $regexMatch: { input: { $ifNull: ['$city', ''] }, regex: /hyderabad/i } }, then: 17.3850 },
+                      { case: { $regexMatch: { input: { $ifNull: ['$city', ''] }, regex: /gurgaon|gurugram/i } }, then: 28.4595 },
+                      { case: { $regexMatch: { input: { $ifNull: ['$city', ''] }, regex: /delhi/i } }, then: 28.6139 },
+                      { case: { $regexMatch: { input: { $ifNull: ['$city', ''] }, regex: /noida/i } }, then: 28.5355 },
+                      { case: { $regexMatch: { input: { $ifNull: ['$city', ''] }, regex: /pune/i } }, then: 18.5204 },
+                      { case: { $regexMatch: { input: { $ifNull: ['$city', ''] }, regex: /mumbai/i } }, then: 19.0760 },
+                      { case: { $regexMatch: { input: { $ifNull: ['$city', ''] }, regex: /chennai/i } }, then: 13.0827 },
+                      { case: { $regexMatch: { input: { $ifNull: ['$city', ''] }, regex: /ahmedabad/i } }, then: 23.0350 },
+                      { case: { $regexMatch: { input: { $ifNull: ['$city', ''] }, regex: /jaipur/i } }, then: 26.9000 },
+                      { case: { $regexMatch: { input: { $ifNull: ['$city', ''] }, regex: /kochi/i } }, then: 10.0000 },
+                      { case: { $regexMatch: { input: { $ifNull: ['$city', ''] }, regex: /chandigarh/i } }, then: 30.7300 },
+                      { case: { $regexMatch: { input: { $ifNull: ['$city', ''] }, regex: /indore/i } }, then: 22.7250 },
+                      { case: { $regexMatch: { input: { $ifNull: ['$city', ''] }, regex: /bhubaneswar/i } }, then: 20.2850 }
+                    ],
+                    default: null
+                  }
+                }
+              ]
+            },
+            rawLng: {
+              $cond: [
+                { $and: [{ $ne: ['$coordinates.lng', null] }, { $isNumber: '$coordinates.lng' }] },
+                '$coordinates.lng',
+                {
+                  $switch: {
+                    branches: [
+                      { case: { $regexMatch: { input: { $ifNull: ['$city', ''] }, regex: /kolkata/i } }, then: 88.3639 },
+                      { case: { $regexMatch: { input: { $ifNull: ['$city', ''] }, regex: /bengaluru|bangalore/i } }, then: 77.5946 },
+                      { case: { $regexMatch: { input: { $ifNull: ['$city', ''] }, regex: /hyderabad/i } }, then: 78.4867 },
+                      { case: { $regexMatch: { input: { $ifNull: ['$city', ''] }, regex: /gurgaon|gurugram/i } }, then: 77.0266 },
+                      { case: { $regexMatch: { input: { $ifNull: ['$city', ''] }, regex: /delhi/i } }, then: 77.2090 },
+                      { case: { $regexMatch: { input: { $ifNull: ['$city', ''] }, regex: /noida/i } }, then: 77.3910 },
+                      { case: { $regexMatch: { input: { $ifNull: ['$city', ''] }, regex: /pune/i } }, then: 73.8567 },
+                      { case: { $regexMatch: { input: { $ifNull: ['$city', ''] }, regex: /mumbai/i } }, then: 72.8777 },
+                      { case: { $regexMatch: { input: { $ifNull: ['$city', ''] }, regex: /chennai/i } }, then: 80.2707 },
+                      { case: { $regexMatch: { input: { $ifNull: ['$city', ''] }, regex: /ahmedabad/i } }, then: 72.5800 },
+                      { case: { $regexMatch: { input: { $ifNull: ['$city', ''] }, regex: /jaipur/i } }, then: 75.8000 },
+                      { case: { $regexMatch: { input: { $ifNull: ['$city', ''] }, regex: /kochi/i } }, then: 76.3000 },
+                      { case: { $regexMatch: { input: { $ifNull: ['$city', ''] }, regex: /chandigarh/i } }, then: 76.7750 },
+                      { case: { $regexMatch: { input: { $ifNull: ['$city', ''] }, regex: /indore/i } }, then: 75.8750 },
+                      { case: { $regexMatch: { input: { $ifNull: ['$city', ''] }, regex: /bhubaneswar/i } }, then: 85.8250 }
+                    ],
+                    default: null
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          $addFields: {
+            distApprox: {
+              $cond: [
+                { $and: [{ $isNumber: '$rawLat' }, { $isNumber: '$rawLng' }] },
+                {
+                  $add: [
+                    { $pow: [{ $subtract: ['$rawLat', numUserLat] }, 2] },
+                    { $pow: [{ $subtract: ['$rawLng', numUserLng] }, 2] }
+                  ]
+                },
+                99999999
+              ]
+            }
+          }
+        }
+      ];
+
+      if (maxDist && !isNaN(maxDist)) {
+        const degRadius = maxDist / 95;
+        const degRadiusSq = degRadius * degRadius;
+        proximityPipeline.push({ $match: { distApprox: { $lte: degRadiusSq } } });
+      }
+
+      const [countAgg, jobsList, oCount, tInDb] = await Promise.all([
+        Job.aggregate([...proximityPipeline, { $count: 'total' }]),
+        Job.aggregate([
+          ...proximityPipeline,
+          { $sort: { distApprox: 1, lastSeenAt: -1, updatedAt: -1 } },
+          { $skip: skip },
+          { $limit: parsedLimit },
+          {
+            $project: {
+              source: 1,
+              sourceJobId: 1,
+              company: 1,
+              title: 1,
+              location: 1,
+              locationRaw: 1,
+              city: 1,
+              state: 1,
+              country: 1,
+              techCorridor: 1,
+              locality: 1,
+              officeName: 1,
+              officeAddress: 1,
+              coordinates: 1,
+              roleFamily: 1,
+              seniority: 1,
+              fresherFriendly: 1,
+              expMin: 1,
+              expMax: 1,
+              workMode: 1,
+              fingerprint: 1,
+              applyUrl: 1,
+              updatedAt: 1,
+              firstSeenAt: 1,
+              lastSeenAt: 1,
+              status: 1,
+              descriptionHtml: 1,
+              rawLat: 1,
+              rawLng: 1
+            }
+          }
+        ]),
+        Job.countDocuments({ status: 'open' }),
+        Job.countDocuments()
+      ]);
+
+      jobs = jobsList;
+      totalCount = countAgg[0]?.total || 0;
+      openCount = oCount;
+      totalInDb = tInDb;
+    } else {
+      // Default query: newest verified jobs first
+      const [jobsList, tCount, oCount, tInDb] = await Promise.all([
+        Job.find(filter)
+          .sort({ lastSeenAt: -1, updatedAt: -1 })
+          .skip(skip)
+          .limit(parsedLimit)
+          .select('source sourceJobId company title location locationRaw city state country techCorridor locality officeName officeAddress coordinates roleFamily seniority fresherFriendly expMin expMax workMode fingerprint applyUrl updatedAt firstSeenAt lastSeenAt status descriptionHtml')
+          .lean(),
+        Job.countDocuments(filter),
+        Job.countDocuments({ status: 'open' }),
+        Job.countDocuments()
+      ]);
+
+      jobs = jobsList;
+      totalCount = tCount;
+      openCount = oCount;
+      totalInDb = tInDb;
+    }
 
     // Cross-source deduplication linking:
     // If multiple records share the same fingerprint, link duplicates and prefer ATS record over aggregator
@@ -210,10 +371,32 @@ async function getJobs(req, res) {
       }
     }
 
-    // Attach precomputed eligibility for instant, 100% consistent candidate matching
+    // Attach precomputed eligibility and calculate distance if user location provided
     for (const job of deduplicatedJobs) {
       job.eligibility = analyzeJobEligibility(job);
       delete job.descriptionHtml;
+
+      if (hasUserLocation) {
+        const lat = job.rawLat != null ? job.rawLat : (job.coordinates?.lat || resolveItemCoordinates(job)?.lat);
+        const lng = job.rawLng != null ? job.rawLng : (job.coordinates?.lng || resolveItemCoordinates(job)?.lng);
+        if (lat != null && lng != null) {
+          job.distanceKm = calculateDistanceKm(numUserLat, numUserLng, lat, lng);
+        } else {
+          job.distanceKm = null;
+        }
+      } else {
+        job.distanceKm = null;
+      }
+    }
+
+    let finalJobs = deduplicatedJobs;
+    if (isSortByDistance) {
+      finalJobs.sort((a, b) => {
+        if (a.distanceKm == null && b.distanceKm == null) return 0;
+        if (a.distanceKm == null) return 1;
+        if (b.distanceKm == null) return -1;
+        return a.distanceKm - b.distanceKm;
+      });
     }
 
     return res.status(200).json({
@@ -224,9 +407,10 @@ async function getJobs(req, res) {
         totalInDb,
         page: parsedPage,
         limit: parsedLimit,
-        totalPages: Math.ceil(totalCount / parsedLimit) || 1
+        totalPages: Math.ceil(totalCount / parsedLimit) || 1,
+        userLocationApplied: hasUserLocation
       },
-      jobs: deduplicatedJobs
+      jobs: finalJobs
     });
   } catch (error) {
     console.error('[jobController:getJobs] Error:', error);

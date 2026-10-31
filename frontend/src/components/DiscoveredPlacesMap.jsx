@@ -37,7 +37,8 @@ export default function DiscoveredPlacesMap({
   onSelectPlace,
   cityName = '',
   citySlug = '',
-  centerCoords = null
+  centerCoords = null,
+  userLocation = null
 }) {
   const mapContainerRef = useRef(null);
   const mapInstanceRef = useRef(null);
@@ -65,7 +66,7 @@ export default function DiscoveredPlacesMap({
         attributionControl: false
       });
 
-      // High performance CARTO tile layer (free global CDN, unblocked, crisp vector raster)
+      // High performance tile layer
       const isDarkMode = typeof document !== 'undefined' && document.documentElement.getAttribute('data-theme') === 'dark';
       const tileUrl = isDarkMode
         ? 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}'
@@ -118,6 +119,20 @@ export default function DiscoveredPlacesMap({
     };
   }, []);
 
+  // Helper to calculate distance
+  const calcDist = (lat1, lon1, lat2, lon2) => {
+    if (lat1 == null || lon1 == null || lat2 == null || lon2 == null) return null;
+    const R = 6371;
+    const dLat = (lat2 - lat1) * (Math.PI / 180);
+    const dLon = (lon2 - lon1) * (Math.PI / 180);
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
+      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return Math.round(R * c * 10) / 10;
+  };
+
   // Populate Markers for all discovered places
   useEffect(() => {
     const map = mapInstanceRef.current;
@@ -129,6 +144,32 @@ export default function DiscoveredPlacesMap({
 
     const bounds = [];
 
+    // Render User Location Pin if available
+    if (userLocation && userLocation.lat != null && userLocation.lng != null) {
+      const userMarkerHtml = `
+        <div class="user-location-map-pin">
+          <div class="user-pin-pulse"></div>
+          <div class="user-pin-center"></div>
+          <span class="user-pin-title">You Are Here</span>
+        </div>
+      `;
+      const userIcon = L.divIcon({
+        className: 'custom-user-marker',
+        html: userMarkerHtml,
+        iconSize: [28, 28],
+        iconAnchor: [14, 14]
+      });
+      L.marker([userLocation.lat, userLocation.lng], {
+        icon: userIcon,
+        zIndexOffset: 2000
+      }).bindPopup(`
+        <div class="user-loc-popup">
+          <strong>📍 Your Location</strong>
+          <span>${userLocation.label || 'Active reference point'}</span>
+        </div>
+      `).addTo(layer);
+    }
+
     places.forEach((place) => {
       if (place.lat == null || place.lng == null) return;
 
@@ -136,6 +177,13 @@ export default function DiscoveredPlacesMap({
       bounds.push([place.lat, place.lng]);
 
       const directionsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(`${place.name}, ${place.address || ''}`)}`;
+
+      const dist = userLocation?.lat != null && userLocation?.lng != null
+        ? calcDist(userLocation.lat, userLocation.lng, place.lat, place.lng)
+        : null;
+      const distText = dist != null
+        ? (dist < 1 ? `${Math.round(dist * 1000)} m away` : `${dist.toFixed(1)} km away`)
+        : '';
 
       const markerHtml = `
         <div class="discovered-map-pin ${isSelected ? 'is-active' : ''}">
@@ -167,15 +215,22 @@ export default function DiscoveredPlacesMap({
           <div class="discovered-popup-header">
             <span class="discovered-popup-badge">${place.category || 'Tech Office'}</span>
             ${place.rating ? `<span class="discovered-popup-rating">★ ${place.rating}</span>` : ''}
+            ${distText ? `<span class="discovered-popup-dist">📍 ${distText}</span>` : ''}
           </div>
           <h4 class="discovered-popup-name">${place.name}</h4>
-          <p class="discovered-popup-address">${place.address || 'Address registered'}</p>
+          <p class="discovered-popup-address">
+            <svg class="popup-addr-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+              <circle cx="12" cy="10" r="3" />
+            </svg>
+            <span>${place.address || 'Address registered'}</span>
+          </p>
           <div class="discovered-popup-actions">
             <a href="${directionsUrl}" target="_blank" rel="noopener noreferrer" class="discovered-popup-dir-btn">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <polygon points="3 11 22 2 13 21 11 13 3 11" />
               </svg>
-              Get Directions (Google Maps)
+              <span>Get Directions (Google Maps)</span>
             </a>
           </div>
         </div>
@@ -183,8 +238,11 @@ export default function DiscoveredPlacesMap({
 
       marker.bindPopup(popupHtml, {
         className: 'custom-leaflet-office-popup',
-        offset: [0, -28],
-        closeButton: true
+        offset: [0, -36],
+        closeButton: true,
+        autoPan: true,
+        autoPanPaddingTopLeft: [20, 90],
+        autoPanPaddingBottomRight: [20, 20]
       });
 
       marker.on('click', () => {
@@ -202,7 +260,7 @@ export default function DiscoveredPlacesMap({
         map.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 });
       } catch (_) {}
     }
-  }, [places]);
+  }, [places, userLocation]);
 
   // Handle selected place changes (Fly to place on map & trigger popup)
   useEffect(() => {

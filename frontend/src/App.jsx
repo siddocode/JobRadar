@@ -5,7 +5,9 @@ import AuthModal from './components/AuthModal';
 import JobEligibilityModal from './components/JobEligibilityModal';
 import CandidateProfileUploadModal from './components/CandidateProfileUploadModal';
 import TechCorridorMapView from './components/TechCorridorMapView';
+import UserLocationModal from './components/UserLocationModal';
 import { useAuth } from './context/AuthContext';
+import { useLocation, formatDistance, calculateDistanceKm } from './context/LocationContext';
 import { getJobMatchQuick } from './utils/candidateMatcher';
 
 const PRIMARY_TECH_HUBS = [
@@ -23,6 +25,13 @@ const PRIMARY_TECH_HUBS = [
 
 export default function App() {
   const { user, isAuthenticated, logout, openAuthModal, authFetch, candidateProfile } = useAuth();
+  const {
+    userLocation,
+    openLocationModal,
+    sortByDistance,
+    setSortByDistance,
+    maxDistanceKm
+  } = useLocation();
   const [activeTab, setActiveTab] = useState('jobs'); // 'jobs' | 'directory' | 'reachout'
   const [theme, setTheme] = useState(() => localStorage.getItem('jobradar_theme') || 'light');
 
@@ -167,6 +176,16 @@ export default function App() {
       if (statusFilter !== 'all') params.append('status', statusFilter);
       if (companyFilter !== 'all') params.append('company', companyFilter);
       if (techOnlyJobs) params.append('techOnly', 'true');
+      if (userLocation && userLocation.lat != null && userLocation.lng != null) {
+        params.append('userLat', String(userLocation.lat));
+        params.append('userLng', String(userLocation.lng));
+        if (sortByDistance) {
+          params.append('sortBy', 'distance');
+        }
+        if (maxDistanceKm) {
+          params.append('maxDistanceKm', String(maxDistanceKm));
+        }
+      }
       params.append('page', String(page));
       params.append('limit', String(viewMode === 'map' ? 100 : limit));
 
@@ -190,7 +209,7 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, [searchQuery, selectedCountry, selectedCity, selectedCorridor, experienceLevel, workModeFilter, statusFilter, companyFilter, techOnlyJobs, page, limit, viewMode]);
+  }, [searchQuery, selectedCountry, selectedCity, selectedCorridor, experienceLevel, workModeFilter, statusFilter, companyFilter, techOnlyJobs, page, limit, viewMode, userLocation, sortByDistance, maxDistanceKm]);
 
   const fetchDirectoryMeta = useCallback(async () => {
     try {
@@ -836,6 +855,25 @@ export default function App() {
                 </svg>
               </span>
               <span className="sync-text">{isSyncing ? 'Syncing...' : 'Sync Jobs'}</span>
+            </button>
+
+            <button
+              type="button"
+              className={`user-location-nav-btn ${userLocation ? 'has-location' : ''}`}
+              onClick={openLocationModal}
+              title={userLocation
+                ? `Location: ${userLocation.label} (${userLocation.lat.toFixed(3)}, ${userLocation.lng.toFixed(3)}). Click to update or clear.`
+                : 'Set your location to see nearest jobs and companies'}
+              id="topbar-location-btn"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+                <circle cx="12" cy="10" r="3" />
+              </svg>
+              <span className="location-nav-text">
+                {userLocation ? (userLocation.label?.split(',')[0] || userLocation.city || 'My Location') : 'Set Location'}
+              </span>
+              {userLocation && <span className="location-active-dot" />}
             </button>
 
             <div className="topbar-divider" />
@@ -1536,6 +1574,44 @@ export default function App() {
                   </div>
 
                   <div className="results-controls-cluster">
+                    {/* Nearest to Me Proximity Toggle */}
+                    <button
+                      type="button"
+                      id="sort-nearest-toggle-btn"
+                      className={`sort-nearest-pill-btn ${sortByDistance && userLocation ? 'is-active' : ''}`}
+                      onClick={() => {
+                        if (!userLocation) {
+                          openLocationModal();
+                        } else {
+                          setSortByDistance(!sortByDistance);
+                        }
+                      }}
+                      title={userLocation
+                        ? (sortByDistance ? `Currently sorting jobs nearest to ${userLocation.label}` : `Click to sort nearest to ${userLocation.label}`)
+                        : 'Set your location to see nearest jobs first'}
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3">
+                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+                        <circle cx="12" cy="10" r="3" />
+                      </svg>
+                      <span className="sort-nearest-label">
+                        {userLocation
+                          ? (sortByDistance ? `Nearest: ${userLocation.label?.split(',')[0]}` : 'Sort: Distance')
+                          : '📍 Nearest to Me'}
+                      </span>
+                      {userLocation && (
+                        <span
+                          className="sort-nearest-edit-tag"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openLocationModal();
+                          }}
+                          title="Change your location"
+                        >
+                          Change
+                        </span>
+                      )}
+                    </button>
 
                     {/* View Mode Switcher */}
                     <div className="view-mode-segmented" role="group" aria-label="View layout switch">
@@ -1701,13 +1777,19 @@ export default function App() {
                                       <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
                                       <circle cx="12" cy="10" r="3" />
                                     </svg>
-                                    <span>{job.locality ? `${job.locality}, ${job.city || 'India'}` : displayCity}</span>
+                                    <span className="location-name-truncate">{job.locality ? `${job.locality}, ${job.city || 'India'}` : displayCity}</span>
                                   </div>
 
                                   <div className="radar-tags-row">
                                     <span className={`mode-badge ${getWorkModeBadgeClass(job.workMode)}`}>
                                       {job.workMode || 'onsite'}
                                     </span>
+
+                                    {job.distanceKm != null && (
+                                      <span className="radar-tag distance-tag" title={`Direct distance: ${job.distanceKm} km`}>
+                                        📍 {formatDistance(job.distanceKm)}
+                                      </span>
+                                    )}
 
                                     {job.techCorridor && (
                                       <span className="radar-tag corridor">
@@ -1839,6 +1921,11 @@ export default function App() {
                                       >
                                         {displayCity}
                                       </span>
+                                      {job.distanceKm != null && (
+                                        <span className="table-distance-badge" title={`Approximately ${job.distanceKm} km from your set location`}>
+                                          📍 {formatDistance(job.distanceKm)}
+                                        </span>
+                                      )}
                                       <span className={`mode-badge ${getWorkModeBadgeClass(job.workMode)}`}>
                                         {job.workMode}
                                       </span>
@@ -2070,6 +2157,9 @@ export default function App() {
 
       {/* Global Auth Modal */}
       <AuthModal />
+
+      {/* User Location Radar Modal */}
+      <UserLocationModal />
     </div>
   );
 }

@@ -4,6 +4,7 @@ const City = require('../models/City');
 const Job = require('../models/Job');
 const UncertainMerge = require('../models/UncertainMerge');
 const UserPipeline = require('../models/UserPipeline');
+const { calculateDistanceKm } = require('../utils/geoUtils');
 
 /**
  * GET /api/directory/cities
@@ -86,6 +87,10 @@ exports.getCompanies = async (req, res) => {
       q = '',
       techOnly = 'false',
       followUp = 'all',
+      userLat,
+      userLng,
+      sortBy,
+      maxDistanceKm,
       page = 1,
       limit = 50
     } = req.query;
@@ -179,21 +184,74 @@ exports.getCompanies = async (req, res) => {
       }
     }
 
-    // Fast count at database level
-    console.time('[Perf] countDocuments');
-    const total = await Company.countDocuments(companyQuery);
-    console.timeEnd('[Perf] countDocuments');
+    // Check if user location is provided
+    const numUserLat = userLat != null && userLat !== '' ? parseFloat(userLat) : null;
+    const numUserLng = userLng != null && userLng !== '' ? parseFloat(userLng) : null;
+    const hasUserLocation = numUserLat != null && numUserLng != null && !isNaN(numUserLat) && !isNaN(numUserLng);
+    const maxDist = maxDistanceKm ? parseFloat(maxDistanceKm) : null;
+    const isSortByDistance = hasUserLocation && (sortBy === 'distance' || maxDist != null);
 
     const startIndex = (pageNum - 1) * limitNum;
+    let total = 0;
+    let paginatedCompanies = [];
+    const companyDistMap = new Map();
 
-    // Fast database-level pagination
-    console.time('[Perf] findPaginated');
-    const paginatedCompanies = await Company.find(companyQuery)
-      .sort({ name: 1 })
-      .skip(startIndex)
-      .limit(limitNum)
-      .lean();
-    console.timeEnd('[Perf] findPaginated');
+    if (isSortByDistance) {
+      // 1. Fetch offices with coordinates to determine proximity across all companies
+      const allOffices = await Office.find({ lat: { $ne: null }, lng: { $ne: null } })
+        .select('companyId lat lng')
+        .lean();
+
+      for (const off of allOffices) {
+        if (!off.companyId) continue;
+        const cId = off.companyId.toString();
+        const dist = calculateDistanceKm(numUserLat, numUserLng, off.lat, off.lng);
+        if (dist != null) {
+          const prev = companyDistMap.get(cId);
+          if (prev == null || dist < prev) {
+            companyDistMap.set(cId, dist);
+          }
+        }
+      }
+
+      // Filter by max distance if requested
+      let sortedCompIds = Array.from(companyDistMap.entries())
+        .filter(([cId, d]) => maxDist == null || d <= maxDist)
+        .sort((a, b) => a[1] - b[1])
+        .map(([cId]) => cId);
+
+      // Intersect with companyQuery._id if already specified
+      if (companyQuery._id && companyQuery._id.$in) {
+        const idSet = new Set(companyQuery._id.$in.map(id => id.toString()));
+        sortedCompIds = sortedCompIds.filter(id => idSet.has(id));
+      } else if (companyQuery._id && companyQuery._id.$nin) {
+        const idSet = new Set(companyQuery._id.$nin.map(id => id.toString()));
+        sortedCompIds = sortedCompIds.filter(id => !idSet.has(id));
+      }
+
+      // Filter against any remaining companyQuery criteria (e.g. name, techOnly, etc.)
+      const matchingCompRecords = await Company.find({
+        ...companyQuery,
+        _id: { $in: sortedCompIds }
+      }, '_id').lean();
+      const matchingSet = new Set(matchingCompRecords.map(c => c._id.toString()));
+      sortedCompIds = sortedCompIds.filter(id => matchingSet.has(id));
+
+      total = sortedCompIds.length;
+      const paginatedIds = sortedCompIds.slice(startIndex, startIndex + limitNum);
+
+      const foundCompanies = await Company.find({ _id: { $in: paginatedIds } }).lean();
+      const compMap = new Map(foundCompanies.map(c => [c._id.toString(), c]));
+      paginatedCompanies = paginatedIds.map(id => compMap.get(id)).filter(Boolean);
+    } else {
+      // Default query: alphabetical
+      total = await Company.countDocuments(companyQuery);
+      paginatedCompanies = await Company.find(companyQuery)
+        .sort({ name: 1 })
+        .skip(startIndex)
+        .limit(limitNum)
+        .lean();
+    }
 
     // Attach open jobs and offices ONLY for the paginated slice
     const companyIds = paginatedCompanies.map(c => c._id);
@@ -234,13 +292,46 @@ exports.getCompanies = async (req, res) => {
       }
     }
 
-    // Assemble company cards with strictly verified hiring status
-    const processed = paginatedCompanies.map(comp => {
+    // Assemble company cards with strictly verified hiring status & distance
+    let processed = paginatedCompanies.map(comp => {
       const cId = comp._id.toString();
       const openJobs = jobsMap[cId] || [];
       const offices = officesMap[cId] || [];
       const isHiring = openJobs.length > 0;
       const userPipe = userPipelineMap[cId];
+
+      let distanceKm = null;
+      let nearestOffice = null;
+
+      if (hasUserLocation) {
+        let minDistance = Infinity;
+
+        // Check each office coordinates
+        for (const off of offices) {
+          if (off.lat != null && off.lng != null) {
+            const d = calculateDistanceKm(numUserLat, numUserLng, off.lat, off.lng);
+            if (d != null && d < minDistance) {
+              minDistance = d;
+              nearestOffice = off;
+            }
+          }
+        }
+
+        // Also check company base coordinates
+        if (comp.latitude != null && comp.longitude != null) {
+          const d = calculateDistanceKm(numUserLat, numUserLng, comp.latitude, comp.longitude);
+          if (d != null && d < minDistance) {
+            minDistance = d;
+            if (!nearestOffice) {
+              nearestOffice = { address: comp.address, locality: comp.locality, lat: comp.latitude, lng: comp.longitude };
+            }
+          }
+        }
+
+        if (minDistance !== Infinity) {
+          distanceKm = minDistance;
+        }
+      }
 
       return {
         ...comp,
@@ -252,16 +343,33 @@ exports.getCompanies = async (req, res) => {
         isHiring,
         hiringStatusLabel: isHiring
           ? `Hiring (${openJobs.length} opening${openJobs.length > 1 ? 's' : ''})`
-          : 'No known vacancy'
+          : 'No known vacancy',
+        distanceKm,
+        nearestOffice
       };
     });
+
+    // Proximity sorting & filtering
+    if (hasUserLocation && maxDist && !isNaN(maxDist)) {
+      processed = processed.filter(c => c.distanceKm == null || c.distanceKm <= maxDist);
+    }
+
+    if (hasUserLocation && sortBy === 'distance') {
+      processed.sort((a, b) => {
+        if (a.distanceKm == null && b.distanceKm == null) return 0;
+        if (a.distanceKm == null) return 1;
+        if (b.distanceKm == null) return -1;
+        return a.distanceKm - b.distanceKm;
+      });
+    }
 
     res.status(200).json({
       success: true,
       companies: processed,
       total,
       page: pageNum,
-      totalPages: Math.ceil(total / limitNum) || 1
+      totalPages: Math.ceil(total / limitNum) || 1,
+      userLocationApplied: hasUserLocation
     });
   } catch (err) {
     console.error('Error fetching directory companies:', err);
@@ -838,5 +946,178 @@ exports.createCompany = async (req, res) => {
     return res.status(500).json({ success: false, error: err.message });
   }
 };
+
+/**
+ * GET /api/directory/places/search
+ * Place & office search biased to user GPS coordinates
+ * Query params: q, lat, lng, limit
+ */
+exports.searchPlaces = async (req, res) => {
+  try {
+    const { q = '', lat, lng, limit = 12 } = req.query;
+    const query = q.trim();
+    if (!query || query.length < 2) {
+      return res.status(200).json({ success: true, places: [] });
+    }
+
+    const userLat = lat ? parseFloat(lat) : null;
+    const userLng = lng ? parseFloat(lng) : null;
+    const limitNum = Math.min(25, Math.max(1, parseInt(limit, 10) || 12));
+
+    const results = [];
+    const seenKeys = new Set();
+
+    // 1. If GOOGLE_PLACES_API_KEY is configured in backend, query Google Places Autocomplete API
+    const apiKey = (process.env.GOOGLE_PLACES_API_KEY || '').trim();
+    if (apiKey) {
+      try {
+        let googleUrl = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(query)}&key=${apiKey}`;
+        if (userLat != null && userLng != null) {
+          googleUrl += `&location=${userLat},${userLng}&radius=50000`;
+        }
+        const gRes = await fetch(googleUrl);
+        if (gRes.ok) {
+          const gData = await gRes.json();
+          if (gData.status === 'OK' && Array.isArray(gData.predictions)) {
+            for (const pred of gData.predictions.slice(0, 5)) {
+              const detailsUrl = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${pred.place_id}&fields=name,geometry,formatted_address,types&key=${apiKey}`;
+              const dRes = await fetch(detailsUrl);
+              if (dRes.ok) {
+                const dData = await dRes.json();
+                const place = dData.result;
+                if (place?.geometry?.location) {
+                  const pLat = place.geometry.location.lat;
+                  const pLng = place.geometry.location.lng;
+                  const key = `${pLat.toFixed(3)},${pLng.toFixed(3)}`;
+                  if (!seenKeys.has(key)) {
+                    seenKeys.add(key);
+                    const isFood = (place.types || []).some(t => ['restaurant', 'cafe', 'food', 'bar', 'meal_takeaway'].includes(t));
+                    const isOffice = (place.types || []).some(t => ['point_of_interest', 'establishment', 'office'].includes(t));
+                    results.push({
+                      label: place.name || pred.structured_formatting?.main_text || pred.description,
+                      fullAddress: place.formatted_address || pred.description,
+                      lat: pLat,
+                      lng: pLng,
+                      category: isFood ? 'food' : (isOffice ? 'office' : 'landmark'),
+                      source: 'google_places'
+                    });
+                  }
+                }
+              }
+            }
+          }
+        }
+      } catch (gErr) {
+        console.warn('[PlacesSearch] Google API error:', gErr.message);
+      }
+    }
+
+    // 2. Search MongoDB Offices and Companies
+    try {
+      const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const safeQuery = escapeRegex(query);
+      const reg = new RegExp(safeQuery, 'i');
+
+      const matchingOffices = await Office.find({
+        $or: [
+          { locality: reg },
+          { address: reg }
+        ],
+        lat: { $ne: null },
+        lng: { $ne: null }
+      })
+      .populate('companyId', 'name')
+      .populate('cityId', 'name')
+      .limit(10)
+      .lean();
+
+      for (const off of matchingOffices) {
+        const compName = off.companyId?.name || '';
+        const cityName = off.cityId?.name || '';
+        const pLat = off.lat;
+        const pLng = off.lng;
+        const key = `${pLat.toFixed(3)},${pLng.toFixed(3)}`;
+        if (seenKeys.has(key)) continue;
+        seenKeys.add(key);
+
+        const label = compName ? `${compName} (${off.locality || cityName})` : (off.locality || off.address.split(',')[0]);
+        results.push({
+          label,
+          fullAddress: off.address || `${label}, ${cityName}`,
+          city: cityName,
+          lat: pLat,
+          lng: pLng,
+          category: 'office',
+          source: 'local_db'
+        });
+      }
+
+      // Also search Company by name
+      const matchingCompanies = await Company.find({
+        name: reg
+      })
+      .select('name')
+      .limit(10)
+      .lean();
+
+      if (matchingCompanies.length > 0) {
+        const compIds = matchingCompanies.map(c => c._id);
+        const compOffices = await Office.find({
+          companyId: { $in: compIds },
+          lat: { $ne: null },
+          lng: { $ne: null }
+        })
+        .populate('companyId', 'name')
+        .populate('cityId', 'name')
+        .limit(10)
+        .lean();
+
+        for (const off of compOffices) {
+          const compName = off.companyId?.name || '';
+          const cityName = off.cityId?.name || '';
+          const pLat = off.lat;
+          const pLng = off.lng;
+          const key = `${pLat.toFixed(3)},${pLng.toFixed(3)}`;
+          if (seenKeys.has(key)) continue;
+          seenKeys.add(key);
+
+          const label = compName ? `${compName} (${off.locality || cityName})` : (off.locality || off.address.split(',')[0]);
+          results.push({
+            label,
+            fullAddress: off.address || `${label}, ${cityName}`,
+            city: cityName,
+            lat: pLat,
+            lng: pLng,
+            category: 'office',
+            source: 'local_db'
+          });
+        }
+      }
+    } catch (dbErr) {
+      console.warn('[PlacesSearch] DB search error:', dbErr.message);
+    }
+
+    // Distance calculation & proximity sorting if userLat and userLng provided
+    if (userLat != null && userLng != null) {
+      results.forEach(r => {
+        r.distanceKm = calculateDistanceKm(userLat, userLng, r.lat, r.lng);
+      });
+      results.sort((a, b) => {
+        if (a.distanceKm == null) return 1;
+        if (b.distanceKm == null) return -1;
+        return a.distanceKm - b.distanceKm;
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      places: results.slice(0, limitNum)
+    });
+  } catch (err) {
+    console.error('Error in searchPlaces:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+};
+
 
 
