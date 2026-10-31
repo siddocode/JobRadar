@@ -13,7 +13,7 @@ const DEFAULT_API_KEY = 'xkeysib-07ac65d5ad35762539704380ae81969d43bfa2ca1fff7b6
 const DEFAULT_SENDER_EMAIL = 'siddocode@gmail.com';
 const DEFAULT_SENDER_NAME = 'JobRadar';
 const DEFAULT_APP_URL = (process.env.NODE_ENV === 'production' || process.env.RENDER === 'true')
-  ? 'https://job-radar-puce.vercel.app'
+  ? 'https://job-radarr.vercel.app'
   : 'http://localhost:5173';
 
 /**
