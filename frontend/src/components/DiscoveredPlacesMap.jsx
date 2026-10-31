@@ -49,6 +49,10 @@ export default function DiscoveredPlacesMap({
     if (!mapContainerRef.current) return;
 
     if (!mapInstanceRef.current) {
+      if (mapContainerRef.current._leaflet_id) {
+        delete mapContainerRef.current._leaflet_id;
+      }
+
       const cityKey = (citySlug || cityName || 'all').toLowerCase();
       const defaultCenter = centerCoords?.lat && centerCoords?.lng
         ? { lat: centerCoords.lat, lng: centerCoords.lng, zoom: 12 }
@@ -61,10 +65,15 @@ export default function DiscoveredPlacesMap({
         attributionControl: false
       });
 
-      // Free OpenStreetMap Tile Layer
-      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      // High performance CARTO tile layer (free global CDN, unblocked, crisp vector raster)
+      const isDarkMode = typeof document !== 'undefined' && document.documentElement.getAttribute('data-theme') === 'dark';
+      const tileUrl = isDarkMode
+        ? 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}'
+        : 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}';
+
+      L.tileLayer(tileUrl, {
         maxZoom: 19,
-        attribution: '&copy; OpenStreetMap'
+        attribution: '&copy; <a href="https://www.esri.com/">Esri</a>, OpenStreetMap contributors'
       }).addTo(map);
 
       // Custom zoom control bottom right
@@ -74,13 +83,12 @@ export default function DiscoveredPlacesMap({
       markersLayerRef.current = markersLayer;
       mapInstanceRef.current = map;
 
-      // Ensure proper rendering of map tiles
-      setTimeout(() => {
-        if (mapInstanceRef.current) mapInstanceRef.current.invalidateSize();
-      }, 150);
-      setTimeout(() => {
-        if (mapInstanceRef.current) mapInstanceRef.current.invalidateSize();
-      }, 400);
+      // Ensure proper rendering of map tiles across paint frames
+      const invalidateTimers = [50, 150, 300, 600, 1000].map((delay) =>
+        setTimeout(() => {
+          if (mapInstanceRef.current) mapInstanceRef.current.invalidateSize();
+        }, delay)
+      );
 
       // Auto-invalidate size on container resize
       const resizeObserver = new ResizeObserver(() => {
@@ -90,15 +98,22 @@ export default function DiscoveredPlacesMap({
       });
       resizeObserver.observe(mapContainerRef.current);
       mapContainerRef.current._resizeObserver = resizeObserver;
+      mapContainerRef.current._invalidateTimers = invalidateTimers;
     }
 
     return () => {
+      if (mapContainerRef.current && mapContainerRef.current._invalidateTimers) {
+        mapContainerRef.current._invalidateTimers.forEach(clearTimeout);
+      }
       if (mapContainerRef.current && mapContainerRef.current._resizeObserver) {
         mapContainerRef.current._resizeObserver.disconnect();
       }
       if (mapInstanceRef.current) {
         mapInstanceRef.current.remove();
         mapInstanceRef.current = null;
+      }
+      if (mapContainerRef.current && mapContainerRef.current._leaflet_id) {
+        delete mapContainerRef.current._leaflet_id;
       }
     };
   }, []);

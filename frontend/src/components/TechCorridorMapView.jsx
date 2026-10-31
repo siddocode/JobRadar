@@ -149,6 +149,10 @@ export default function TechCorridorMapView({
     if (!mapContainerRef.current) return;
 
     if (!mapInstanceRef.current) {
+      if (mapContainerRef.current._leaflet_id) {
+        delete mapContainerRef.current._leaflet_id;
+      }
+
       const initialTarget = CITY_CENTERS[selectedCity?.toLowerCase()] || CITY_CENTERS.all;
       const map = L.map(mapContainerRef.current, {
         center: [initialTarget.lat, initialTarget.lng],
@@ -157,10 +161,15 @@ export default function TechCorridorMapView({
         attributionControl: false
       });
 
-      // Free OpenStreetMap tiles with zero watermark / API key requirement
-      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      // High-performance GIS basemaps with zero watermarks, zero API key requirement, and free Akamai CDN
+      const isDarkMode = typeof document !== 'undefined' && document.documentElement.getAttribute('data-theme') === 'dark';
+      const tileUrl = isDarkMode
+        ? 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}'
+        : 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}';
+
+      L.tileLayer(tileUrl, {
         maxZoom: 19,
-        attribution: '&copy; OpenStreetMap contributors'
+        attribution: '&copy; <a href="https://www.esri.com/">Esri</a>, OpenStreetMap contributors'
       }).addTo(map);
 
       // Custom zoom control in bottom-right
@@ -170,17 +179,14 @@ export default function TechCorridorMapView({
       markersLayerRef.current = markersLayer;
       mapInstanceRef.current = map;
 
-      // Invalidate size on mount to ensure tiles render immediately
-      setTimeout(() => {
-        if (mapInstanceRef.current) {
-          mapInstanceRef.current.invalidateSize();
-        }
-      }, 100);
-      setTimeout(() => {
-        if (mapInstanceRef.current) {
-          mapInstanceRef.current.invalidateSize();
-        }
-      }, 400);
+      // Invalidate size across multiple paint frames so mobile flex layout never leaves blank canvas
+      const invalidateTimers = [50, 150, 300, 600, 1000].map((delay) =>
+        setTimeout(() => {
+          if (mapInstanceRef.current) {
+            mapInstanceRef.current.invalidateSize();
+          }
+        }, delay)
+      );
 
       // Observe container resize to auto-adjust Leaflet canvas
       const resizeObserver = new ResizeObserver(() => {
@@ -190,16 +196,23 @@ export default function TechCorridorMapView({
       });
       resizeObserver.observe(mapContainerRef.current);
       mapContainerRef.current._resizeObserver = resizeObserver;
+      mapContainerRef.current._invalidateTimers = invalidateTimers;
     }
 
     return () => {
       // Cleanup on full unmount
+      if (mapContainerRef.current && mapContainerRef.current._invalidateTimers) {
+        mapContainerRef.current._invalidateTimers.forEach(clearTimeout);
+      }
       if (mapContainerRef.current && mapContainerRef.current._resizeObserver) {
         mapContainerRef.current._resizeObserver.disconnect();
       }
       if (mapInstanceRef.current) {
         mapInstanceRef.current.remove();
         mapInstanceRef.current = null;
+      }
+      if (mapContainerRef.current && mapContainerRef.current._leaflet_id) {
+        delete mapContainerRef.current._leaflet_id;
       }
     };
   }, []);
@@ -361,29 +374,29 @@ export default function TechCorridorMapView({
         <div class="popup-eyebrow">Verified Tech Office</div>
         <h4 class="popup-company-name">${companyName}</h4>
         <div class="popup-office-landmark">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <rect x="4" y="2" width="16" height="20" rx="2" ry="2" />
-            <line x1="9" y1="22" x2="9" y2="22.01" />
-            <line x1="15" y1="22" x2="15" y2="22.01" />
-            <line x1="9" y1="6" x2="9" y2="6.01" />
-            <line x1="15" y1="6" x2="15" y2="6.01" />
+          <svg class="popup-landmark-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="4" y="2" width="16" height="20" rx="2" ry="2"></rect>
+            <line x1="9" y1="22" x2="9" y2="22.01"></line>
+            <line x1="15" y1="22" x2="15" y2="22.01"></line>
+            <line x1="9" y1="6" x2="9" y2="6.01"></line>
+            <line x1="15" y1="6" x2="15" y2="6.01"></line>
           </svg>
-          ${officeName}
+          <span class="popup-landmark-text">${officeName}</span>
         </div>
         <p class="popup-address">${address}</p>
         <div class="popup-actions">
-          <a href="${mapsSearchUrl}" target="_blank" rel="noopener noreferrer" class="popup-map-btn">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
-              <circle cx="12" cy="10" r="3" />
+          <a href="${mapsSearchUrl}" target="_blank" rel="noopener noreferrer" class="popup-map-btn" title="View on Google Maps">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+              <circle cx="12" cy="10" r="3"></circle>
             </svg>
-            View on Map
+            <span>View on Map</span>
           </a>
-          <a href="${directionsUrl}" target="_blank" rel="noopener noreferrer" class="popup-directions-btn">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <polygon points="3 11 22 2 13 21 11 13 3 11" />
+          <a href="${directionsUrl}" target="_blank" rel="noopener noreferrer" class="popup-directions-btn" title="Get Directions">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="3 11 22 2 13 21 11 13 3 11"></polygon>
             </svg>
-            Get Directions
+            <span>Get Directions</span>
           </a>
         </div>
       </div>
@@ -393,13 +406,18 @@ export default function TechCorridorMapView({
       className: 'custom-leaflet-office-popup',
       offset: [0, -32],
       closeButton: true,
-      autoClose: false
+      autoClose: false,
+      autoPan: true,
+      autoPanPaddingTopLeft: [12, 80],
+      autoPanPaddingBottomRight: [12, 20]
     }).openPopup();
 
     officeMarkerRef.current = marker;
 
-    // Fly camera directly to company office building with smooth easing
-    map.flyTo([targetCoords.lat, targetCoords.lng], 16, {
+    // Fly camera directly to company office building; on mobile offset camera south (+0.0050) so popup sits well below top floating badge
+    const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
+    const targetLat = isMobile ? targetCoords.lat + 0.0050 : targetCoords.lat;
+    map.flyTo([targetLat, targetCoords.lng], 16, {
       duration: 1.1
     });
   };

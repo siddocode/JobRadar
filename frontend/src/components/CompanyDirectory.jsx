@@ -3,6 +3,7 @@ import CompanyCard from './CompanyCard';
 import PersonalizeModal from './PersonalizeModal';
 import DiscoveredPlacesMap from './DiscoveredPlacesMap';
 import { useAuth } from '../context/AuthContext';
+import { useModalScrollLock } from '../utils/useModalScrollLock';
 
 const AVAILABLE_INDIAN_HUBS = [
   { slug: 'kolkata', name: 'Kolkata', state: 'West Bengal', tier: 1 },
@@ -127,6 +128,8 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
 
   // Add Company Modal State (Kept intact for future Admin dashboard)
   const [showAddModal, setShowAddModal] = useState(false);
+
+  useModalScrollLock(showDiscoveryModal || showAddModal);
   const [addForm, setAddForm] = useState({
     name: '',
     website: '',

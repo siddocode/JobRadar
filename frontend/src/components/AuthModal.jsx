@@ -1,5 +1,108 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useModalScrollLock } from '../utils/useModalScrollLock';
+
+/**
+ * SixDigitPinInput Component
+ * Renders 6 distinct interactive PIN boxes with auto-advance,
+ * backspace reversal, arrow navigation, and full paste support.
+ */
+function SixDigitPinInput({ value = '', onChange, onComplete, disabled = false, autoFocus = false, idPrefix = 'otp' }) {
+  const inputRefs = useRef([]);
+  const cleanVal = (value || '').replace(/\D/g, '').slice(0, 6);
+  const digits = Array.from({ length: 6 }, (_, i) => cleanVal[i] || '');
+
+  useEffect(() => {
+    if (autoFocus && inputRefs.current[0]) {
+      inputRefs.current[0].focus();
+    }
+  }, [autoFocus]);
+
+  const handleDigitChange = (e, index) => {
+    const entered = e.target.value.replace(/\D/g, '');
+    if (!entered) {
+      const nextDigits = [...digits];
+      nextDigits[index] = '';
+      const nextOtp = nextDigits.join('');
+      onChange(nextOtp);
+      return;
+    }
+
+    const lastChar = entered.slice(-1);
+    const nextDigits = [...digits];
+    nextDigits[index] = lastChar;
+    const nextOtp = nextDigits.join('');
+    onChange(nextOtp);
+
+    // Auto-advance to next box
+    if (index < 5 && lastChar) {
+      inputRefs.current[index + 1]?.focus();
+    } else if (nextOtp.length === 6 && onComplete) {
+      onComplete(nextOtp);
+    }
+  };
+
+  const handleKeyDown = (e, index) => {
+    if (e.key === 'Backspace') {
+      if (!digits[index] && index > 0) {
+        e.preventDefault();
+        const nextDigits = [...digits];
+        nextDigits[index - 1] = '';
+        onChange(nextDigits.join(''));
+        inputRefs.current[index - 1]?.focus();
+      } else {
+        const nextDigits = [...digits];
+        nextDigits[index] = '';
+        onChange(nextDigits.join(''));
+      }
+    } else if (e.key === 'ArrowLeft' && index > 0) {
+      e.preventDefault();
+      inputRefs.current[index - 1]?.focus();
+    } else if (e.key === 'ArrowRight' && index < 5) {
+      e.preventDefault();
+      inputRefs.current[index + 1]?.focus();
+    }
+  };
+
+  const handlePaste = (e) => {
+    e.preventDefault();
+    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
+    if (!pasted) return;
+    onChange(pasted);
+    const targetIdx = Math.min(pasted.length, 5);
+    inputRefs.current[targetIdx]?.focus();
+    if (pasted.length === 6 && onComplete) {
+      onComplete(pasted);
+    }
+  };
+
+  return (
+    <div className="otp-six-pin-container" onPaste={handlePaste}>
+      {digits.map((digit, index) => {
+        const isFilled = Boolean(digit);
+        return (
+          <input
+            key={`${idPrefix}-digit-${index}`}
+            ref={(el) => { inputRefs.current[index] = el; }}
+            id={`${idPrefix}-digit-${index}`}
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            maxLength={1}
+            autoComplete="one-time-code"
+            className={`otp-pin-box ${isFilled ? 'is-filled' : ''}`}
+            value={digit}
+            disabled={disabled}
+            onChange={(e) => handleDigitChange(e, index)}
+            onKeyDown={(e) => handleKeyDown(e, index)}
+            onFocus={(e) => e.target.select()}
+            aria-label={`Digit ${index + 1}`}
+          />
+        );
+      })}
+    </div>
+  );
+}
 
 export default function AuthModal() {
   const {
@@ -14,6 +117,8 @@ export default function AuthModal() {
     login,
     loginWithOtp
   } = useAuth();
+
+  useModalScrollLock(authModalOpen);
 
   const [tab, setTab] = useState(authModalTab || 'signup');
   const [name, setName] = useState('');
@@ -159,6 +264,14 @@ export default function AuthModal() {
     }
   };
 
+  // Switch to OTP sign-in mode (asks for email first, does NOT auto-send)
+  const handleSwitchToOtpMode = () => {
+    setSignInMode('otp');
+    setOtpSent(false);
+    setOtp('');
+    setError(null);
+  };
+
   // Submit Handler
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -183,8 +296,17 @@ export default function AuthModal() {
           await login({ email: email.trim(), password });
         } else {
           // Sign In with OTP
+          if (!otpSent) {
+            // Step 1: User submitted email to get code
+            if (!email.trim() || !email.includes('@')) {
+              throw new Error('Please enter a valid email address');
+            }
+            await handleSendOtp(email.trim());
+            return;
+          }
+          // Step 2: User submitted the 6-digit code
           if (!email.trim() || !otp.trim()) {
-            throw new Error('Please enter your email and the 6-digit OTP code');
+            throw new Error('Please enter the 6-digit verification code');
           }
           await loginWithOtp({ email: email.trim(), otp: otp.trim() });
         }
@@ -360,9 +482,10 @@ export default function AuthModal() {
               </div>
 
               {/* 6-Digit OTP Input */}
+              {/* 6-Digit OTP Input */}
               <div className="auth-field-group">
                 <div className="auth-label-row">
-                  <label className="auth-label" htmlFor="auth-otp-input">
+                  <label className="auth-label">
                     6-Digit Verification Code
                   </label>
                   {!otpSent ? (
@@ -371,19 +494,12 @@ export default function AuthModal() {
                     <span className="auth-hint-text" style={{ color: '#059669', fontWeight: 600 }}>Sent to inbox</span>
                   )}
                 </div>
-                <div className="auth-otp-input-wrapper">
-                  <input
-                    type="text"
-                    id="auth-otp-input"
-                    className="auth-input otp-input"
-                    placeholder="Enter 6-digit OTP code"
-                    maxLength={6}
-                    required
-                    value={otp}
-                    onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
-                    autoComplete="one-time-code"
-                  />
-                </div>
+                <SixDigitPinInput
+                  value={otp}
+                  onChange={setOtp}
+                  disabled={loading}
+                  idPrefix="signup-otp"
+                />
               </div>
 
               {/* Password */}
@@ -424,90 +540,183 @@ export default function AuthModal() {
           {/* SIGN IN FIELDS */}
           {tab === 'login' && (
             <>
-              <div className="auth-field-group">
-                <label className="auth-label" htmlFor="login-email-input">Email Address</label>
-                <input
-                  type="email"
-                  id="login-email-input"
-                  className="auth-input"
-                  placeholder="Your registered email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                />
-              </div>
-
               {signInMode === 'password' ? (
-                <div className="auth-field-group">
-                  <div className="auth-label-row">
-                    <label className="auth-label" htmlFor="login-password-input">Password</label>
-                    <button
-                      type="button"
-                      className="auth-text-action-btn"
-                      onClick={() => setSignInMode('otp')}
-                    >
-                      Sign in with OTP instead
-                    </button>
+                /* PASSWORD SIGN IN MODE */
+                <>
+                  <div className="auth-field-group">
+                    <label className="auth-label" htmlFor="login-email-input">Email Address</label>
+                    <input
+                      type="email"
+                      id="login-email-input"
+                      className="auth-input"
+                      placeholder="Your registered email"
+                      required
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                    />
                   </div>
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    id="login-password-input"
-                    className="auth-input"
-                    placeholder="Enter your password"
-                    required
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                  />
-                </div>
-              ) : (
-                <div className="auth-field-group">
-                  <div className="auth-label-row">
-                    <label className="auth-label" htmlFor="login-otp-input">6-Digit Verification Code</label>
-                    {otpCooldown > 0 ? (
-                      <span className="otp-cooldown-text">Resend in {otpCooldown}s</span>
-                    ) : (
+
+                  <div className="auth-field-group">
+                    <div className="auth-label-row">
+                      <label className="auth-label" htmlFor="login-password-input">Password</label>
                       <button
                         type="button"
                         className="auth-text-action-btn"
-                        onClick={() => handleSendOtp(email)}
-                        disabled={isSendingOtp || !email.includes('@')}
+                        onClick={handleSwitchToOtpMode}
                       >
-                        {isSendingOtp ? 'Sending...' : (otpSent ? 'Resend Code' : 'Get Code')}
+                        Sign in with OTP instead
                       </button>
-                    )}
-                  </div>
-                  <div className="auth-otp-input-wrapper">
+                    </div>
                     <input
-                      type="text"
-                      id="login-otp-input"
-                      className="auth-input otp-input"
-                      placeholder="Enter 6-digit OTP code"
-                      maxLength={6}
+                      type={showPassword ? 'text' : 'password'}
+                      id="login-password-input"
+                      className="auth-input"
+                      placeholder="Enter your password"
                       required
-                      value={otp}
-                      onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
                     />
                   </div>
-                  <div style={{ marginTop: '6px', textAlign: 'right' }}>
+
+                  <button
+                    type="submit"
+                    className="auth-submit-btn"
+                    disabled={loading}
+                    id="auth-login-submit"
+                  >
+                    {loading ? 'Signing in...' : 'Sign In'}
+                  </button>
+                </>
+              ) : !otpSent ? (
+                /* OTP STEP 1: FILL EMAIL FIRST */
+                <>
+                  <div className="auth-field-group">
+                    <label className="auth-label" htmlFor="login-email-input">
+                      Email Address
+                    </label>
+                    <input
+                      type="email"
+                      id="login-email-input"
+                      className="auth-input"
+                      placeholder="Enter your registered email"
+                      required
+                      value={email}
+                      onChange={(e) => {
+                        setEmail(e.target.value);
+                        if (error) setError(null);
+                      }}
+                      autoFocus
+                    />
+                    <span className="auth-hint-text" style={{ marginTop: '5px', display: 'block' }}>
+                      Enter your email to receive a 6-digit sign-in code.
+                    </span>
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="auth-submit-btn"
+                    disabled={isSendingOtp || !email.trim() || !email.includes('@')}
+                    id="auth-send-otp-submit"
+                  >
+                    {isSendingOtp ? 'Sending code...' : 'Send Sign-In Code'}
+                  </button>
+
+                  <div style={{ textAlign: 'center', marginTop: '8px' }}>
                     <button
                       type="button"
                       className="auth-text-action-btn"
-                      onClick={() => setSignInMode('password')}
+                      onClick={() => {
+                        setSignInMode('password');
+                        setError(null);
+                      }}
                     >
-                      Use Password instead
+                      Sign in with password instead
                     </button>
                   </div>
-                </div>
-              )}
+                </>
+              ) : (
+                /* OTP STEP 2: FILL CODE NEXT */
+                <>
+                  <div className="auth-field-group">
+                    <div className="auth-label-row">
+                      <label className="auth-label">Sign-In Email</label>
+                      <button
+                        type="button"
+                        className="auth-text-action-btn"
+                        onClick={() => {
+                          setOtpSent(false);
+                          setOtp('');
+                          setError(null);
+                        }}
+                      >
+                        Change email
+                      </button>
+                    </div>
+                    <div
+                      style={{
+                        padding: '10px 14px',
+                        background: 'var(--bg-card-subtle)',
+                        borderRadius: '8px',
+                        border: '1px solid var(--border-color)',
+                        fontSize: '13.5px',
+                        fontWeight: 600,
+                        color: 'var(--text-primary)'
+                      }}
+                    >
+                      {email}
+                    </div>
+                  </div>
 
-              <button
-                type="submit"
-                className="auth-submit-btn"
-                disabled={loading}
-                id="auth-login-submit"
-              >
-                {loading ? 'Signing in...' : 'Sign In'}
-              </button>
+                  <div className="auth-field-group">
+                    <div className="auth-label-row">
+                      <label className="auth-label">6-Digit Verification Code</label>
+                      {otpCooldown > 0 ? (
+                        <span className="otp-cooldown-text">Resend in {otpCooldown}s</span>
+                      ) : (
+                        <button
+                          type="button"
+                          className="auth-text-action-btn"
+                          onClick={() => handleSendOtp(email.trim())}
+                          disabled={isSendingOtp}
+                        >
+                          {isSendingOtp ? 'Sending...' : 'Resend Code'}
+                        </button>
+                      )}
+                    </div>
+                    <SixDigitPinInput
+                      value={otp}
+                      onChange={setOtp}
+                      autoFocus={true}
+                      disabled={loading}
+                      idPrefix="login-otp"
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="auth-submit-btn"
+                    disabled={loading || otp.trim().length !== 6}
+                    id="auth-login-submit"
+                  >
+                    {loading ? 'Signing in...' : 'Sign In'}
+                  </button>
+
+                  <div style={{ textAlign: 'center', marginTop: '8px' }}>
+                    <button
+                      type="button"
+                      className="auth-text-action-btn"
+                      onClick={() => {
+                        setSignInMode('password');
+                        setOtpSent(false);
+                        setOtp('');
+                        setError(null);
+                      }}
+                    >
+                      Sign in with password instead
+                    </button>
+                  </div>
+                </>
+              )}
             </>
           )}
         </form>

@@ -7,6 +7,18 @@ const emailService = require('../services/emailService');
 // In-memory store for pending email OTPs (expires in 10 minutes)
 const pendingOtps = new Map();
 
+const AUTH_COOKIE_NAME = 'jobradar_auth_token';
+
+function setAuthCookie(res, token) {
+  res.cookie(AUTH_COOKIE_NAME, token, {
+    httpOnly: false,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+    path: '/'
+  });
+}
+
 // Helper to generate a 6-digit numeric OTP
 function generateOtpCode() {
   return Math.floor(100000 + Math.random() * 900000).toString();
@@ -203,6 +215,8 @@ exports.register = async (req, res) => {
       { expiresIn: '7d' }
     );
 
+    setAuthCookie(res, token);
+
     return res.status(201).json({
       success: true,
       message: 'Account created and verified successfully',
@@ -257,6 +271,8 @@ exports.login = async (req, res) => {
       JWT_SECRET,
       { expiresIn: '7d' }
     );
+
+    setAuthCookie(res, token);
 
     return res.status(200).json({
       success: true,
@@ -343,6 +359,8 @@ exports.loginWithOtp = async (req, res) => {
       { expiresIn: '7d' }
     );
 
+    setAuthCookie(res, token);
+
     return res.status(200).json({
       success: true,
       message: 'Logged in successfully with OTP',
@@ -357,6 +375,15 @@ exports.loginWithOtp = async (req, res) => {
     console.error('OTP Login error:', err);
     return res.status(500).json({ success: false, error: 'Login with OTP failed' });
   }
+};
+
+/**
+ * POST /api/auth/logout
+ * Clears the auth cookie
+ */
+exports.logout = async (req, res) => {
+  res.clearCookie(AUTH_COOKIE_NAME, { path: '/' });
+  return res.status(200).json({ success: true, message: 'Logged out successfully' });
 };
 
 /**

@@ -53,6 +53,7 @@ export default function App() {
   const [techOnlyJobs, setTechOnlyJobs] = useState(false);
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(25);
+  const [mobileFiltersExpanded, setMobileFiltersExpanded] = useState(false);
 
   // Status
   const [loading, setLoading] = useState(true);
@@ -741,6 +742,29 @@ export default function App() {
       {/* Main Content Area */}
       <div className="app-main-area">
         <header className="main-topbar">
+          {/* Mobile Topbar Brand Block (Active on Mobile/Tablet screens) */}
+          <div
+            className="topbar-mobile-brand"
+            onClick={handleGoHome}
+            role="button"
+            tabIndex={0}
+            title="Go to Home"
+          >
+            <div className="mobile-brand-logo-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <circle cx="12" cy="12" r="9" />
+                <line x1="12" y1="3" x2="12" y2="7" />
+                <line x1="12" y1="17" x2="12" y2="21" />
+                <line x1="3" y1="12" x2="7" y2="12" />
+                <line x1="17" y1="12" x2="21" y2="12" />
+              </svg>
+            </div>
+            <div className="mobile-brand-info">
+              <span className="mobile-brand-title">JobRadar</span>
+              <span className="mobile-brand-tag">Verified ATS</span>
+            </div>
+          </div>
+
           <div className="topbar-title-block">
             <h1 className="page-heading">
               {activeTab === 'jobs' && 'Live jobs'}
@@ -1054,24 +1078,48 @@ export default function App() {
                       </span>
                     )}
                   </div>
-                  {hasNonDefaultFilters && (
+                  <div className="filter-header-right-actions">
                     <button
                       type="button"
-                      id="clear-filters-btn"
-                      className="filter-reset-header-btn"
-                      onClick={handleResetFilters}
-                      title="Reset all filters to default"
+                      id="mobile-filter-expand-btn"
+                      className="mobile-filter-expand-btn"
+                      onClick={() => setMobileFiltersExpanded(prev => !prev)}
+                      aria-expanded={mobileFiltersExpanded}
+                      title={mobileFiltersExpanded ? "Collapse additional filters" : "Show more filter options"}
                     >
-                      <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-                        <path d="M3 3v5h5" />
+                      <span>{mobileFiltersExpanded ? 'Less Filters' : 'More Filters'}</span>
+                      <svg
+                        viewBox="0 0 24 24"
+                        width="12"
+                        height="12"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                        style={{ transform: mobileFiltersExpanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s ease' }}
+                      >
+                        <polyline points="6 9 12 15 18 9" />
                       </svg>
-                      Reset Filters
                     </button>
-                  )}
+
+                    {hasNonDefaultFilters && (
+                      <button
+                        type="button"
+                        id="clear-filters-btn"
+                        className="filter-reset-header-btn"
+                        onClick={handleResetFilters}
+                        title="Reset all filters to default"
+                      >
+                        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                          <path d="M3 3v5h5" />
+                        </svg>
+                        Reset Filters
+                      </button>
+                    )}
+                  </div>
                 </div>
 
-                <div className="filter-grid">
+                <div className={`filter-grid ${mobileFiltersExpanded ? 'is-mobile-expanded' : ''}`}>
                   {/* Search Box */}
                   <div className="input-group">
                     <label htmlFor="search-title-input" className="native-sr-only">Job Title / Keyword</label>
@@ -1503,7 +1551,8 @@ export default function App() {
                           <rect x="14" y="14" width="7" height="7" rx="1.5" />
                           <rect x="3" y="14" width="7" height="7" rx="1.5" />
                         </svg>
-                        <span>Radar Grid</span>
+                        <span className="view-mode-label-long">Radar Grid</span>
+                        <span className="view-mode-label-short">Grid</span>
                       </button>
                       <button
                         type="button"
@@ -1529,7 +1578,8 @@ export default function App() {
                           <line x1="8" y1="2" x2="8" y2="18" />
                           <line x1="16" y1="6" x2="16" y2="22" />
                         </svg>
-                        <span>Corridor Map</span>
+                        <span className="view-mode-label-long">Corridor Map</span>
+                        <span className="view-mode-label-short">Map</span>
                       </button>
                     </div>
 
@@ -1887,6 +1937,111 @@ export default function App() {
           </div>
         </footer>
       </div>
+
+      {/* Mobile Bottom Navigation Bar (Docked on Mobile Screens <= 768px) */}
+      <nav className="mobile-bottom-nav" aria-label="Mobile Navigation">
+        <button
+          type="button"
+          className={`mobile-nav-btn ${activeTab === 'jobs' ? 'active' : ''}`}
+          onClick={() => {
+            setActiveTab('jobs');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+          id="mobile-tab-jobs"
+          aria-label="Live jobs"
+        >
+          <div className="mobile-nav-icon-wrap">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2">
+              <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
+              <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
+            </svg>
+            {meta.totalInDb > 0 && (
+              <span className="mobile-nav-badge">
+                {meta.totalInDb > 999 ? `${(meta.totalInDb / 1000).toFixed(1)}k` : meta.totalInDb}
+              </span>
+            )}
+          </div>
+          <span className="mobile-nav-label">Live Jobs</span>
+        </button>
+
+        <button
+          type="button"
+          className={`mobile-nav-btn ${activeTab === 'directory' ? 'active' : ''}`}
+          onClick={() => {
+            setActiveTab('directory');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+          id="mobile-tab-directory"
+          aria-label="Company directory"
+        >
+          <div className="mobile-nav-icon-wrap">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2">
+              <rect x="4" y="2" width="16" height="20" rx="2" ry="2" />
+              <line x1="9" y1="22" x2="9" y2="22.01" />
+              <line x1="15" y1="22" x2="15" y2="22.01" />
+              <line x1="9" y1="6" x2="9" y2="6.01" />
+              <line x1="15" y1="6" x2="15" y2="6.01" />
+              <line x1="9" y1="10" x2="9" y2="10.01" />
+              <line x1="15" y1="10" x2="15" y2="10.01" />
+              <line x1="9" y1="14" x2="9" y2="14.01" />
+              <line x1="15" y1="14" x2="15" y2="14.01" />
+              <line x1="9" y1="18" x2="9" y2="18.01" />
+              <line x1="15" y1="18" x2="15" y2="18.01" />
+            </svg>
+            {companyCount > 0 && <span className="mobile-nav-badge">{companyCount}</span>}
+          </div>
+          <span className="mobile-nav-label">Directory</span>
+        </button>
+
+        <button
+          type="button"
+          className={`mobile-nav-btn ${activeTab === 'reachout' ? 'active' : ''}`}
+          onClick={() => {
+            setActiveTab('reachout');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+          id="mobile-tab-reachout"
+          aria-label="Outreach pipeline"
+        >
+          <div className="mobile-nav-icon-wrap">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="10" />
+              <circle cx="12" cy="12" r="6" />
+              <circle cx="12" cy="12" r="2" />
+            </svg>
+            {reachOutCount > 0 && <span className="mobile-nav-badge">{reachOutCount}</span>}
+          </div>
+          <span className="mobile-nav-label">Outreach</span>
+        </button>
+
+        <button
+          type="button"
+          className="mobile-nav-btn"
+          onClick={() => {
+            if (!isAuthenticated) {
+              openAuthModal('Please sign in or create an account to personalize CV and track pipeline.');
+            } else {
+              setIsProfileModalOpen(true);
+            }
+          }}
+          id="mobile-tab-account"
+          aria-label="Candidate profile or sign in"
+        >
+          <div className="mobile-nav-icon-wrap">
+            {isAuthenticated ? (
+              <span className="mobile-nav-avatar">
+                {user?.name ? user.name.slice(0, 2).toUpperCase() : (user?.email ? user.email.slice(0, 2).toUpperCase() : 'UR')}
+              </span>
+            ) : (
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                <circle cx="12" cy="7" r="4" />
+              </svg>
+            )}
+          </div>
+          <span className="mobile-nav-label">{isAuthenticated ? 'Profile' : 'Sign In'}</span>
+        </button>
+      </nav>
 
       {/* Job Eligibility Modal */}
       {eligibilityJob && (

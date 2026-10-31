@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useModalScrollLock } from '../utils/useModalScrollLock';
 
 /**
  * CandidateProfileUploadModal
@@ -9,6 +10,8 @@ import { useAuth } from '../context/AuthContext';
  */
 export default function CandidateProfileUploadModal({ isOpen, onClose, onProfileUpdated }) {
   const { token, isAuthenticated, openAuthModal, candidateProfile, updateCandidateProfile, clearCandidateProfile } = useAuth();
+
+  useModalScrollLock(isOpen);
 
   const [activeTab, setActiveTab] = useState('cv'); // 'cv' | 'url'
   const [selectedFile, setSelectedFile] = useState(null);

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { evaluateCandidateMatch, generateClientEligibility } from '../utils/candidateMatcher';
 import CvTailorSection from './CvTailorSection';
+import { useModalScrollLock } from '../utils/useModalScrollLock';
 
 /**
  * JobEligibilityModal Component
@@ -21,6 +22,8 @@ export default function JobEligibilityModal({
   isInPipeline = false
 }) {
   const { candidateProfile, isAuthenticated, openAuthModal, token, updateCandidateProfile } = useAuth();
+
+  useModalScrollLock(Boolean(job));
 
   const [eligibility, setEligibility] = useState(() => job?.eligibility || null);
   const [loading, setLoading] = useState(() => !job?.eligibility);

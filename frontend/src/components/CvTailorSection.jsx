@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
+import { useAuth } from '../context/AuthContext';
 import { downloadResumePdf, downloadResumeText, copyResumeToClipboard } from '../utils/pdfGenerator';
 
 export default function CvTailorSection({ job, candidateProfile, token, onProfileUpdated }) {
+  const { isAuthenticated, openAuthModal } = useAuth();
   const [selectedFile, setSelectedFile] = useState(null);
   const [sourceType, setSourceType] = useState(() => (candidateProfile ? 'profile' : 'pdf'));
   const [portfolioUrl, setPortfolioUrl] = useState(() => {
@@ -31,6 +33,10 @@ export default function CvTailorSection({ job, candidateProfile, token, onProfil
 
   // Handle PDF file selection
   const handleFileChange = (e) => {
+    if (!isAuthenticated) {
+      openAuthModal(`Please sign in or create an account to upload your CV and tailor it for ${job?.company || 'this role'}.`, 'login');
+      return;
+    }
     const file = e.target.files?.[0];
     if (file) {
       if (!file.name.toLowerCase().endsWith('.pdf') && file.type !== 'application/pdf') {
@@ -46,6 +52,10 @@ export default function CvTailorSection({ job, candidateProfile, token, onProfil
   const handleDrop = (e) => {
     e.preventDefault();
     setDragOver(false);
+    if (!isAuthenticated) {
+      openAuthModal(`Please sign in or create an account to upload your CV and tailor it for ${job?.company || 'this role'}.`, 'login');
+      return;
+    }
     const file = e.dataTransfer.files?.[0];
     if (file) {
       if (!file.name.toLowerCase().endsWith('.pdf') && file.type !== 'application/pdf') {
@@ -60,6 +70,10 @@ export default function CvTailorSection({ job, candidateProfile, token, onProfil
 
   // Perform tailoring API call
   const handleTailorCv = async () => {
+    if (!isAuthenticated) {
+      openAuthModal(`Please sign in or create an account to tailor your CV for ${job?.company || 'this role'}.`, 'login');
+      return;
+    }
     setError(null);
     setTailoring(true);
     setTailoringStep(1);
@@ -79,6 +93,7 @@ export default function CvTailorSection({ job, candidateProfile, token, onProfil
         formData.append('cv', selectedFile);
         res = await fetch(`/api/jobs/${jobId}/tailor-cv`, {
           method: 'POST',
+          credentials: 'include',
           headers,
           body: formData
         });
@@ -86,6 +101,7 @@ export default function CvTailorSection({ job, candidateProfile, token, onProfil
         headers['Content-Type'] = 'application/json';
         res = await fetch(`/api/jobs/${jobId}/tailor-cv`, {
           method: 'POST',
+          credentials: 'include',
           headers,
           body: JSON.stringify({
             candidateProfile: candidateProfile || undefined
@@ -99,6 +115,7 @@ export default function CvTailorSection({ job, candidateProfile, token, onProfil
         headers['Content-Type'] = 'application/json';
         res = await fetch(`/api/jobs/${jobId}/tailor-cv`, {
           method: 'POST',
+          credentials: 'include',
           headers,
           body: JSON.stringify({
             portfolioUrl: cleanUrl || undefined,
@@ -309,8 +326,49 @@ export default function CvTailorSection({ job, candidateProfile, token, onProfil
         </div>
       </div>
 
-      {/* 2. Source CV Selection */}
-      {!tailoredData && (
+      {/* 2. Authentication Gate: Displayed when user is NOT signed in */}
+      {!isAuthenticated && (
+        <div className="cv-tailor-setup-card cv-tailor-auth-gate">
+          <div className="tailor-auth-gate-content">
+            <div className="tailor-auth-gate-icon">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+              </svg>
+            </div>
+            <div className="tailor-auth-gate-text">
+              <h4>Sign in required to tailor and upload your CV</h4>
+              <p>
+                Uploading your resume, extracting authentic experience, and infusing job-specific competencies for <strong>{job.company}</strong> requires an active account.
+              </p>
+            </div>
+            <div className="tailor-auth-gate-actions">
+              <button
+                type="button"
+                className="btn-tailor-submit"
+                onClick={() => openAuthModal(`Sign in or create an account to upload and tailor your CV for ${job.company}.`, 'login')}
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+                  <polyline points="10 17 15 12 10 7" />
+                  <line x1="15" y1="12" x2="3" y2="12" />
+                </svg>
+                <span>Sign In to Tailor CV</span>
+              </button>
+              <button
+                type="button"
+                className="btn-tailor-register"
+                onClick={() => openAuthModal(`Create a free account to upload and tailor your CV for ${job.company}.`, 'signup')}
+              >
+                Create Free Account
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 3. Source CV Selection: Available ONLY when authenticated */}
+      {isAuthenticated && !tailoredData && (
         <div className="cv-tailor-setup-card">
           <div className="setup-header">
             <h4>Select CV Source to Tailor</h4>

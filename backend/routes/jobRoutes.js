@@ -68,8 +68,8 @@ router.post('/:id/check-candidate-eligibility', requireAuth, upload.single('cv')
 // POST /api/jobs/evaluate-candidate - Arbitrary match evaluation with client job payload
 router.post('/evaluate-candidate', requireAuth, jobController.evaluateDirectMatch);
 
-// POST /api/jobs/:id/tailor-cv - Tailor CV specifically for a job (supports direct PDF upload or profile JSON)
-router.post('/:id/tailor-cv', optionalAuth, upload.single('cv'), jobController.tailorCvForJob);
+// POST /api/jobs/:id/tailor-cv - Tailor CV specifically for a job (AUTHENTICATION REQUIRED)
+router.post('/:id/tailor-cv', requireAuth, upload.single('cv'), jobController.tailorCvForJob);
 
 module.exports = router;
 

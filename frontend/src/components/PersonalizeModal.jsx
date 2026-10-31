@@ -1,8 +1,11 @@
 import React, { useState, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useModalScrollLock } from '../utils/useModalScrollLock';
 
 export default function PersonalizeModal({ company, onClose, onSaveToNotes }) {
   const { user, authFetch } = useAuth();
+
+  useModalScrollLock(Boolean(company));
 
   const [role, setRole] = useState('Full Stack / Software Engineer');
   const [tone, setTone] = useState('engineering'); // 'engineering' | 'founder' | 'referral'
@@ -12,16 +15,15 @@ export default function PersonalizeModal({ company, onClose, onSaveToNotes }) {
   const [isSavingNote, setIsSavingNote] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
-  if (!company) return null;
-
-  const primaryOffice = company.offices?.[0];
+  const primaryOffice = company?.offices?.[0];
   const cityName = primaryOffice?.cityId?.name || primaryOffice?.locality || 'India';
-  const companyName = company.name;
-  const emails = company.contact?.emails || [];
-  const primaryEmail = emails[0]?.value || `careers@${company.domain || company.slug + '.com'}`;
+  const companyName = company?.name || 'Company';
+  const emails = company?.contact?.emails || [];
+  const primaryEmail = emails[0]?.value || `careers@${company?.domain || (company?.slug ? company.slug + '.com' : 'company.com')}`;
 
   // Generated Subject & Email Pitch Body based on chosen Tone & Inputs
   const { subject, body } = useMemo(() => {
+    if (!company) return { subject: '', body: '' };
     const sender = candidateName.trim() || 'Software Engineer';
     const cleanCompany = companyName.trim();
     const cleanRole = role.trim();
@@ -116,6 +118,8 @@ ${user?.email ? user.email : ''}`
       setIsSavingNote(false);
     }
   };
+
+  if (!company) return null;
 
   return (
     <div className="auth-modal-overlay" onClick={onClose} role="dialog" aria-modal="true">

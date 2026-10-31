@@ -2,8 +2,44 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 
 const AuthContext = createContext(null);
 
+const AUTH_COOKIE_NAME = 'jobradar_auth_token';
+
+function getAuthCookie() {
+  if (typeof document === 'undefined') return null;
+  const match = document.cookie.match(new RegExp('(?:^|;\\s*)' + AUTH_COOKIE_NAME + '=([^;]+)'));
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+function setAuthCookie(token, days = 7) {
+  if (typeof document === 'undefined') return;
+  const expires = new Date(Date.now() + days * 864e5).toUTCString();
+  const secure = typeof window !== 'undefined' && window.location.protocol === 'https:' ? '; Secure' : '';
+  document.cookie = `${AUTH_COOKIE_NAME}=${encodeURIComponent(token)}; expires=${expires}; path=/; SameSite=Lax${secure}`;
+}
+
+function removeAuthCookie() {
+  if (typeof document === 'undefined') return;
+  document.cookie = `${AUTH_COOKIE_NAME}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; SameSite=Lax`;
+}
+
 export function AuthProvider({ children }) {
-  const [token, setToken] = useState(() => localStorage.getItem('jobradar_auth_token') || null);
+  const [token, setToken] = useState(() => {
+    // 1. Check cookies first
+    const cookieToken = getAuthCookie();
+    if (cookieToken) return cookieToken;
+
+    // 2. One-time legacy migration from localStorage to cookie
+    try {
+      const legacyToken = localStorage.getItem(AUTH_COOKIE_NAME);
+      if (legacyToken) {
+        setAuthCookie(legacyToken);
+        localStorage.removeItem(AUTH_COOKIE_NAME);
+        return legacyToken;
+      }
+    } catch (_) {}
+    return null;
+  });
+
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -23,10 +59,10 @@ export function AuthProvider({ children }) {
     setAuthModalReason('');
   }, []);
 
-  // Candidate Profile State (cached in localStorage ONLY if user is logged in)
+  // Candidate Profile State (cached in localStorage ONLY if user is logged in via cookie)
   const [candidateProfile, setCandidateProfile] = useState(() => {
     try {
-      const authToken = localStorage.getItem('jobradar_auth_token');
+      const authToken = getAuthCookie();
       if (!authToken) {
         // User is not logged in: wipe any cached candidate profile
         localStorage.removeItem('jobradar_candidate_profile');
@@ -66,13 +102,15 @@ export function AuthProvider({ children }) {
       }
     } catch (_) {}
 
-    if (token && newProfile) {
+    const currentToken = token || getAuthCookie();
+    if (currentToken && newProfile) {
       try {
         await fetch('/api/auth/candidate-profile', {
           method: 'POST',
+          credentials: 'include',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
+            'Authorization': `Bearer ${currentToken}`
           },
           body: JSON.stringify({ candidateProfile: newProfile })
         });
@@ -94,12 +132,13 @@ export function AuthProvider({ children }) {
     if (!authToken) {
       setUser(null);
       setCandidateProfile(null);
-      localStorage.removeItem('jobradar_candidate_profile');
+      try { localStorage.removeItem('jobradar_candidate_profile'); } catch (_) {}
       setLoading(false);
       return;
     }
     try {
       const res = await fetch('/api/auth/me', {
+        credentials: 'include',
         headers: {
           'Authorization': `Bearer ${authToken}`
         }
@@ -121,23 +160,32 @@ export function AuthProvider({ children }) {
           }
         } else {
           // Token invalid
-          localStorage.removeItem('jobradar_auth_token');
-          localStorage.removeItem('jobradar_candidate_profile');
+          removeAuthCookie();
+          try {
+            localStorage.removeItem(AUTH_COOKIE_NAME);
+            localStorage.removeItem('jobradar_candidate_profile');
+          } catch (_) {}
           setToken(null);
           setUser(null);
           setCandidateProfile(null);
         }
       } else {
-        localStorage.removeItem('jobradar_auth_token');
-        localStorage.removeItem('jobradar_candidate_profile');
+        removeAuthCookie();
+        try {
+          localStorage.removeItem(AUTH_COOKIE_NAME);
+          localStorage.removeItem('jobradar_candidate_profile');
+        } catch (_) {}
         setToken(null);
         setUser(null);
         setCandidateProfile(null);
       }
     } catch (err) {
       console.error('Failed to load current user:', err);
-      localStorage.removeItem('jobradar_auth_token');
-      localStorage.removeItem('jobradar_candidate_profile');
+      removeAuthCookie();
+      try {
+        localStorage.removeItem(AUTH_COOKIE_NAME);
+        localStorage.removeItem('jobradar_candidate_profile');
+      } catch (_) {}
       setToken(null);
       setUser(null);
       setCandidateProfile(null);
@@ -198,6 +246,7 @@ export function AuthProvider({ children }) {
   const register = async ({ email, password, name, otp }) => {
     const res = await fetch('/api/auth/register', {
       method: 'POST',
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password, name, otp })
     });
@@ -206,11 +255,13 @@ export function AuthProvider({ children }) {
       throw new Error(data.error || 'Registration failed');
     }
 
-    localStorage.setItem('jobradar_auth_token', data.token);
+    // Store in cookie and clean up legacy localStorage
+    setAuthCookie(data.token);
+    try { localStorage.removeItem(AUTH_COOKIE_NAME); } catch (_) {}
     setToken(data.token);
     setUser(data.user);
     setCandidateProfile(null);
-    localStorage.removeItem('jobradar_candidate_profile');
+    try { localStorage.removeItem('jobradar_candidate_profile'); } catch (_) {}
     closeAuthModal();
     return data;
   };
@@ -219,6 +270,7 @@ export function AuthProvider({ children }) {
   const login = async ({ email, password }) => {
     const res = await fetch('/api/auth/login', {
       method: 'POST',
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password })
     });
@@ -227,7 +279,9 @@ export function AuthProvider({ children }) {
       throw new Error(data.error || 'Login failed');
     }
 
-    localStorage.setItem('jobradar_auth_token', data.token);
+    // Store in cookie and clean up legacy localStorage
+    setAuthCookie(data.token);
+    try { localStorage.removeItem(AUTH_COOKIE_NAME); } catch (_) {}
     setToken(data.token);
     setUser(data.user);
     if (data.user?.candidateProfile) {
@@ -249,6 +303,7 @@ export function AuthProvider({ children }) {
   const loginWithOtp = async ({ email, otp }) => {
     const res = await fetch('/api/auth/login-otp', {
       method: 'POST',
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, otp })
     });
@@ -257,7 +312,9 @@ export function AuthProvider({ children }) {
       throw new Error(data.error || 'OTP login failed');
     }
 
-    localStorage.setItem('jobradar_auth_token', data.token);
+    // Store in cookie and clean up legacy localStorage
+    setAuthCookie(data.token);
+    try { localStorage.removeItem(AUTH_COOKIE_NAME); } catch (_) {}
     setToken(data.token);
     setUser(data.user);
     if (data.user?.candidateProfile) {
@@ -275,23 +332,34 @@ export function AuthProvider({ children }) {
     return data;
   };
 
-  // Logout - completely wipe token, user, and all cached candidate CV/URL data
-  const logout = () => {
-    localStorage.removeItem('jobradar_auth_token');
-    localStorage.removeItem('jobradar_candidate_profile');
+  // Logout - completely wipe token cookie, user, and all cached candidate CV data
+  const logout = async () => {
+    removeAuthCookie();
+    try {
+      localStorage.removeItem(AUTH_COOKIE_NAME);
+      localStorage.removeItem('jobradar_candidate_profile');
+    } catch (_) {}
     setToken(null);
     setUser(null);
     setCandidateProfile(null);
+    try {
+      await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+    } catch (_) {}
   };
 
   // Authenticated fetch wrapper
   const authFetch = useCallback(async (url, options = {}) => {
     const headers = { ...(options.headers || {}) };
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
+    const currentToken = token || getAuthCookie();
+    if (currentToken) {
+      headers['Authorization'] = `Bearer ${currentToken}`;
     }
 
-    const res = await fetch(url, { ...options, headers });
+    const res = await fetch(url, {
+      ...options,
+      credentials: options.credentials || 'include',
+      headers
+    });
 
     if (res.status === 401) {
       // Session expired or unauthenticated
