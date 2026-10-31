@@ -4,9 +4,15 @@ import './index.css'
 import App from './App.jsx'
 import { AuthProvider } from './context/AuthContext'
 
-// Automatically prefix relative /api calls when VITE_API_URL is configured in production
-const rawApiBase = (import.meta.env.VITE_API_URL || '').trim().replace(/\/+$/, '');
-const API_BASE = rawApiBase.replace(/\/api$/, '');
+// Default production Render backend endpoint
+const DEFAULT_PROD_API = 'https://jobradar-xled.onrender.com';
+
+// Automatically prefix relative /api calls when deployed in production or when VITE_API_URL is configured
+const isLocalhost = typeof window !== 'undefined' && ['localhost', '127.0.0.1'].includes(window.location.hostname);
+const configuredBase = (import.meta.env.VITE_API_URL || '').trim();
+const rawApiBase = configuredBase || (!isLocalhost ? DEFAULT_PROD_API : '');
+const API_BASE = rawApiBase.replace(/\/+$/, '').replace(/\/api$/, '');
+
 if (API_BASE) {
   const originalFetch = window.fetch;
   window.fetch = function (input, init) {
