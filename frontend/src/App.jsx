@@ -6,6 +6,7 @@ import JobEligibilityModal from './components/JobEligibilityModal';
 import CandidateProfileUploadModal from './components/CandidateProfileUploadModal';
 import TechCorridorMapView from './components/TechCorridorMapView';
 import UserLocationModal from './components/UserLocationModal';
+import ClassyDropdown from './components/ClassyDropdown';
 import { useAuth } from './context/AuthContext';
 import { useLocation, formatDistance, calculateDistanceKm } from './context/LocationContext';
 import { getJobMatchQuick } from './utils/candidateMatcher';
@@ -469,6 +470,102 @@ export default function App() {
 
     return { tier1, other };
   }, [stats]);
+
+  // Memoized options for ClassyDropdown filter components
+  const countryOptions = useMemo(() => {
+    const list = [
+      { value: 'all', label: 'All Countries (Global)' },
+      { value: 'India', label: `India (${countries.find(c => c.country === 'India')?.count || 0} jobs)` }
+    ];
+    countries
+      .filter(c => c.country && c.country !== 'India')
+      .forEach(c => {
+        list.push({
+          value: c.country,
+          label: `${c.country} (${c.count} ${c.count === 1 ? 'job' : 'jobs'})`,
+          group: 'International Countries'
+        });
+      });
+    return list;
+  }, [countries]);
+
+  const cityOptions = useMemo(() => {
+    const defaultLabel = selectedCountry === 'India'
+      ? `All Indian Cities (${totalCityJobs} jobs)`
+      : selectedCountry !== 'all'
+        ? `All Cities in ${selectedCountry} (${totalCityJobs} jobs)`
+        : `All Cities Worldwide (${totalCityJobs} jobs)`;
+
+    const list = [{ value: 'all', label: defaultLabel }];
+
+    if (cityGroups.remote.length > 0) {
+      cityGroups.remote.forEach(c => {
+        list.push({
+          value: c.city,
+          label: `${c.city} (${c.count} ${c.count === 1 ? 'job' : 'jobs'})`,
+          group: 'Remote and Distributed'
+        });
+      });
+    }
+
+    if (cityGroups.major.length > 0) {
+      const majorGroupLabel = selectedCountry === 'India'
+        ? 'Major Indian Tech Hubs'
+        : (selectedCountry !== 'all' ? `Major Tech Hubs in ${selectedCountry}` : 'Major Hubs');
+      cityGroups.major.forEach(c => {
+        list.push({
+          value: c.city,
+          label: `${c.city} ${c.state ? `(${c.state})` : ''} (${c.count} ${c.count === 1 ? 'job' : 'jobs'})`,
+          group: majorGroupLabel
+        });
+      });
+    }
+
+    if (cityGroups.other.length > 0) {
+      const otherGroupLabel = selectedCountry === 'India'
+        ? 'Other Cities and Tech Clusters'
+        : 'Other Locations';
+      cityGroups.other.slice(0, 100).forEach(c => {
+        list.push({
+          value: c.city,
+          label: `${c.city} (${c.count} ${c.count === 1 ? 'job' : 'jobs'})`,
+          group: otherGroupLabel
+        });
+      });
+    }
+
+    return list;
+  }, [selectedCountry, totalCityJobs, cityGroups]);
+
+  const workModeOptions = useMemo(() => [
+    { value: 'all', label: 'All Work Modes' },
+    { value: 'onsite', label: 'On-site Work' },
+    { value: 'hybrid', label: 'Hybrid (Office + Remote)' },
+    { value: 'remote', label: 'Remote' },
+    { value: 'unknown', label: 'Unspecified Location' }
+  ], []);
+
+  const companyOptions = useMemo(() => {
+    if (!stats || !stats.companies) return [];
+    const list = [{ value: 'all', label: `All Companies (${stats.companies.length})` }];
+    if (companyGroups.tier1.length > 0) {
+      companyGroups.tier1.forEach(comp => {
+        list.push({ value: comp, label: comp, group: 'Tier-1 Product Companies' });
+      });
+    }
+    if (companyGroups.other.length > 0) {
+      companyGroups.other.forEach(comp => {
+        list.push({ value: comp, label: comp, group: 'Other Tech Companies' });
+      });
+    }
+    return list;
+  }, [stats, companyGroups]);
+
+  const statusOptions = useMemo(() => [
+    { value: 'open', label: 'Active and Open Postings Only' },
+    { value: 'all', label: 'All Postings (Active + Archived)' },
+    { value: 'closed', label: 'Closed Postings Only' }
+  ], []);
 
   // Derive all active filters for transparent display and individual dismissals
   const activeFilters = useMemo(() => {
@@ -941,6 +1038,10 @@ export default function App() {
                 title="Sign in or create free account"
                 id="header-signin-btn"
               >
+                <svg className="auth-btn-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                  <circle cx="12" cy="7" r="4" />
+                </svg>
                 <span className="auth-btn-text">Sign In</span>
               </button>
             )}
@@ -1170,7 +1271,7 @@ export default function App() {
                         id="search-title-input"
                         type="text"
                         className="custom-input"
-                        placeholder="Search position (e.g. SRE, Frontend, Manager)..."
+                        placeholder="Search role or tech (e.g. SRE, React)..."
                         value={searchQuery}
                         onChange={(e) => {
                           setSearchQuery(e.target.value);
@@ -1183,152 +1284,82 @@ export default function App() {
                   {/* Country Dropdown */}
                   <div className="input-group">
                     <label htmlFor="filter-country-select" className="native-sr-only">Country</label>
-                    <div className="filter-dropdown-wrapper">
-                      <span className="filter-select-icon icon-country" aria-hidden="true">
-                        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-                      </span>
-                      <select
-                        id="filter-country-select"
-                        className="custom-select custom-select-with-icon"
-                        value={selectedCountry}
-                        onChange={(e) => {
-                          const nextCountry = e.target.value;
-                          setSelectedCountry(nextCountry);
-                          setSelectedCity('all');
-                          setSelectedCorridor('all');
-                          setPage(1);
-                        }}
-                      >
-                        <option value="all">All Countries (Global)</option>
-                        <option value="India">
-                          India ({countries.find(c => c.country === 'India')?.count || 0} jobs)
-                        </option>
-                        <optgroup label="International Countries">
-                          {countries
-                            .filter(c => c.country && c.country !== 'India')
-                            .map(c => (
-                              <option key={c.country} value={c.country}>
-                                {c.country} ({c.count} {c.count === 1 ? 'job' : 'jobs'})
-                              </option>
-                            ))}
-                        </optgroup>
-                      </select>
-                    </div>
+                    <ClassyDropdown
+                      id="filter-country-select"
+                      value={selectedCountry}
+                      onChange={(nextCountry) => {
+                        setSelectedCountry(nextCountry);
+                        setSelectedCity('all');
+                        setSelectedCorridor('all');
+                        setPage(1);
+                      }}
+                      options={countryOptions}
+                      placeholder="All Countries (Global)"
+                      title="Select Country"
+                      icon={
+                        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                      }
+                    />
                   </div>
 
                   {/* City Dropdown */}
                   <div className="input-group">
                     <label htmlFor="filter-city-select" className="native-sr-only">City</label>
-                    <div className="filter-dropdown-wrapper">
-                      <span className="filter-select-icon icon-city" aria-hidden="true">
-                        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-                      </span>
-                      <select
-                        id="filter-city-select"
-                        className="custom-select custom-select-with-icon"
-                        value={selectedCity}
-                        onChange={(e) => {
-                          setSelectedCity(e.target.value);
-                          setPage(1);
-                        }}
-                      >
-                        <option value="all">
-                          {selectedCountry === 'India'
-                            ? `All Indian Cities (${totalCityJobs} jobs)`
-                            : selectedCountry !== 'all'
-                              ? `All Cities in ${selectedCountry} (${totalCityJobs} jobs)`
-                              : `All Cities Worldwide (${totalCityJobs} jobs)`}
-                        </option>
-                        {cityGroups.remote.length > 0 && (
-                          <optgroup label="Remote and Distributed">
-                            {cityGroups.remote.map((c) => (
-                              <option key={c.city} value={c.city}>
-                                {c.city} ({c.count} {c.count === 1 ? 'job' : 'jobs'})
-                              </option>
-                            ))}
-                          </optgroup>
-                        )}
-                        {cityGroups.major.length > 0 && (
-                          <optgroup label={selectedCountry === 'India' ? 'Major Indian Tech Hubs' : (selectedCountry !== 'all' ? `Major Tech Hubs in ${selectedCountry}` : 'Major Hubs')}>
-                            {cityGroups.major.map((c) => (
-                              <option key={c.city} value={c.city}>
-                                {c.city} {c.state ? `(${c.state})` : ''} ({c.count} {c.count === 1 ? 'job' : 'jobs'})
-                              </option>
-                            ))}
-                          </optgroup>
-                        )}
-                        {cityGroups.other.length > 0 && (
-                          <optgroup label={selectedCountry === 'India' ? 'Other Cities and Tech Clusters' : 'Other Locations'}>
-                            {cityGroups.other.slice(0, 100).map((c) => (
-                              <option key={c.city} value={c.city}>
-                                {c.city} ({c.count} {c.count === 1 ? 'job' : 'jobs'})
-                              </option>
-                            ))}
-                          </optgroup>
-                        )}
-                      </select>
-                    </div>
+                    <ClassyDropdown
+                      id="filter-city-select"
+                      value={selectedCity}
+                      onChange={(nextCity) => {
+                        setSelectedCity(nextCity);
+                        setPage(1);
+                      }}
+                      options={cityOptions}
+                      placeholder="Select City"
+                      title="Select City or Tech Hub"
+                      searchable={true}
+                      icon={
+                        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                      }
+                    />
                   </div>
 
                   {/* Work Mode Filter */}
                   <div className="input-group">
                     <label htmlFor="filter-workmode-select" className="native-sr-only">Work Mode</label>
-                    <div className="filter-dropdown-wrapper">
-                      <span className="filter-select-icon icon-workmode" aria-hidden="true">
-                        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-                      </span>
-                      <select
-                        id="filter-workmode-select"
-                        className="custom-select custom-select-with-icon"
-                        value={workModeFilter}
-                        onChange={(e) => {
-                          setWorkModeFilter(e.target.value);
-                          setPage(1);
-                        }}
-                      >
-                        <option value="all">All Work Modes</option>
-                        <option value="onsite">On-site Work</option>
-                        <option value="hybrid">Hybrid (Office + Remote)</option>
-                        <option value="remote">Remote</option>
-                        <option value="unknown">Unspecified Location</option>
-                      </select>
-                    </div>
+                    <ClassyDropdown
+                      id="filter-workmode-select"
+                      value={workModeFilter}
+                      onChange={(nextMode) => {
+                        setWorkModeFilter(nextMode);
+                        setPage(1);
+                      }}
+                      options={workModeOptions}
+                      placeholder="All Work Modes"
+                      title="Select Work Mode"
+                      icon={
+                        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                      }
+                    />
                   </div>
 
                   {/* Company Filter */}
                   {stats && stats.companies && stats.companies.length > 0 && (
                     <div className="input-group">
                       <label htmlFor="filter-company-select" className="native-sr-only">Company</label>
-                      <div className="filter-dropdown-wrapper">
-                        <span className="filter-select-icon icon-company" aria-hidden="true">
-                          <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
-                        </span>
-                        <select
-                          id="filter-company-select"
-                          className="custom-select custom-select-with-icon"
-                          value={companyFilter}
-                          onChange={(e) => {
-                            setCompanyFilter(e.target.value);
-                            setPage(1);
-                          }}
-                        >
-                          <option value="all">All Companies ({stats.companies.length})</option>
-                          {companyGroups.tier1.length > 0 && (
-                            <optgroup label="Tier-1 Product Companies">
-                              {companyGroups.tier1.map((comp) => (
-                                <option key={comp} value={comp}>{comp}</option>
-                              ))}
-                            </optgroup>
-                          )}
-                          {companyGroups.other.length > 0 && (
-                            <optgroup label="Other Tech Companies">
-                              {companyGroups.other.map((comp) => (
-                                <option key={comp} value={comp}>{comp}</option>
-                              ))}
-                            </optgroup>
-                          )}
-                        </select>
-                      </div>
+                      <ClassyDropdown
+                        id="filter-company-select"
+                        value={companyFilter}
+                        onChange={(nextComp) => {
+                          setCompanyFilter(nextComp);
+                          setPage(1);
+                        }}
+                        options={companyOptions}
+                        placeholder={`All Companies (${stats.companies.length})`}
+                        title="Filter by Company"
+                        searchable={true}
+                        icon={
+                          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+                        }
+                      />
                     </div>
                   )}
 
@@ -1398,24 +1429,20 @@ export default function App() {
                   {/* Status Filter */}
                   <div className="input-group">
                     <label htmlFor="filter-status-select" className="native-sr-only">Status</label>
-                    <div className="filter-dropdown-wrapper">
-                      <span className="filter-select-icon icon-status" aria-hidden="true">
-                        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                      </span>
-                      <select
-                        id="filter-status-select"
-                        className="custom-select custom-select-with-icon"
-                        value={statusFilter}
-                        onChange={(e) => {
-                          setStatusFilter(e.target.value);
-                          setPage(1);
-                        }}
-                      >
-                        <option value="open">Active and Open Postings Only</option>
-                        <option value="all">All Postings (Active + Archived)</option>
-                        <option value="closed">Closed Postings Only</option>
-                      </select>
-                    </div>
+                    <ClassyDropdown
+                      id="filter-status-select"
+                      value={statusFilter}
+                      onChange={(nextStatus) => {
+                        setStatusFilter(nextStatus);
+                        setPage(1);
+                      }}
+                      options={statusOptions}
+                      placeholder="Active and Open Postings Only"
+                      title="Filter Postings by Status"
+                      icon={
+                        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                      }
+                    />
                   </div>
                 </div>
 
@@ -1613,68 +1640,70 @@ export default function App() {
                       )}
                     </button>
 
-                    {/* View Mode Switcher */}
-                    <div className="view-mode-segmented" role="group" aria-label="View layout switch">
-                      <button
-                        type="button"
-                        className={`segmented-option view-btn-grid ${viewMode === 'grid' ? 'active' : ''}`}
-                        onClick={() => setViewMode('grid')}
-                        title="Switch to Radar Grid View"
-                      >
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" style={{ marginRight: '5px', verticalAlign: '-1px' }}>
-                          <rect x="3" y="3" width="7" height="7" rx="1.5" />
-                          <rect x="14" y="3" width="7" height="7" rx="1.5" />
-                          <rect x="14" y="14" width="7" height="7" rx="1.5" />
-                          <rect x="3" y="14" width="7" height="7" rx="1.5" />
-                        </svg>
-                        <span className="view-mode-label-long">Radar Grid</span>
-                        <span className="view-mode-label-short">Grid</span>
-                      </button>
-                      <button
-                        type="button"
-                        className={`segmented-option view-btn-table ${viewMode === 'table' ? 'active' : ''}`}
-                        onClick={() => setViewMode('table')}
-                        title="Switch to Structured Table View"
-                      >
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" style={{ marginRight: '5px', verticalAlign: '-1px' }}>
-                          <line x1="3" y1="6" x2="21" y2="6" />
-                          <line x1="3" y1="12" x2="21" y2="12" />
-                          <line x1="3" y1="18" x2="21" y2="18" />
-                        </svg>
-                        <span>Table</span>
-                      </button>
-                      <button
-                        type="button"
-                        className={`segmented-option view-btn-map ${viewMode === 'map' ? 'active' : ''}`}
-                        onClick={() => setViewMode('map')}
-                        title="Interactive GIS Tech Corridor Map"
-                      >
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" style={{ marginRight: '5px', verticalAlign: '-1px' }}>
-                          <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6" />
-                          <line x1="8" y1="2" x2="8" y2="18" />
-                          <line x1="16" y1="6" x2="16" y2="22" />
-                        </svg>
-                        <span className="view-mode-label-long">Corridor Map</span>
-                        <span className="view-mode-label-short">Map</span>
-                      </button>
-                    </div>
+                    <div className="results-sub-cluster">
+                      {/* View Mode Switcher */}
+                      <div className="view-mode-segmented" role="group" aria-label="View layout switch">
+                        <button
+                          type="button"
+                          className={`segmented-option view-btn-grid ${viewMode === 'grid' ? 'active' : ''}`}
+                          onClick={() => setViewMode('grid')}
+                          title="Switch to Radar Grid View"
+                        >
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" style={{ marginRight: '5px', verticalAlign: '-1px' }}>
+                            <rect x="3" y="3" width="7" height="7" rx="1.5" />
+                            <rect x="14" y="3" width="7" height="7" rx="1.5" />
+                            <rect x="14" y="14" width="7" height="7" rx="1.5" />
+                            <rect x="3" y="14" width="7" height="7" rx="1.5" />
+                          </svg>
+                          <span className="view-mode-label-long">Radar Grid</span>
+                          <span className="view-mode-label-short">Grid</span>
+                        </button>
+                        <button
+                          type="button"
+                          className={`segmented-option view-btn-table ${viewMode === 'table' ? 'active' : ''}`}
+                          onClick={() => setViewMode('table')}
+                          title="Switch to Structured Table View"
+                        >
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" style={{ marginRight: '5px', verticalAlign: '-1px' }}>
+                            <line x1="3" y1="6" x2="21" y2="6" />
+                            <line x1="3" y1="12" x2="21" y2="12" />
+                            <line x1="3" y1="18" x2="21" y2="18" />
+                          </svg>
+                          <span>Table</span>
+                        </button>
+                        <button
+                          type="button"
+                          className={`segmented-option view-btn-map ${viewMode === 'map' ? 'active' : ''}`}
+                          onClick={() => setViewMode('map')}
+                          title="Interactive GIS Tech Corridor Map"
+                        >
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" style={{ marginRight: '5px', verticalAlign: '-1px' }}>
+                            <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6" />
+                            <line x1="8" y1="2" x2="8" y2="18" />
+                            <line x1="16" y1="6" x2="16" y2="22" />
+                          </svg>
+                          <span className="view-mode-label-long">Corridor Map</span>
+                          <span className="view-mode-label-short">Map</span>
+                        </button>
+                      </div>
 
-                    {/* Per Page Select */}
-                    <select
-                      id="page-limit-select"
-                      className="custom-select"
-                      style={{ width: '84px', padding: '6px 8px', fontSize: '12.5px' }}
-                      value={limit}
-                      onChange={(e) => {
-                        setLimit(Number(e.target.value));
-                        setPage(1);
-                      }}
-                    >
-                      <option value={12}>12 / pg</option>
-                      <option value={24}>24 / pg</option>
-                      <option value={48}>48 / pg</option>
-                      <option value={96}>96 / pg</option>
-                    </select>
+                      {/* Per Page Select */}
+                      <select
+                        id="page-limit-select"
+                        className="custom-select"
+                        style={{ width: '84px', padding: '6px 8px', fontSize: '12.5px' }}
+                        value={limit}
+                        onChange={(e) => {
+                          setLimit(Number(e.target.value));
+                          setPage(1);
+                        }}
+                      >
+                        <option value={12}>12 / pg</option>
+                        <option value={24}>24 / pg</option>
+                        <option value={48}>48 / pg</option>
+                        <option value={96}>96 / pg</option>
+                      </select>
+                    </div>
                   </div>
                 </div>
 

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import CompanyCard from './CompanyCard';
 import PersonalizeModal from './PersonalizeModal';
 import DiscoveredPlacesMap from './DiscoveredPlacesMap';
+import ClassyDropdown from './ClassyDropdown';
 import { useAuth } from '../context/AuthContext';
 import { useLocation, formatDistance, calculateDistanceKm } from '../context/LocationContext';
 import { useModalScrollLock } from '../utils/useModalScrollLock';
@@ -132,6 +133,51 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
     others.sort((a, b) => (b.officeCount || 0) - (a.officeCount || 0) || a.name.localeCompare(b.name));
 
     return { tier1, others, totalOffices };
+  }, [cities]);
+
+  // Options for ClassyDropdown city pickers
+  const directoryCityOptions = useMemo(() => {
+    const list = [
+      { value: 'all', label: `All Indian Cities (${groupedDirectoryCities.totalOffices} offices)` }
+    ];
+    if (groupedDirectoryCities.tier1.length > 0) {
+      groupedDirectoryCities.tier1.forEach(c => {
+        list.push({
+          value: c.slug,
+          label: `${c.name}${c.state ? `, ${c.state}` : ''} ${c.officeCount > 0 ? `(${c.officeCount} saved)` : '(Ready to scan)'}`,
+          group: 'Major Indian Tech Hubs'
+        });
+      });
+    }
+    if (groupedDirectoryCities.others.length > 0) {
+      groupedDirectoryCities.others.forEach(c => {
+        list.push({
+          value: c.slug,
+          label: `${c.name}${c.state ? `, ${c.state}` : ''} ${c.officeCount > 0 ? `(${c.officeCount} saved)` : '(Ready to scan)'}`,
+          group: 'Regional IT Clusters and Cities'
+        });
+      });
+    }
+    return list;
+  }, [groupedDirectoryCities]);
+
+  const scannerCityOptions = useMemo(() => {
+    const list = [];
+    [1, 2, 3].forEach(tier => {
+      const hubs = AVAILABLE_INDIAN_HUBS.filter(h => (h.tier || 1) === tier);
+      if (hubs.length === 0) return;
+      const grpLabel = tier === 1 ? 'Tier 1 Tech Capitals' : (tier === 2 ? 'Tier 2 Tech Hubs and IT Corridors' : 'Tier 3 and Emerging Tech Centers');
+      hubs.forEach(h => {
+        const matched = cities.find(c => c.slug === h.slug);
+        const count = matched?.officeCount || 0;
+        list.push({
+          value: h.slug,
+          label: `${h.name}, ${h.state} ${count > 0 ? `(${count} saved in db)` : '(Ready to scan)'}`,
+          group: grpLabel
+        });
+      });
+    });
+    return list;
   }, [cities]);
 
   // Add Company Modal State (Kept intact for future Admin dashboard)
@@ -509,63 +555,51 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
           </div>
 
           {/* City Filter */}
-          <div className="filter-select-wrapper">
-            <svg className="filter-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" />
-              <circle cx="12" cy="10" r="3" />
-            </svg>
-            <select
+          <div className="filter-select-wrapper" style={{ minWidth: '220px' }}>
+            <ClassyDropdown
               id="directory-city-select"
-              className="directory-select"
               value={selectedCity}
-              onChange={(e) => {
-                setSelectedCity(e.target.value);
+              onChange={(nextCity) => {
+                setSelectedCity(nextCity);
                 setPage(1);
               }}
-            >
-              <option value="all">All Indian Cities ({groupedDirectoryCities.totalOffices} offices)</option>
-              {groupedDirectoryCities.tier1.length > 0 && (
-                <optgroup label="Major Indian Tech Hubs">
-                  {groupedDirectoryCities.tier1.map((c) => (
-                    <option key={c.slug} value={c.slug}>
-                      {c.name}{c.state ? `, ${c.state}` : ''} {c.officeCount > 0 ? `(${c.officeCount} saved)` : '(Ready to scan)'}
-                    </option>
-                  ))}
-                </optgroup>
-              )}
-              {groupedDirectoryCities.others.length > 0 && (
-                <optgroup label="Regional IT Clusters and Cities">
-                  {groupedDirectoryCities.others.map((c) => (
-                    <option key={c.slug} value={c.slug}>
-                      {c.name}{c.state ? `, ${c.state}` : ''} {c.officeCount > 0 ? `(${c.officeCount} saved)` : '(Ready to scan)'}
-                    </option>
-                  ))}
-                </optgroup>
-              )}
-            </select>
+              options={directoryCityOptions}
+              placeholder={`All Indian Cities (${groupedDirectoryCities.totalOffices} offices)`}
+              title="Filter Directory by City Hub"
+              searchable={true}
+              icon={
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" /><circle cx="12" cy="10" r="3" /></svg>
+              }
+            />
           </div>
 
           {/* Dual-Engine Map-Wise Discovery Trigger */}
           <button
-            className="osm-scan-trigger-btn"
+            className={`osm-scan-trigger-btn ${isScanning ? 'is-scanning-active' : ''}`}
             onClick={() => {
               if (selectedCity !== 'all') {
                 setDiscoveryCitySlug(selectedCity);
               }
               setShowDiscoveryModal(true);
             }}
-            title="Scan Google Places or OpenStreetMap map-wise for local startups and consultancies"
+            title={isScanning ? 'Radar scanner is active - Click to view live progress' : 'Scan Google Places or OpenStreetMap map-wise for local startups and consultancies'}
             id="open-city-scanner-btn"
           >
             <span className="osm-scan-icon">
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2">
-                <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6" />
-                <line x1="8" y1="2" x2="8" y2="18" />
-                <line x1="16" y1="6" x2="16" y2="22" />
-              </svg>
+              {isScanning ? (
+                <span className="btn-spinner" style={{ width: '13px', height: '13px' }} />
+              ) : (
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2">
+                  <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6" />
+                  <line x1="8" y1="2" x2="8" y2="18" />
+                  <line x1="16" y1="6" x2="16" y2="22" />
+                </svg>
+              )}
             </span>
             <span className="osm-scan-text">
-              {selectedCity !== 'all' 
+              {isScanning
+                ? 'Scanning in Progress...'
+                : selectedCity !== 'all' 
                 ? `Scan ${cities.find(c => c.slug === selectedCity)?.name || selectedCity} (Google / Map)` 
                 : 'Map-Wise Places Scanner'}
             </span>
@@ -744,12 +778,20 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
       {/* Dual-Engine Map-Wise Discovery Modal */}
       {showDiscoveryModal && (
         <div className="modal-backdrop" onClick={() => !isScanning && setShowDiscoveryModal(false)}>
-          <div className="discovery-modal-card discovery-scanner-modal-card" onClick={(e) => e.stopPropagation()}>
+          <div className={`discovery-modal-card discovery-scanner-modal-card ${isScanning ? 'is-scanning-mode' : ''} ${scanStatus?.lastSummary ? 'has-results' : ''}`} onClick={(e) => e.stopPropagation()}>
             <div className="discovery-modal-header">
               <div className="discovery-header-top-row">
                 <div className="discovery-modal-badge">
                   <span className="live-pulse-dot" />
-                  <span>{scannerEngine === 'google_places' ? 'Google Places Radar' : 'OpenStreetMap Engine'}</span>
+                  <span>
+                    {isScanning
+                      ? 'Live Radar Scan Active'
+                      : scanStatus?.lastSummary
+                      ? 'Scan Completed'
+                      : scannerEngine === 'google_places'
+                      ? 'Google Places Radar'
+                      : 'OpenStreetMap Engine'}
+                  </span>
                 </div>
                 <button
                   type="button"
@@ -766,10 +808,20 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
               </div>
               <div className="discovery-modal-title-group">
                 <h3 className="discovery-modal-title">
-                  {scannerEngine === 'google_places' ? 'Startup & Tech Office Scanner' : 'City Startup & Office Discovery'}
+                  {isScanning
+                    ? `Scanning ${AVAILABLE_INDIAN_HUBS.find(h => h.slug === discoveryCitySlug)?.name || discoveryCitySlug}...`
+                    : scanStatus?.lastSummary
+                    ? `Discovery Results: ${scanStatus.lastSummary.city}`
+                    : scannerEngine === 'google_places'
+                    ? 'Startup & Tech Office Scanner'
+                    : 'City Startup & Office Discovery'}
                 </h3>
                 <p className="discovery-modal-subtitle">
-                  {scannerEngine === 'google_places'
+                  {isScanning
+                    ? `Sweeping coordinates across ${AVAILABLE_INDIAN_HUBS.find(h => h.slug === discoveryCitySlug)?.name || discoveryCitySlug} to discover verified tech companies and offices.`
+                    : scanStatus?.lastSummary
+                    ? `Successfully synchronized places for ${scanStatus.lastSummary.city}. You can review coordinates on the map or explore the full company directory.`
+                    : scannerEngine === 'google_places'
                     ? 'Discovers verified software companies, IT consultancies, dev agencies, and local tech hubs via Google Places coordinates.'
                     : 'Extracts physical IT campuses, registered tech offices & co-working spaces directly from OpenStreetMap.'}
                 </p>
@@ -777,311 +829,56 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
             </div>
 
             <div className="discovery-modal-body">
-              {/* 2-Column Responsive Config Grid for Discovery Engine & Target City */}
-              <div className="discovery-config-grid">
-                {/* Engine Switcher Tabs */}
-                <div className="discovery-form-group">
-                  <label className="discovery-label">Discovery Engine</label>
-                <div className="engine-tabs">
-                  <button
-                    type="button"
-                    className={`engine-tab-btn ${scannerEngine === 'google_places' ? 'active' : ''}`}
-                    onClick={() => {
-                      if (!isScanning) {
-                        setScannerEngine('google_places');
-                        setScanStatus(null);
-                      }
-                    }}
-                    disabled={isScanning}
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
-                      <circle cx="12" cy="9" r="2.5"/>
-                    </svg>
-                    <span>Google Places</span>
-                    <span className="tab-badge">Map-Wise</span>
-                  </button>
-                  <button
-                    type="button"
-                    className={`engine-tab-btn ${scannerEngine === 'osm' ? 'active' : ''}`}
-                    onClick={() => {
-                      if (!isScanning) {
-                        setScannerEngine('osm');
-                        setScanStatus(null);
-                      }
-                    }}
-                    disabled={isScanning}
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <circle cx="12" cy="12" r="10"/>
-                      <line x1="2" y1="12" x2="22" y2="12"/>
-                      <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
-                    </svg>
-                    <span>OpenStreetMap</span>
-                    <span className="tab-badge free">Free OSM</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* City Selector */}
-              <div className="discovery-form-group">
-                <label className="discovery-label" htmlFor="scanner-city-select">
-                  Target City Hub
-                </label>
-                <div className="discovery-select-wrapper">
-                  <div className="discovery-select-icon">
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
-                      <circle cx="12" cy="9" r="2.5"/>
-                    </svg>
-                  </div>
-                  <select
-                    id="scanner-city-select"
-                    className="discovery-city-select with-left-icon"
-                    value={discoveryCitySlug}
-                    onChange={(e) => {
-                      setDiscoveryCitySlug(e.target.value);
-                      setScanStatus(null);
-                    }}
-                    disabled={isScanning}
-                  >
-                    <optgroup label="Tier 1 Tech Capitals">
-                      {AVAILABLE_INDIAN_HUBS.filter(h => h.tier === 1).map((h) => {
-                        const matched = cities.find(c => c.slug === h.slug);
-                        const count = matched?.officeCount || 0;
-                        return (
-                          <option key={h.slug} value={h.slug}>
-                            {h.name}, {h.state} {count > 0 ? `(${count} saved in db)` : '(Ready to scan)'}
-                          </option>
-                        );
-                      })}
-                    </optgroup>
-                    <optgroup label="Tier 2 Tech Hubs and IT Corridors">
-                      {AVAILABLE_INDIAN_HUBS.filter(h => h.tier === 2).map((h) => {
-                        const matched = cities.find(c => c.slug === h.slug);
-                        const count = matched?.officeCount || 0;
-                        return (
-                          <option key={h.slug} value={h.slug}>
-                            {h.name}, {h.state} {count > 0 ? `(${count} saved in db)` : '(Ready to scan)'}
-                          </option>
-                        );
-                      })}
-                    </optgroup>
-                    <optgroup label="Tier 3 and Emerging Tech Centers">
-                      {AVAILABLE_INDIAN_HUBS.filter(h => h.tier === 3).map((h) => {
-                        const matched = cities.find(c => c.slug === h.slug);
-                        const count = matched?.officeCount || 0;
-                        return (
-                          <option key={h.slug} value={h.slug}>
-                            {h.name}, {h.state} {count > 0 ? `(${count} saved in db)` : '(Ready to scan)'}
-                          </option>
-                        );
-                      })}
-                    </optgroup>
-                  </select>
-                </div>
-              </div>
-            </div>
-
-              {/* Engine Specific Options */}
-              {scannerEngine === 'google_places' ? (
-                <>
-                  {/* Map Search Radius */}
-                  <div className="discovery-form-group">
-                    <label className="discovery-label">Search Radius (from city center)</label>
-                    <div className="radius-selector-row">
-                      <button
-                        type="button"
-                        className={`radius-btn ${scanRadius === 15000 ? 'active' : ''}`}
-                        onClick={() => setScanRadius(15000)}
-                        disabled={isScanning}
-                      >
-                        <span className="radius-val">15 km</span>
-                        <span className="radius-lbl">Core City</span>
-                      </button>
-                      <button
-                        type="button"
-                        className={`radius-btn ${scanRadius === 25000 ? 'active' : ''}`}
-                        onClick={() => setScanRadius(25000)}
-                        disabled={isScanning}
-                      >
-                        <span className="radius-val">25 km</span>
-                        <span className="radius-lbl">IT Corridors</span>
-                      </button>
-                      <button
-                        type="button"
-                        className={`radius-btn ${scanRadius === 50000 ? 'active' : ''}`}
-                        onClick={() => setScanRadius(50000)}
-                        disabled={isScanning}
-                      >
-                        <span className="radius-val">50 km</span>
-                        <span className="radius-lbl">Greater Metro</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Unified Scope Card */}
-                  <div className="discovery-scope-card">
-                    <div className="scope-row">
-                      <div className="scope-icon-wrap info">
-                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                          <circle cx="12" cy="12" r="10" />
-                          <line x1="12" y1="16" x2="12" y2="12" />
-                          <line x1="12" y1="8" x2="12.01" y2="8" />
-                        </svg>
-                      </div>
-                      <div className="scope-text-wrap">
-                        Scanning map radius in{' '}
-                        <strong>{AVAILABLE_INDIAN_HUBS.find(h => h.slug === discoveryCitySlug)?.name || discoveryCitySlug}</strong>{' '}
-                        for software agencies, IT consultancies, app developers & tech startups.
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Optional Custom Google API Key Accordion */}
-                  <div className="api-key-accordion-section">
-                    <button
-                      type="button"
-                      className={`api-key-accordion-toggle ${showApiKeyInput ? 'is-expanded' : ''}`}
-                      onClick={() => setShowApiKeyInput(!showApiKeyInput)}
-                    >
-                      <div className="api-key-toggle-left">
-                        <svg className="api-key-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M21 2l-2 2m-1.5 1.5L16 7l-1.5-1.5-4 4 1.5 1.5L9 14l-1.5-1.5-4 4A3 3 0 1 0 7.8 20.8l4-4 1.5 1.5 3-3-1.5-1.5 1.5-1.5 2-2z" />
-                        </svg>
-                        <span>Have a Google Places API Key?</span>
-                        <span className="api-key-optional-tag">Optional</span>
-                      </div>
-                      <svg
-                        className={`accordion-chevron ${showApiKeyInput ? 'is-open' : ''}`}
-                        width="13"
-                        height="13"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2.5"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <polyline points="6 9 12 15 18 9" />
-                      </svg>
-                    </button>
-                    {showApiKeyInput && (
-                      <div className="api-key-input-box">
-                        <label className="discovery-label" htmlFor="custom-api-key-input">Custom API Key</label>
-                        <input
-                          id="custom-api-key-input"
-                          type="password"
-                          className="discovery-input"
-                          placeholder="AIzaSy... (leave blank to use system key / free local engine)"
-                          value={customApiKey}
-                          onChange={(e) => setCustomApiKey(e.target.value)}
-                          disabled={isScanning}
-                        />
-                        <span className="api-key-hint">
-                          Optional. If blank, JobRadar uses system settings or intelligent high-density local business scanning without requiring Google billing.
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </>
-              ) : (
-                <>
-                  {/* City Coverage Info Pill for OSM */}
-                  <div className="discovery-scope-card">
-                    <div className="scope-row">
-                      <div className="scope-icon-wrap info">
-                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                          <circle cx="12" cy="12" r="10" />
-                          <line x1="12" y1="16" x2="12" y2="12" />
-                          <line x1="12" y1="8" x2="12.01" y2="8" />
-                        </svg>
-                      </div>
-                      <div className="scope-text-wrap">
-                        Targeting registered IT offices & software tech corridors in{' '}
-                        <strong>{AVAILABLE_INDIAN_HUBS.find(h => h.slug === discoveryCitySlug)?.name || discoveryCitySlug}</strong> via OpenStreetMap.
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Advanced Options for OSM */}
-                  <div className="discovery-options-row" style={{ marginTop: '6px' }}>
-                    <label className="discovery-checkbox-label">
-                      <input
-                        type="checkbox"
-                        checked={forceRefresh}
-                        onChange={(e) => setForceRefresh(e.target.checked)}
-                        disabled={isScanning}
-                      />
-                      <span>Force fresh scan (bypass 24-hour cache)</span>
-                    </label>
-                  </div>
-                </>
-              )}
-
-              {/* Initial Ready-to-Scan Radar Briefing Card */}
-              {!isScanning && !scanStatus?.lastSummary && (
-                <div className="discovery-prescan-card">
-                  <div className="prescan-left">
-                    <div className="prescan-hub-badge">
-                      <span className="prescan-pulse-dot" />
-                      <span>
-                        {AVAILABLE_INDIAN_HUBS.find(h => h.slug === discoveryCitySlug)?.tier
-                          ? `Tier ${AVAILABLE_INDIAN_HUBS.find(h => h.slug === discoveryCitySlug)?.tier} Hub`
-                          : 'Tech Hub'}
-                      </span>
-                    </div>
-                    <h4 className="prescan-title">
-                      Ready to scan {AVAILABLE_INDIAN_HUBS.find(h => h.slug === discoveryCitySlug)?.name || discoveryCitySlug}
-                    </h4>
-                    <p className="prescan-desc">
+              {/* STATE 1: Live Scanning View (Dedicated, Focused & Rotating Radar Scope) */}
+              {isScanning ? (
+                <div className="discovery-scanning-box is-active-scan-screen">
+                  <div className="scanning-active-pill">
+                    <span className="live-pulse-dot" />
+                    <span>
+                      Live Radar Sweep:{' '}
+                      <strong>
+                        {AVAILABLE_INDIAN_HUBS.find(h => h.slug === discoveryCitySlug)?.name || discoveryCitySlug}
+                      </strong>
                       {scannerEngine === 'google_places'
-                        ? `Radar will query Google Places across a ${scanRadius / 1000} km radius from ${AVAILABLE_INDIAN_HUBS.find(h => h.slug === discoveryCitySlug)?.name || discoveryCitySlug}'s IT corridors. Discovered companies and physical office coordinates will appear side-by-side on an interactive map preview.`
-                        : `Overpass API will extract physical IT campuses, registered tech offices & software co-working spaces directly from OpenStreetMap.`}
-                    </p>
+                        ? ` • ${scanRadius / 1000} km Radius`
+                        : ' • OpenStreetMap Hub'}
+                    </span>
                   </div>
-                  <div className="prescan-metrics-col">
-                    <div className="prescan-metric-item">
-                      <span className="prescan-metric-val">
-                        {cities.find(c => c.slug === discoveryCitySlug)?.officeCount || 0}
-                      </span>
-                      <span className="prescan-metric-lbl">Offices in DB</span>
-                    </div>
-                    <div className="prescan-metric-item">
-                      <span className="prescan-metric-val">
-                        {scannerEngine === 'google_places' ? `${scanRadius / 1000} km` : 'Full Hub'}
-                      </span>
-                      <span className="prescan-metric-lbl">Radar Radius</span>
-                    </div>
-                    <div className="prescan-metric-item">
-                      <span className="prescan-metric-val">Live Map</span>
-                      <span className="prescan-metric-lbl">Interactive Pinpoint</span>
-                    </div>
-                  </div>
-                </div>
-              )}
 
-              {/* Progress State */}
-              {isScanning && (
-                <div className="discovery-scanning-box">
+                  {/* High-Tech 360-Degree Rotating Radar Scope Visual */}
                   <div className="scanner-radar-visual">
+                    <div className="radar-grid-scope" />
+                    <div className="radar-rotating-beam" />
+                    <div className="radar-blip blip-1" />
+                    <div className="radar-blip blip-2" />
+                    <div className="radar-blip blip-3" />
                     <div className="radar-sweep-ring ring-1" />
                     <div className="radar-sweep-ring ring-2" />
                     <div className="radar-sweep-ring ring-3" />
                     <div className="radar-center-beacon">
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
-                        <circle cx="12" cy="9" r="2.5"/>
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" />
+                        <circle cx="12" cy="9" r="2.5" />
                       </svg>
                     </div>
                   </div>
+
                   <div className="scanner-status-text">
                     {scanStatus?.progress || `Scanning ${AVAILABLE_INDIAN_HUBS.find(h => h.slug === discoveryCitySlug)?.name || discoveryCitySlug} for tech offices...`}
                   </div>
+
+                  <p className="scanner-subtext">
+                    JobRadar is actively sweeping Google Places and map coordinates to discover tech companies, office locations, and contact channels.
+                  </p>
+
                   <div className="scanner-steps-list">
                     <div className="scanner-step active">
                       <span className="step-dot" />
-                      <span>{scannerEngine === 'google_places' ? 'Querying Google Places map coordinates' : 'Querying physical IT offices & tech campuses'}</span>
+                      <span>
+                        {scannerEngine === 'google_places'
+                          ? `Querying Google Places coordinates in ${AVAILABLE_INDIAN_HUBS.find(h => h.slug === discoveryCitySlug)?.name || discoveryCitySlug}`
+                          : 'Querying physical IT offices & tech campuses'}
+                      </span>
                     </div>
                     <div className="scanner-step active">
                       <span className="step-dot" />
@@ -1093,13 +890,23 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
                     </div>
                   </div>
                 </div>
-              )}
-
-              {/* Scan Results Summary */}
-              {!isScanning && scanStatus?.lastSummary && (
+              ) : scanStatus?.lastSummary ? (
+                /* STATE 2: Scan Results Summary & Discovered Places Preview */
                 <div className="discovery-results-card">
                   <div className="results-header">
                     <h4>Scan Completed for {scanStatus.lastSummary.city}</h4>
+                    <button
+                      type="button"
+                      className="btn-rescan-trigger"
+                      onClick={() => setScanStatus(null)}
+                      title="Configure and run a new scan or change city"
+                    >
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="1 4 1 10 7 10" />
+                        <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+                      </svg>
+                      <span>New Scan / Change City</span>
+                    </button>
                   </div>
                   <div className="results-grid">
                     <div className="result-metric">
@@ -1325,7 +1132,16 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
                                       className={`place-action-pill map-action-pill ${isPinpointed ? 'is-selected' : ''}`}
                                       onClick={() => {
                                         setSelectedPreviewPlace(place);
-                                        if (placesViewMode === 'list') setPlacesViewMode('split');
+                                        const isMobile = typeof window !== 'undefined' && window.innerWidth <= 860;
+                                        if (isMobile) {
+                                          setPlacesViewMode('map');
+                                        } else {
+                                          if (placesViewMode === 'list') setPlacesViewMode('split');
+                                          setTimeout(() => {
+                                            const mapEl = document.querySelector('.places-map-pane');
+                                            if (mapEl) mapEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                                          }, 60);
+                                        }
                                       }}
                                       title="Open map right here and pinpoint this office"
                                     >
@@ -1396,6 +1212,7 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
                               citySlug={discoveryCitySlug}
                               centerCoords={scanStatus.lastSummary?.center}
                               userLocation={userLocation}
+                              onBackToList={() => setPlacesViewMode('list')}
                             />
                           </div>
                         )}
@@ -1403,13 +1220,265 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
                     </div>
                   )}
                 </div>
-              )}
+              ) : (
+                /* STATE 3: Setup Configuration Form */
+                <>
+                  {scanStatus?.error && (
+                    <div className="discovery-error-box">
+                      <span>{scanStatus.error}</span>
+                    </div>
+                  )}
 
-              {/* Scan Error */}
-              {!isScanning && scanStatus?.error && (
-                <div className="discovery-error-box">
-                  <span>{scanStatus.error}</span>
-                </div>
+                  {/* 2-Column Responsive Config Grid for Discovery Engine & Target City */}
+                  <div className="discovery-config-grid">
+                    {/* Engine Switcher Tabs */}
+                    <div className="discovery-form-group">
+                      <label className="discovery-label">Discovery Engine</label>
+                      <div className="engine-tabs">
+                        <button
+                          type="button"
+                          className={`engine-tab-btn ${scannerEngine === 'google_places' ? 'active' : ''}`}
+                          onClick={() => {
+                            if (!isScanning) {
+                              setScannerEngine('google_places');
+                              setScanStatus(null);
+                            }
+                          }}
+                          disabled={isScanning}
+                        >
+                          <div className="engine-tab-title-wrap">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" />
+                              <circle cx="12" cy="9" r="2.5" />
+                            </svg>
+                            <span>Google Places</span>
+                          </div>
+                          <span className="tab-badge">Map-Wise</span>
+                        </button>
+                        <button
+                          type="button"
+                          className={`engine-tab-btn ${scannerEngine === 'osm' ? 'active' : ''}`}
+                          onClick={() => {
+                            if (!isScanning) {
+                              setScannerEngine('osm');
+                              setScanStatus(null);
+                            }
+                          }}
+                          disabled={isScanning}
+                        >
+                          <div className="engine-tab-title-wrap">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <circle cx="12" cy="12" r="10" />
+                              <line x1="2" y1="12" x2="22" y2="12" />
+                              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                            </svg>
+                            <span>OpenStreetMap</span>
+                          </div>
+                          <span className="tab-badge free">Free OSM</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* City Selector */}
+                    <div className="discovery-form-group">
+                      <label className="discovery-label" htmlFor="scanner-city-select">
+                        Target City Hub
+                      </label>
+                      <ClassyDropdown
+                        id="scanner-city-select"
+                        value={discoveryCitySlug}
+                        onChange={(nextCity) => {
+                          setDiscoveryCitySlug(nextCity);
+                          setScanStatus(null);
+                        }}
+                        options={scannerCityOptions}
+                        placeholder="Select City to Scan"
+                        title="Target City Hub"
+                        searchable={true}
+                        disabled={isScanning}
+                        icon={
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" /><circle cx="12" cy="9" r="2.5" /></svg>
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  {/* Engine Specific Options */}
+                  {scannerEngine === 'google_places' ? (
+                    <>
+                      {/* Map Search Radius */}
+                      <div className="discovery-form-group">
+                        <label className="discovery-label">Search Radius (from city center)</label>
+                        <div className="radius-selector-row">
+                          <button
+                            type="button"
+                            className={`radius-btn ${scanRadius === 15000 ? 'active' : ''}`}
+                            onClick={() => setScanRadius(15000)}
+                            disabled={isScanning}
+                          >
+                            <span className="radius-val">15 km</span>
+                            <span className="radius-lbl">Core City</span>
+                          </button>
+                          <button
+                            type="button"
+                            className={`radius-btn ${scanRadius === 25000 ? 'active' : ''}`}
+                            onClick={() => setScanRadius(25000)}
+                            disabled={isScanning}
+                          >
+                            <span className="radius-val">25 km</span>
+                            <span className="radius-lbl">IT Corridors</span>
+                          </button>
+                          <button
+                            type="button"
+                            className={`radius-btn ${scanRadius === 50000 ? 'active' : ''}`}
+                            onClick={() => setScanRadius(50000)}
+                            disabled={isScanning}
+                          >
+                            <span className="radius-val">50 km</span>
+                            <span className="radius-lbl">Greater Metro</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Unified Scope Card */}
+                      <div className="discovery-scope-card">
+                        <div className="scope-row">
+                          <div className="scope-icon-wrap info">
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                              <circle cx="12" cy="12" r="10" />
+                              <line x1="12" y1="16" x2="12" y2="12" />
+                              <line x1="12" y1="8" x2="12.01" y2="8" />
+                            </svg>
+                          </div>
+                          <div className="scope-text-wrap">
+                            Scanning map radius in{' '}
+                            <strong>{AVAILABLE_INDIAN_HUBS.find(h => h.slug === discoveryCitySlug)?.name || discoveryCitySlug}</strong>{' '}
+                            for software agencies, IT consultancies, app developers & tech startups.
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Optional Custom Google API Key Accordion */}
+                      <div className="api-key-accordion-section">
+                        <button
+                          type="button"
+                          className={`api-key-accordion-toggle ${showApiKeyInput ? 'is-expanded' : ''}`}
+                          onClick={() => setShowApiKeyInput(!showApiKeyInput)}
+                        >
+                          <div className="api-key-toggle-left">
+                            <svg className="api-key-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M21 2l-2 2m-1.5 1.5L16 7l-1.5-1.5-4 4 1.5 1.5L9 14l-1.5-1.5-4 4A3 3 0 1 0 7.8 20.8l4-4 1.5 1.5 3-3-1.5-1.5 1.5-1.5 2-2z" />
+                            </svg>
+                            <span>Have a Google Places API Key?</span>
+                            <span className="api-key-optional-tag">Optional</span>
+                          </div>
+                          <svg
+                            className={`accordion-chevron ${showApiKeyInput ? 'is-open' : ''}`}
+                            width="13"
+                            height="13"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2.5"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <polyline points="6 9 12 15 18 9" />
+                          </svg>
+                        </button>
+                        {showApiKeyInput && (
+                          <div className="api-key-input-box">
+                            <label className="discovery-label" htmlFor="custom-api-key-input">Custom API Key</label>
+                            <input
+                              id="custom-api-key-input"
+                              type="password"
+                              className="discovery-input"
+                              placeholder="AIzaSy... (leave blank to use system key / free local engine)"
+                              value={customApiKey}
+                              onChange={(e) => setCustomApiKey(e.target.value)}
+                              disabled={isScanning}
+                            />
+                            <span className="api-key-hint">
+                              Optional. If blank, JobRadar uses system settings or intelligent high-density local business scanning without requiring Google billing.
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      {/* City Coverage Info Pill for OSM */}
+                      <div className="discovery-scope-card">
+                        <div className="scope-row">
+                          <div className="scope-icon-wrap info">
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                              <circle cx="12" cy="12" r="10" />
+                              <line x1="12" y1="16" x2="12" y2="12" />
+                              <line x1="12" y1="8" x2="12.01" y2="8" />
+                            </svg>
+                          </div>
+                          <div className="scope-text-wrap">
+                            Targeting registered IT offices & software tech corridors in{' '}
+                            <strong>{AVAILABLE_INDIAN_HUBS.find(h => h.slug === discoveryCitySlug)?.name || discoveryCitySlug}</strong> via OpenStreetMap.
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Advanced Options for OSM */}
+                      <div className="discovery-options-row" style={{ marginTop: '6px' }}>
+                        <label className="discovery-checkbox-label">
+                          <input
+                            type="checkbox"
+                            checked={forceRefresh}
+                            onChange={(e) => setForceRefresh(e.target.checked)}
+                            disabled={isScanning}
+                          />
+                          <span>Force fresh scan (bypass 24-hour cache)</span>
+                        </label>
+                      </div>
+                    </>
+                  )}
+
+                  {/* Initial Ready-to-Scan Radar Briefing Card */}
+                  <div className="discovery-prescan-card">
+                    <div className="prescan-left">
+                      <div className="prescan-hub-badge">
+                        <span className="prescan-pulse-dot" />
+                        <span>
+                          {AVAILABLE_INDIAN_HUBS.find(h => h.slug === discoveryCitySlug)?.tier
+                            ? `Tier ${AVAILABLE_INDIAN_HUBS.find(h => h.slug === discoveryCitySlug)?.tier} Hub`
+                            : 'Tech Hub'}
+                        </span>
+                      </div>
+                      <h4 className="prescan-title">
+                        Ready to scan {AVAILABLE_INDIAN_HUBS.find(h => h.slug === discoveryCitySlug)?.name || discoveryCitySlug}
+                      </h4>
+                      <p className="prescan-desc">
+                        {scannerEngine === 'google_places'
+                          ? `Radar will query Google Places across a ${scanRadius / 1000} km radius from ${AVAILABLE_INDIAN_HUBS.find(h => h.slug === discoveryCitySlug)?.name || discoveryCitySlug}'s IT corridors. Discovered companies and physical office coordinates will appear side-by-side on an interactive map preview.`
+                          : `Overpass API will extract physical IT campuses, registered tech offices & software co-working spaces directly from OpenStreetMap.`}
+                      </p>
+                    </div>
+                    <div className="prescan-metrics-col">
+                      <div className="prescan-metric-item">
+                        <span className="prescan-metric-val">
+                          {cities.find(c => c.slug === discoveryCitySlug)?.officeCount || 0}
+                        </span>
+                        <span className="prescan-metric-lbl">Offices in DB</span>
+                      </div>
+                      <div className="prescan-metric-item">
+                        <span className="prescan-metric-val">
+                          {scannerEngine === 'google_places' ? `${scanRadius / 1000} km` : 'Full Hub'}
+                        </span>
+                        <span className="prescan-metric-lbl">Radar Radius</span>
+                      </div>
+                      <div className="prescan-metric-item">
+                        <span className="prescan-metric-val">Live Map</span>
+                        <span className="prescan-metric-lbl">Interactive Pinpoint</span>
+                      </div>
+                    </div>
+                  </div>
+                </>
               )}
             </div>
 
@@ -1438,6 +1507,15 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
                   </svg>
                   <span>View {scanStatus.lastSummary.city} Companies</span>
                 </button>
+              ) : isScanning ? (
+                <button
+                  type="button"
+                  className="btn-modal-primary is-scanning-state"
+                  disabled
+                >
+                  <span className="btn-spinner" />
+                  <span>Scanning in background...</span>
+                </button>
               ) : (
                 <button
                   type="button"
@@ -1446,20 +1524,15 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
                   disabled={isScanning}
                   id="start-places-scan-btn"
                 >
-                  {isScanning ? (
-                    <>
-                      <span className="btn-spinner" />
-                      <span>Scanning in background...</span>
-                    </>
-                  ) : (
-                    <>
-                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                        <circle cx="11" cy="11" r="8" />
-                        <line x1="21" y1="21" x2="16.65" y2="16.65" />
-                      </svg>
-                      <span>{scannerEngine === 'google_places' ? 'Start Google Places Scan' : 'Start OSM Scan'}</span>
-                    </>
-                  )}
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="11" cy="11" r="8" />
+                    <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                  </svg>
+                  <span>
+                    {scannerEngine === 'google_places'
+                      ? `Start Radar Scan (${scanRadius / 1000} km)`
+                      : 'Start OpenStreetMap Scan'}
+                  </span>
                 </button>
               )}
             </div>

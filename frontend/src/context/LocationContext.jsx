@@ -118,7 +118,7 @@ export function LocationProvider({ children }) {
   const detectCurrentLocation = useCallback(async () => {
     if (!navigator.geolocation) {
       setDetectError('Geolocation is not supported by your browser.');
-      return;
+      return null;
     }
 
     setIsDetecting(true);
@@ -129,42 +129,63 @@ export function LocationProvider({ children }) {
         async (position) => {
           const lat = position.coords.latitude;
           const lng = position.coords.longitude;
+          const accuracy = Math.round(position.coords.accuracy || 0);
 
           let label = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
           let city = '';
 
-          // Attempt free reverse geocode via OSM Nominatim
+          // 1. Try our high-precision backend reverse geocode
           try {
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 4000);
-            const res = await fetch(
-              `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=14&addressdetails=1`,
-              {
-                headers: { 'Accept': 'application/json' },
-                signal: controller.signal
-              }
-            );
+            const timeoutId = setTimeout(() => controller.abort(), 6000);
+            const res = await fetch(`/api/directory/places/reverse?lat=${lat}&lng=${lng}`, {
+              signal: controller.signal
+            });
             clearTimeout(timeoutId);
 
             if (res.ok) {
               const data = await res.json();
-              const addr = data.address || {};
-              const suburb = addr.suburb || addr.neighbourhood || addr.quarter || addr.residential || addr.road || '';
-              const c = addr.city || addr.town || addr.municipality || addr.state_district || addr.state || '';
-              city = c;
-              if (suburb && c) {
-                label = `${suburb}, ${c}`;
-              } else if (c) {
-                label = c;
-              } else if (data.display_name) {
-                label = data.display_name.split(',').slice(0, 2).join(',').trim();
+              if (data.success && data.label) {
+                label = data.label;
+                city = data.city || '';
               }
             }
-          } catch (_) {
-            label = 'Current GPS Location';
+          } catch (_) {}
+
+          // 2. Client-side OSM Nominatim fallback if backend was unavailable
+          if (!city) {
+            try {
+              const controller = new AbortController();
+              const timeoutId = setTimeout(() => controller.abort(), 4000);
+              const res = await fetch(
+                `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
+                {
+                  headers: { 'Accept': 'application/json' },
+                  signal: controller.signal
+                }
+              );
+              clearTimeout(timeoutId);
+
+              if (res.ok) {
+                const data = await res.json();
+                const addr = data.address || {};
+                const neighborhood = addr.neighbourhood || addr.suburb || addr.quarter || addr.residential || addr.road || '';
+                const c = addr.city || addr.town || addr.municipality || addr.state_district || addr.state || '';
+                city = c;
+                if (neighborhood && c) {
+                  label = `${neighborhood}, ${c}`;
+                } else if (c) {
+                  label = c;
+                } else if (data.display_name) {
+                  label = data.display_name.split(',').slice(0, 2).join(',').trim();
+                }
+              }
+            } catch (_) {
+              label = `Location (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
+            }
           }
 
-          const locObj = { lat, lng, label, city, source: 'gps' };
+          const locObj = { lat, lng, label, city, accuracy, source: 'gps' };
           setUserLocation(locObj);
           setIsDetecting(false);
           resolve(locObj);
@@ -172,13 +193,13 @@ export function LocationProvider({ children }) {
         (err) => {
           setIsDetecting(false);
           let msg = 'Could not retrieve your location.';
-          if (err.code === 1) msg = 'Location access was denied. Please allow location permissions in your browser or choose a tech hub below.';
-          else if (err.code === 2) msg = 'Location is currently unavailable.';
-          else if (err.code === 3) msg = 'Location request timed out.';
+          if (err.code === 1) msg = 'Location access was denied. Please allow location permissions in your browser or select your tech hub.';
+          else if (err.code === 2) msg = 'GPS location is currently unavailable.';
+          else if (err.code === 3) msg = 'Location request timed out. Please try again or search your area.';
           setDetectError(msg);
           resolve(null);
         },
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 }
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
       );
     });
   }, [setUserLocation]);

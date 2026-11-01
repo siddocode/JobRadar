@@ -24,10 +24,7 @@ router.post('/companies', directoryController.createCompany);
 
 // Places & address autocomplete search biased to GPS
 router.get('/places/search', directoryController.searchPlaces);
-
-
-
-
+router.get('/places/reverse', directoryController.reverseGeocode);
 // Reach out list (companies with no known vacancy but contact details)
 router.get('/reach-out', optionalAuth, directoryController.getReachOutCompanies);
 

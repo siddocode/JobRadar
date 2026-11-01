@@ -5,6 +5,7 @@ const Job = require('../models/Job');
 const UncertainMerge = require('../models/UncertainMerge');
 const UserPipeline = require('../models/UserPipeline');
 const { calculateDistanceKm } = require('../utils/geoUtils');
+const { detectLocalityFromCoords } = require('../utils/companyUtils');
 
 /**
  * GET /api/directory/cities
@@ -1116,6 +1117,191 @@ exports.searchPlaces = async (req, res) => {
   } catch (err) {
     console.error('Error in searchPlaces:', err);
     return res.status(500).json({ success: false, error: err.message });
+  }
+};
+
+/**
+ * GET /api/directory/places/reverse?lat=...&lng=...
+ * Highly accurate reverse geocoding to human-readable neighborhood/locality/city
+ */
+exports.reverseGeocode = async (req, res) => {
+  try {
+    const { lat, lng } = req.query;
+    if (!lat || !lng) {
+      return res.status(400).json({ success: false, error: 'lat and lng parameters are required' });
+    }
+    const numLat = parseFloat(lat);
+    const numLng = parseFloat(lng);
+    if (isNaN(numLat) || isNaN(numLng)) {
+      return res.status(400).json({ success: false, error: 'Invalid coordinates' });
+    }
+
+    let label = '';
+    let city = '';
+    let locality = '';
+    let state = '';
+    let country = 'India';
+
+    // 1. Check known tech park clusters / IT hubs from detectLocalityFromCoords
+    const knownLocalityKolkata = detectLocalityFromCoords(numLat, numLng, 'kolkata');
+    const knownLocalityBlr = detectLocalityFromCoords(numLat, numLng, 'bengaluru');
+    const knownLocalityHyd = detectLocalityFromCoords(numLat, numLng, 'hyderabad');
+    const knownLocalityPune = detectLocalityFromCoords(numLat, numLng, 'pune');
+    const knownLocalityNoida = detectLocalityFromCoords(numLat, numLng, 'noida');
+    const knownLocalityMumbai = detectLocalityFromCoords(numLat, numLng, 'mumbai');
+    const knownLocalityChennai = detectLocalityFromCoords(numLat, numLng, 'chennai');
+    const detectedHub = knownLocalityKolkata || knownLocalityBlr || knownLocalityHyd || knownLocalityPune || knownLocalityNoida || knownLocalityMumbai || knownLocalityChennai;
+
+    // 2. If Google Places / Geocoding API key available, query Google Geocoding API
+    const apiKey = (process.env.GOOGLE_PLACES_API_KEY || '').trim();
+    if (apiKey) {
+      try {
+        const gRes = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?latlng=${numLat},${numLng}&key=${apiKey}`);
+        if (gRes.ok) {
+          const gData = await gRes.json();
+          if (gData.status === 'OK' && gData.results?.length > 0) {
+            const first = gData.results[0];
+            label = first.formatted_address;
+            for (const comp of first.address_components || []) {
+              if (comp.types.includes('locality')) city = comp.long_name;
+              if (comp.types.includes('sublocality') || comp.types.includes('sublocality_level_1')) locality = comp.long_name;
+              if (comp.types.includes('administrative_area_level_1')) state = comp.long_name;
+              if (comp.types.includes('country')) country = comp.long_name;
+            }
+            if (detectedHub) {
+              label = `${detectedHub}, ${city || state || ''}`.replace(/,\s*$/, '');
+            } else if (locality && city) {
+              label = `${locality}, ${city}`;
+            }
+            return res.status(200).json({
+              success: true,
+              label,
+              city: city || locality || '',
+              locality,
+              state,
+              country,
+              lat: numLat,
+              lng: numLng,
+              source: 'google_geocoding'
+            });
+          }
+        }
+      } catch (gErr) {
+        console.warn('[ReverseGeocode] Google API failed:', gErr.message);
+      }
+    }
+
+    // 3. Query OpenStreetMap Nominatim with zoom=18 and valid User-Agent
+    try {
+      const osmRes = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${numLat}&lon=${numLng}&zoom=18&addressdetails=1`,
+        {
+          headers: {
+            'User-Agent': 'JobRadar/1.0 (contact: admin@jobradar.app)',
+            'Accept': 'application/json'
+          },
+          signal: AbortSignal.timeout(6000)
+        }
+      );
+      if (osmRes.ok) {
+        const osmData = await osmRes.json();
+        const addr = osmData.address || {};
+        const poi = addr.building || addr.amenity || addr.office || addr.shop || '';
+        const neighborhood = addr.neighbourhood || addr.suburb || addr.quarter || addr.residential || addr.road || '';
+        city = addr.city || addr.town || addr.municipality || addr.state_district || '';
+        state = addr.state || '';
+        country = addr.country || 'India';
+
+        // Greater Kolkata / Bidhannagar normalization for clean display
+        let displayCity = city;
+        if (city === 'Bidhannagar' && addr.municipality === 'Greater Kolkata') {
+          displayCity = 'Kolkata';
+        }
+
+        if (detectedHub) {
+          label = `${detectedHub}, ${displayCity || state}`.replace(/,\s*$/, '');
+        } else if (poi && neighborhood) {
+          label = `${poi}, ${neighborhood}`;
+        } else if (neighborhood && displayCity) {
+          label = `${neighborhood}, ${displayCity}`;
+        } else if (displayCity) {
+          label = `${displayCity}, ${state || country}`;
+        } else if (osmData.display_name) {
+          label = osmData.display_name.split(',').slice(0, 3).join(', ').trim();
+        }
+
+        return res.status(200).json({
+          success: true,
+          label: label || `${numLat.toFixed(4)}, ${numLng.toFixed(4)}`,
+          city: displayCity || (detectedHub ? detectedHub : ''),
+          locality: neighborhood || detectedHub || '',
+          state,
+          country,
+          lat: numLat,
+          lng: numLng,
+          source: 'osm_nominatim'
+        });
+      }
+    } catch (osmErr) {
+      console.warn('[ReverseGeocode] OSM Nominatim failed:', osmErr.message);
+    }
+
+    // 4. Fallback to Photon reverse geocoder
+    try {
+      const photonRes = await fetch(`https://photon.komoot.io/reverse?lat=${numLat}&lon=${numLng}`, {
+        headers: { 'Accept': 'application/json' },
+        signal: AbortSignal.timeout(4000)
+      });
+      if (photonRes.ok) {
+        const pData = await photonRes.json();
+        const feat = pData.features?.[0]?.properties;
+        if (feat) {
+          const name = feat.name || '';
+          const street = feat.street || '';
+          city = feat.city || feat.district || '';
+          state = feat.state || '';
+          country = feat.country || 'India';
+          if (detectedHub) {
+            label = `${detectedHub}, ${city || state}`.replace(/,\s*$/, '');
+          } else if (name && city) {
+            label = `${name}, ${city}`;
+          } else if (street && city) {
+            label = `${street}, ${city}`;
+          } else if (city) {
+            label = `${city}, ${state}`;
+          }
+          return res.status(200).json({
+            success: true,
+            label: label || `${numLat.toFixed(4)}, ${numLng.toFixed(4)}`,
+            city,
+            state,
+            country,
+            lat: numLat,
+            lng: numLng,
+            source: 'photon'
+          });
+        }
+      }
+    } catch (_) {}
+
+    // Final fallback
+    if (detectedHub) {
+      label = detectedHub;
+    } else {
+      label = `Location (${numLat.toFixed(4)}, ${numLng.toFixed(4)})`;
+    }
+
+    return res.status(200).json({
+      success: true,
+      label,
+      city: city || '',
+      lat: numLat,
+      lng: numLng,
+      source: 'coords'
+    });
+  } catch (error) {
+    console.error('[ReverseGeocode] Error:', error.message);
+    return res.status(500).json({ success: false, error: error.message });
   }
 };
 

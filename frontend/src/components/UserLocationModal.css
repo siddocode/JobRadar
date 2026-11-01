@@ -838,18 +838,363 @@
   box-shadow: 0 4px 12px rgba(37, 99, 235, 0.45);
 }
 
-/* Responsive */
+.btn-loc-apply-mobile {
+  display: none;
+}
+
+.btn-loc-apply-desktop {
+  display: inline;
+}
+
+/* ==========================================================================
+   RESPONSIVE DESIGN SYSTEM FOR LOCATION MODAL
+   ========================================================================== */
 @media (max-width: 860px) {
-  .location-modal-grid {
-    grid-template-columns: 1fr;
-    max-height: 80vh;
-    overflow-y: auto;
+  .location-modal-overlay {
+    padding: 12px;
   }
+
+  .location-modal-container {
+    max-height: 94vh;
+    height: 92vh;
+  }
+
+  .location-modal-topbar {
+    padding: 14px 18px;
+  }
+
+  /* Single fluid vertical flex flow on tablets/mobiles */
+  .location-modal-grid {
+    display: flex;
+    flex-direction: column;
+    grid-template-columns: none;
+    flex: 1;
+    min-height: 0;
+    max-height: none;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Controls pane must flow naturally and NOT create an isolated internal scroll */
   .location-controls-pane {
     border-right: none;
     border-bottom: 1px solid #e2e8f0;
+    padding: 16px 18px;
+    overflow: visible;
+    height: auto;
+    min-height: unset;
+    flex-shrink: 0;
   }
+
+  [data-theme='dark'] .location-controls-pane {
+    border-color: #1e293b;
+  }
+
   .location-map-pane {
-    min-height: 300px;
+    min-height: 250px;
+    height: 250px;
+    flex-shrink: 0;
+  }
+
+  .modal-map-viewport {
+    min-height: 250px;
+  }
+}
+
+@media (max-width: 640px) {
+  .location-modal-overlay {
+    padding: 6px;
+    align-items: flex-end;
+  }
+
+  .location-modal-container {
+    width: 100%;
+    max-width: 100%;
+    height: 95vh;
+    max-height: 95vh;
+    border-radius: 20px 20px 14px 14px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+  }
+
+  /* Compact Header */
+  .location-modal-topbar {
+    padding: 11px 13px;
+    gap: 10px;
+    flex-shrink: 0;
+  }
+
+  .location-modal-title-wrap {
+    gap: 9px;
+    min-width: 0;
+    flex: 1;
+  }
+
+  .location-icon-badge {
+    width: 32px;
+    height: 32px;
+    border-radius: 9px;
+  }
+
+  .location-icon-badge svg {
+    width: 17px;
+    height: 17px;
+  }
+
+  .location-modal-heading {
+    font-size: 14.5px;
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .location-modal-subheading {
+    font-size: 11px;
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .location-modal-close {
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+
+  /* Controls pane */
+  .location-controls-pane {
+    padding: 12px 13px;
+    gap: 10px;
+    border-bottom: none;
+  }
+
+  /* 1-Click GPS button */
+  .gps-hero-btn {
+    padding: 9px 12px;
+    border-radius: 12px;
+  }
+
+  .gps-hero-left {
+    gap: 9px;
+  }
+
+  .gps-hero-icon {
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+  }
+
+  .gps-hero-icon svg {
+    width: 15px;
+    height: 15px;
+  }
+
+  .gps-hero-title {
+    font-size: 13px;
+  }
+
+  .gps-hero-desc {
+    font-size: 10.5px;
+  }
+
+  .gps-hero-badge {
+    font-size: 9.5px;
+    padding: 2px 6px;
+  }
+
+  /* Search field */
+  .location-search-field-input {
+    height: 38px;
+    font-size: 12.5px;
+    padding: 0 32px 0 34px;
+    border-radius: 10px;
+  }
+
+  .location-search-field-icon {
+    left: 10px;
+    width: 14px;
+    height: 14px;
+  }
+
+  /* Active pinpoint card */
+  .active-pinpoint-card {
+    padding: 9px 11px;
+    border-radius: 11px;
+    gap: 3px;
+  }
+
+  .active-pinpoint-name {
+    font-size: 13px;
+  }
+
+  .active-pinpoint-coords {
+    font-size: 10.5px;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  /* Quick pick tech corridors */
+  .corridors-section {
+    gap: 5px;
+  }
+
+  .corridors-heading {
+    font-size: 10px;
+  }
+
+  .corridors-chips-grid {
+    max-height: 90px;
+    gap: 4px;
+  }
+
+  .corridor-chip-btn {
+    padding: 4px 8px;
+    font-size: 10.5px;
+  }
+
+  /* Radius pills */
+  .radius-section {
+    gap: 5px;
+  }
+
+  .radius-pills-row {
+    gap: 4px;
+  }
+
+  .radius-pill-btn {
+    padding: 3px 7px;
+    font-size: 10.5px;
+  }
+
+  /* Interactive Map Pane on Mobile */
+  .location-map-pane {
+    min-height: 200px;
+    height: 200px;
+    margin: 4px 13px 13px;
+    border-radius: 13px;
+    overflow: hidden;
+    border: 1px solid #e2e8f0;
+  }
+
+  [data-theme='dark'] .location-map-pane {
+    border-color: #334155;
+  }
+
+  .modal-map-viewport {
+    min-height: 200px;
+    height: 200px;
+  }
+
+  .map-floating-overlay-bar {
+    top: 7px;
+    left: 7px;
+    right: 7px;
+    padding: 4px 8px;
+    border-radius: 7px;
+    font-size: 10px;
+  }
+
+  .map-overlay-hint {
+    display: none;
+  }
+
+  /* Footer on Mobile */
+  .location-modal-bottom-bar {
+    padding: 10px 13px;
+    flex-direction: column;
+    gap: 0;
+    flex-shrink: 0;
+    border-top: 1px solid #e2e8f0;
+    background: #ffffff;
+  }
+
+  [data-theme='dark'] .location-modal-bottom-bar {
+    background: #0f172a;
+    border-color: #1e293b;
+  }
+
+  .bottom-bar-hint {
+    display: none !important;
+  }
+
+  .bottom-bar-actions {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .btn-loc-cancel {
+    flex: 1;
+    height: 40px;
+    padding: 0 10px;
+    font-size: 12.5px;
+    border-radius: 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .btn-loc-apply {
+    flex: 2;
+    height: 40px;
+    padding: 0 12px;
+    font-size: 12.5px;
+    font-weight: 700;
+    border-radius: 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+
+  .btn-loc-apply-desktop {
+    display: none !important;
+  }
+
+  .btn-loc-apply-mobile {
+    display: inline !important;
+  }
+}
+
+@media (max-width: 360px) {
+  .location-modal-overlay {
+    padding: 4px;
+  }
+
+  .location-modal-topbar {
+    padding: 9px 10px;
+  }
+
+  .location-modal-heading {
+    font-size: 13.5px;
+  }
+
+  .location-controls-pane {
+    padding: 10px 10px;
+  }
+
+  .location-map-pane {
+    min-height: 180px;
+    height: 180px;
+    margin: 4px 10px 10px;
+  }
+
+  .location-modal-bottom-bar {
+    padding: 8px 10px;
+  }
+
+  .btn-loc-cancel {
+    height: 38px;
+    font-size: 12px;
+  }
+
+  .btn-loc-apply {
+    height: 38px;
+    font-size: 12px;
   }
 }

@@ -38,7 +38,8 @@ export default function DiscoveredPlacesMap({
   cityName = '',
   citySlug = '',
   centerCoords = null,
-  userLocation = null
+  userLocation = null,
+  onBackToList = null
 }) {
   const mapContainerRef = useRef(null);
   const mapInstanceRef = useRef(null);
@@ -210,6 +211,8 @@ export default function DiscoveredPlacesMap({
         zIndexOffset: isSelected ? 1200 : 500
       }).addTo(layer);
 
+      marker._placeData = place;
+
       const popupHtml = `
         <div class="discovered-popup">
           <div class="discovered-popup-header">
@@ -265,28 +268,47 @@ export default function DiscoveredPlacesMap({
   // Handle selected place changes (Fly to place on map & trigger popup)
   useEffect(() => {
     const map = mapInstanceRef.current;
-    if (!map || !selectedPlace) return;
+    if (!map) return;
 
-    if (selectedPlace.lat != null && selectedPlace.lng != null) {
-      map.flyTo([selectedPlace.lat, selectedPlace.lng], 16, {
-        duration: 1.1,
-        easeLinearity: 0.25
-      });
+    // Invalidate size immediately so tiles render without glitches
+    map.invalidateSize();
+    const timers = [40, 120, 250].map((delay) =>
+      setTimeout(() => {
+        if (mapInstanceRef.current) mapInstanceRef.current.invalidateSize();
+      }, delay)
+    );
 
-      // Find marker in layer and open popup
-      const layer = markersLayerRef.current;
-      if (layer) {
-        layer.eachLayer((marker) => {
-          const latLng = marker.getLatLng();
-          if (
-            Math.abs(latLng.lat - selectedPlace.lat) < 0.0001 &&
-            Math.abs(latLng.lng - selectedPlace.lng) < 0.0001
-          ) {
-            marker.openPopup();
-          }
+    if (selectedPlace && selectedPlace.lat != null && selectedPlace.lng != null) {
+      const lat = Number(selectedPlace.lat);
+      const lng = Number(selectedPlace.lng);
+
+      if (!isNaN(lat) && !isNaN(lng)) {
+        map.flyTo([lat, lng], 16, {
+          duration: 0.8,
+          easeLinearity: 0.25
         });
+
+        // Find marker in layer and open popup
+        const layer = markersLayerRef.current;
+        if (layer) {
+          layer.eachLayer((marker) => {
+            const mPlace = marker._placeData;
+            const latLng = marker.getLatLng();
+            const matchesId = mPlace && selectedPlace.place_id && mPlace.place_id === selectedPlace.place_id;
+            const matchesName = mPlace && selectedPlace.name && mPlace.name.toLowerCase() === selectedPlace.name.toLowerCase();
+            const matchesCoords = Math.abs(latLng.lat - lat) < 0.001 && Math.abs(latLng.lng - lng) < 0.001;
+
+            if (matchesId || matchesName || matchesCoords) {
+              setTimeout(() => {
+                marker.openPopup();
+              }, 300);
+            }
+          });
+        }
       }
     }
+
+    return () => timers.forEach(clearTimeout);
   }, [selectedPlace]);
 
   const handleResetCityView = () => {
@@ -310,21 +332,37 @@ export default function DiscoveredPlacesMap({
       <div className="discovered-map-floating-header">
         <div className="discovered-map-header-content">
           <span className="live-pulse-dot" />
-          <strong>{cityName || 'Discovered'} Tech Radar Map</strong>
+          <strong>{selectedPlace?.name || cityName || 'Discovered'} Tech Radar Map</strong>
           <span className="places-count-pill">{places.length} Places Pinpointed</span>
         </div>
-        <button
-          type="button"
-          className="map-overview-reset-btn"
-          onClick={handleResetCityView}
-          title="Reset to City Overview"
-        >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-            <path d="M3 3v5h5" />
-          </svg>
-          City Overview
-        </button>
+        <div className="discovered-map-controls-group">
+          {onBackToList && (
+            <button
+              type="button"
+              className="map-back-list-btn"
+              onClick={onBackToList}
+              title="Return to place preview list"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <line x1="19" y1="12" x2="5" y2="12" />
+                <polyline points="12 19 5 12 12 5" />
+              </svg>
+              <span>Back to List</span>
+            </button>
+          )}
+          <button
+            type="button"
+            className="map-overview-reset-btn"
+            onClick={handleResetCityView}
+            title="Reset to City Overview"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+              <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+              <path d="M3 3v5h5" />
+            </svg>
+            <span>Overview</span>
+          </button>
+        </div>
       </div>
     </div>
   );

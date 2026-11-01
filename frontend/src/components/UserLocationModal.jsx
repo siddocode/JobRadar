@@ -107,10 +107,29 @@ export default function UserLocationModal() {
   }, [searchQuery, draftLocation, userLocation]);
 
   // Reverse geocode when user clicks on the map
+  // Reverse geocode when user clicks on the map or drags pin
   const reverseGeocodeCoords = useCallback(async (lat, lng) => {
+    // 1. Try our high-precision backend reverse geocode
+    try {
+      const res = await fetch(`/api/directory/places/reverse?lat=${lat}&lng=${lng}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.label) {
+          return {
+            label: data.label,
+            city: data.city || '',
+            lat,
+            lng,
+            source: 'map_click'
+          };
+        }
+      }
+    } catch (_) {}
+
+    // 2. Fallback to OpenStreetMap
     try {
       const res = await fetch(
-        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=16&addressdetails=1`,
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
         { headers: { 'Accept': 'application/json' } }
       );
       if (res.ok) {
@@ -541,8 +560,14 @@ export default function UserLocationModal() {
               type="button"
               className="btn-loc-apply"
               onClick={handleApply}
+              title={draftLocation ? `Apply location: ${draftLocation.label}` : 'Done'}
             >
-              {draftLocation ? `Apply & Sort Nearest to ${draftLocation.label?.split(',')[0] || 'Location'}` : 'Done'}
+              <span className="btn-loc-apply-desktop">
+                {draftLocation ? `Apply & Sort: ${draftLocation.label?.split(',')[0] || 'Location'}` : 'Done'}
+              </span>
+              <span className="btn-loc-apply-mobile">
+                {draftLocation ? '✓ Apply Location' : 'Done'}
+              </span>
             </button>
           </div>
         </footer>

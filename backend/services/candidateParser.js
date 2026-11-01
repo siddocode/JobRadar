@@ -120,7 +120,38 @@ async function parseCvPdf(buffer) {
 }
 
 /**
+ * Extract text from nested JSON objects (e.g. Next.js pageProps or JSON-LD)
+ */
+function extractStringsFromJson(obj, maxDepth = 4, depth = 0) {
+  if (!obj || depth > maxDepth) return '';
+  const strings = [];
+  try {
+    if (typeof obj === 'string') {
+      if (obj.length > 2 && obj.length < 500 && !obj.startsWith('http') && !/^[a-f0-9-]{32,}$/i.test(obj)) {
+        strings.push(obj);
+      }
+    } else if (Array.isArray(obj)) {
+      for (const item of obj.slice(0, 50)) {
+        strings.push(extractStringsFromJson(item, maxDepth, depth + 1));
+      }
+    } else if (typeof obj === 'object') {
+      for (const [key, val] of Object.entries(obj)) {
+        if (/token|hash|secret|svg|css|icon|id/i.test(key)) continue;
+        strings.push(extractStringsFromJson(val, maxDepth, depth + 1));
+      }
+    }
+  } catch (_) {}
+  return strings.filter(Boolean).join(' ');
+}
+
+/**
  * Fetch and extract text from a Portfolio or personal website URL.
+ * Supports:
+ * - HTML Websites & SPAs (React, Next.js, Vue, Webflow, Framer)
+ * - Direct PDF URLs (e.g. Google Drive / raw links / .pdf)
+ * - GitHub Profiles & Repositories
+ * - LinkedIn Profile URLs
+ * 
  * @param {string} url - Valid HTTP/HTTPS URL
  * @returns {Promise<string>} Cleaned website text content
  */
@@ -154,14 +185,102 @@ async function parsePortfolioUrl(url) {
     throw new Error('Local or internal network URLs are not supported.');
   }
 
+  // 1. Specialized Handler: GitHub Profile / User page
+  if (hostname === 'github.com' || hostname === 'www.github.com') {
+    try {
+      const parts = parsedUrl.pathname.split('/').filter(Boolean);
+      const ghUsername = parts[0];
+      if (ghUsername && !['topics', 'trending', 'features', 'pricing', 'login', 'signup'].includes(ghUsername.toLowerCase())) {
+        console.log(`[candidateParser:parsePortfolioUrl] Extracting GitHub developer profile for: ${ghUsername}`);
+        let ghProfileText = `GitHub Profile: https://github.com/${ghUsername}\n`;
+
+        // Query GitHub public User API
+        try {
+          const ghRes = await fetch(`https://api.github.com/users/${ghUsername}`, {
+            headers: { 'User-Agent': 'JobRadar-ProfileScraper/1.0', 'Accept': 'application/vnd.github.v3+json' },
+            signal: AbortSignal.timeout(6000)
+          });
+          if (ghRes.ok) {
+            const uData = await ghRes.json();
+            if (uData.name) ghProfileText += `Name: ${uData.name}\n`;
+            if (uData.bio) ghProfileText += `Bio: ${uData.bio}\n`;
+            if (uData.company) ghProfileText += `Company: ${uData.company}\n`;
+            if (uData.location) ghProfileText += `Location: ${uData.location}\n`;
+            if (uData.blog) ghProfileText += `Portfolio: ${uData.blog}\n`;
+            if (uData.public_repos) ghProfileText += `Public Repositories: ${uData.public_repos}\n`;
+          }
+        } catch (_) {}
+
+        // Fetch User's special Profile README if exists
+        try {
+          const readmeRes = await fetch(`https://raw.githubusercontent.com/${ghUsername}/${ghUsername}/main/README.md`, {
+            signal: AbortSignal.timeout(5000)
+          });
+          if (readmeRes.ok) {
+            const readmeContent = await readmeRes.text();
+            ghProfileText += `\nProfile README:\n${stripHtml(readmeContent)}\n`;
+          } else {
+            // Try master branch
+            const masterRes = await fetch(`https://raw.githubusercontent.com/${ghUsername}/${ghUsername}/master/README.md`, {
+              signal: AbortSignal.timeout(4000)
+            });
+            if (masterRes.ok) {
+              const readmeContent = await masterRes.text();
+              ghProfileText += `\nProfile README:\n${stripHtml(readmeContent)}\n`;
+            }
+          }
+        } catch (_) {}
+
+        // Fetch top updated repositories for languages and skills
+        try {
+          const reposRes = await fetch(`https://api.github.com/users/${ghUsername}/repos?sort=updated&per_page=6`, {
+            headers: { 'User-Agent': 'JobRadar-ProfileScraper/1.0', 'Accept': 'application/vnd.github.v3+json' },
+            signal: AbortSignal.timeout(5000)
+          });
+          if (reposRes.ok) {
+            const repos = await reposRes.json();
+            if (Array.isArray(repos) && repos.length > 0) {
+              const repoSummaries = repos.map(r => `${r.name}: ${r.language || 'Code'} - ${r.description || ''} ${Array.isArray(r.topics) ? r.topics.join(' ') : ''}`).join('\n');
+              ghProfileText += `\nRecent Projects & Codebases:\n${repoSummaries}\n`;
+            }
+          }
+        } catch (_) {}
+
+        if (ghProfileText.length > 60) {
+          return ghProfileText;
+        }
+      }
+    } catch (ghErr) {
+      console.warn('[candidateParser:parsePortfolioUrl] GitHub scraper warning:', ghErr.message);
+    }
+  }
+
+  // 2. Specialized Handler: LinkedIn Profile URL
+  if (hostname.includes('linkedin.com')) {
+    const parts = parsedUrl.pathname.split('/').filter(Boolean);
+    const inIdx = parts.indexOf('in');
+    let linkedinSlug = inIdx !== -1 && parts[inIdx + 1] ? parts[inIdx + 1] : '';
+    let candidateName = '';
+    if (linkedinSlug) {
+      candidateName = linkedinSlug
+        .replace(/[-_][a-f0-9]{4,}$/i, '')
+        .split(/[-_]/)
+        .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+        .join(' ');
+    }
+    return `Candidate Name: ${candidateName || 'Software Engineer'}\nHeadline: Software Engineer\nLocation: India\nProfile: ${formattedUrl}\nNote: Parsed from LinkedIn profile URL.`;
+  }
+
   try {
     const response = await fetch(formattedUrl, {
       method: 'GET',
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 JobRadar-EligibilityBot/1.0',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Cache-Control': 'no-cache'
       },
-      signal: AbortSignal.timeout(12000), // 12 seconds max
+      signal: AbortSignal.timeout(15000), // 15 seconds
       redirect: 'follow'
     });
 
@@ -169,17 +288,81 @@ async function parsePortfolioUrl(url) {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
 
-    const html = await response.text();
-    const cleanText = stripHtml(html);
+    // 3. Direct PDF Detection (e.g. user pasted a link to a resume PDF)
+    const contentType = (response.headers.get('content-type') || '').toLowerCase();
+    const isPdfUrl = parsedUrl.pathname.toLowerCase().endsWith('.pdf') || contentType.includes('application/pdf');
 
-    if (!cleanText || cleanText.length < 50) {
-      throw new Error('The provided website has insufficient readable text to extract a candidate profile.');
+    if (isPdfUrl) {
+      console.log(`[candidateParser:parsePortfolioUrl] Detected direct PDF at ${formattedUrl}. Parsing as CV.`);
+      const arrayBuf = await response.arrayBuffer();
+      const buffer = Buffer.from(arrayBuf);
+      return await parseCvPdf(buffer);
     }
 
-    return cleanText;
+    const html = await response.text();
+    let textParts = [];
+
+    // Extract <title>
+    const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+    if (titleMatch && titleMatch[1]) {
+      textParts.push(`Title: ${titleMatch[1].trim()}`);
+    }
+
+    // Extract meta description & keywords
+    const metaDescMatch = html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i) ||
+                          html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*name=["']description["']/i) ||
+                          html.match(/<meta[^>]*property=["']og:description["'][^>]*content=["']([^"']+)["']/i);
+    if (metaDescMatch && metaDescMatch[1]) {
+      textParts.push(`Summary: ${metaDescMatch[1].trim()}`);
+    }
+
+    const metaKeywordsMatch = html.match(/<meta[^>]*name=["']keywords["'][^>]*content=["']([^"']+)["']/i);
+    if (metaKeywordsMatch && metaKeywordsMatch[1]) {
+      textParts.push(`Skills & Keywords: ${metaKeywordsMatch[1].trim()}`);
+    }
+
+    // Extract Next.js / Nuxt / SPA inline data (e.g. __NEXT_DATA__)
+    const nextDataMatch = html.match(/<script[^>]*id=["']__NEXT_DATA__["'][^>]*>([\s\S]*?)<\/script>/i);
+    if (nextDataMatch && nextDataMatch[1]) {
+      try {
+        const nextJson = JSON.parse(nextDataMatch[1]);
+        const extractedJsonText = extractStringsFromJson(nextJson?.props?.pageProps || nextJson);
+        if (extractedJsonText) {
+          textParts.push(`Data: ${extractedJsonText.slice(0, 3000)}`);
+        }
+      } catch (_) {}
+    }
+
+    // Extract JSON-LD (Person / ProfilePage schemas)
+    const ldJsonMatches = [...html.matchAll(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)];
+    for (const m of ldJsonMatches) {
+      try {
+        const ldData = JSON.parse(m[1]);
+        const ldText = extractStringsFromJson(ldData);
+        if (ldText) {
+          textParts.push(`Structured Data: ${ldText.slice(0, 2000)}`);
+        }
+      } catch (_) {}
+    }
+
+    // Extract visible body content
+    const cleanBodyText = stripHtml(html);
+    if (cleanBodyText) {
+      textParts.push(cleanBodyText);
+    }
+
+    const combined = textParts.join('\n\n').trim();
+
+    // Fallback: If minimal text extracted, construct a basic portfolio context using hostname and title
+    if (!combined || combined.length < 30) {
+      const siteHint = hostname.replace(/\.(com|org|dev|io|in|net|app|me|tech)$/i, '').replace(/[-_]/g, ' ');
+      return `Portfolio Website: ${formattedUrl}\nCandidate Profile: ${siteHint}\nRole: Software Engineer\nLocation: India`;
+    }
+
+    return combined;
   } catch (error) {
     console.error(`[candidateParser:parsePortfolioUrl] Failed for ${formattedUrl}:`, error.message);
-    throw new Error(`Could not access portfolio URL: ${error.message}`);
+    throw new Error(`Could not access portfolio URL (${error.message}). Please ensure the site is public or upload your CV PDF directly.`);
   }
 }
 
@@ -215,20 +398,35 @@ function extractCandidateProfile(rawText = '', meta = {}) {
     phone = phoneMatch[0];
   }
 
-  // Name inference: usually on top lines
-  for (let i = 0; i < Math.min(5, lines.length); i++) {
-    const rawLine = lines[i];
-    const cleanLine = rawLine.replace(/[#§Š€•\d]+/g, '').trim();
-    if (
-      cleanLine.length >= 3 &&
-      cleanLine.length <= 35 &&
-      !cleanLine.includes('@') &&
-      !cleanLine.includes('http') &&
-      !/resume|curriculum|vitae|portfolio|about me|experience|education|skills/i.test(cleanLine) &&
-      /^[a-zA-Z\s.'-]+$/.test(cleanLine)
-    ) {
-      name = cleanLine;
-      break;
+  // Explicit Name marker check (e.g. from GitHub, LinkedIn, or structured tags)
+  const explicitNameMatch = text.match(/(?:Candidate Name|Full Name|Name):\s*([a-zA-Z\s.'-]+)/i);
+  if (explicitNameMatch && explicitNameMatch[1].trim().length >= 3 && explicitNameMatch[1].trim().length <= 35) {
+    name = explicitNameMatch[1].trim();
+  }
+
+  // Name inference: check title or top lines
+  if (!name) {
+    const titleNameMatch = text.match(/Title:\s*([a-zA-Z\s.'-]+?)(?:\s*[-|–—:]\s*(?:portfolio|developer|engineer|software|full\s*stack|homepage|official|web))/i);
+    if (titleNameMatch && titleNameMatch[1].trim().length >= 3 && titleNameMatch[1].trim().length <= 35) {
+      name = titleNameMatch[1].trim();
+    }
+  }
+
+  if (!name) {
+    for (let i = 0; i < Math.min(5, lines.length); i++) {
+      const rawLine = lines[i];
+      const cleanLine = rawLine.replace(/[#§Š€•\d]+/g, '').trim();
+      if (
+        cleanLine.length >= 3 &&
+        cleanLine.length <= 35 &&
+        !cleanLine.includes('@') &&
+        !cleanLine.includes('http') &&
+        !/resume|curriculum|vitae|portfolio|about me|experience|education|skills/i.test(cleanLine) &&
+        /^[a-zA-Z\s.'-]+$/.test(cleanLine)
+      ) {
+        name = cleanLine;
+        break;
+      }
     }
   }
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useLocation, formatDistance } from '../context/LocationContext';
 import { getCompanyOfficeDetails } from '../utils/companyOfficeRegistry';
@@ -110,6 +110,22 @@ export default function CompanyCard({ company, onUpdate, onPersonalize }) {
   const effectiveCoords = (primaryOffice?.lat != null && primaryOffice?.lng != null)
     ? { lat: primaryOffice.lat, lng: primaryOffice.lng }
     : (officeDetails?.isVerifiedRegistry ? officeDetails.coordinates : null);
+
+  // Only show secondary street address if it adds distinct real address detail (not repeating city/state)
+  const distinctAddress = useMemo(() => {
+    const raw = primaryOffice?.address || officeDetails?.officeAddress;
+    if (!raw) return null;
+    const trimmed = String(raw).trim();
+    if (!trimmed) return null;
+    const lower = trimmed.toLowerCase();
+    const cityLower = (cityName || '').toLowerCase();
+    const locLower = (displayLocation || '').toLowerCase();
+    const localityLower = (primaryOffice?.locality || officeDetails?.locality || '').toLowerCase();
+    if (lower === cityLower || lower === locLower || lower === localityLower || lower === 'india' || lower === 'office address') {
+      return null;
+    }
+    return trimmed;
+  }, [primaryOffice, officeDetails, cityName, displayLocation]);
 
   // Compute distance from user location
   let effectiveDistanceKm = company.distanceKm;
@@ -307,7 +323,7 @@ export default function CompanyCard({ company, onUpdate, onPersonalize }) {
         {/* Key Details: Location & Offices with Fixed Height Rhythm */}
         <div className="card-details-section">
           <div className="detail-row">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="detail-svg-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="detail-svg-icon" aria-hidden="true">
               <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" />
               <circle cx="12" cy="10" r="3" />
             </svg>
@@ -322,55 +338,22 @@ export default function CompanyCard({ company, onUpdate, onPersonalize }) {
                     📍 {formatDistance(effectiveDistanceKm)}
                   </span>
                 )}
-                
-                {/* Map & Directions Action Controls */}
-                <div className="company-card-map-actions">
-                  <a
-                    href={getMapsLocationUrl()}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="office-map-pill"
-                    title={`View ${company.name} office on Google Maps`}
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
-                      <circle cx="12" cy="10" r="3" />
-                    </svg>
-                    <span>Map</span>
-                  </a>
-
-                  <a
-                    href={getMapsDirectionsUrl()}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="office-directions-pill"
-                    title={`Get navigation directions to ${company.name} office (see where to go)`}
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                      <polygon points="3 11 22 2 13 21 11 13 3 11" />
-                    </svg>
-                    <span>Directions</span>
-                  </a>
-                </div>
-
                 {primaryOffice?.verified && (
                   <span className="verified-badge-mini" title="Verified office address">Verified</span>
                 )}
               </div>
-              <a
-                href={getMapsLocationUrl()}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="detail-secondary-text clickable-address-text"
-                title={`Open ${primaryOffice?.address || cityName || company.name} in Google Maps`}
-                onClick={(e) => e.stopPropagation()}
-              >
-                {primaryOffice?.address && primaryOffice.address !== cityName
-                  ? primaryOffice.address
-                  : (primaryOffice?.locality || officeDetails?.locality || company.category || 'Office Address')}
-              </a>
+              {distinctAddress && (
+                <a
+                  href={getMapsLocationUrl()}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="detail-secondary-text clickable-address-text"
+                  title={`Open ${distinctAddress} in Google Maps`}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {distinctAddress}
+                </a>
+              )}
             </div>
           </div>
         </div>
@@ -449,8 +432,8 @@ export default function CompanyCard({ company, onUpdate, onPersonalize }) {
               ))}
             </div>
           ) : (
-            <div className="outreach-discovery-row">
-              {websiteUrl && (
+            <div className="outreach-discovery-row outreach-discovery-grid">
+              {websiteUrl ? (
                 <a
                   href={websiteUrl}
                   target="_blank"
@@ -459,7 +442,27 @@ export default function CompanyCard({ company, onUpdate, onPersonalize }) {
                   onClick={(e) => e.stopPropagation()}
                   title={`Visit ${company.name}'s official website`}
                 >
-                  Website
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="2" y1="12" x2="22" y2="12" />
+                    <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                  </svg>
+                  <span>Website</span>
+                </a>
+              ) : (
+                <a
+                  href={getMapsLocationUrl()}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="outreach-quick-chip map-chip"
+                  onClick={(e) => e.stopPropagation()}
+                  title={`View ${company.name} office on Google Maps`}
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+                    <circle cx="12" cy="10" r="3" />
+                  </svg>
+                  <span>View Map</span>
                 </a>
               )}
               <a
@@ -470,10 +473,10 @@ export default function CompanyCard({ company, onUpdate, onPersonalize }) {
                 onClick={(e) => e.stopPropagation()}
                 title={`Get navigation directions to ${company.name} office`}
               >
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <polygon points="3 11 22 2 13 21 11 13 3 11" />
                 </svg>
-                Directions
+                <span>Directions</span>
               </a>
               <a
                 href={`https://www.google.com/search?q=${encodeURIComponent(company.name + ' ' + (primaryOffice?.locality || cityName || '') + ' contact phone email official')}`}
@@ -483,7 +486,11 @@ export default function CompanyCard({ company, onUpdate, onPersonalize }) {
                 onClick={(e) => e.stopPropagation()}
                 title={`Search Google for ${company.name} office contact & phone`}
               >
-                Search company
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <circle cx="11" cy="11" r="8" />
+                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
+                <span>Search Info</span>
               </a>
               <a
                 href={`https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(company.name + ' hr recruiter talent acquisition')}`}
@@ -493,7 +500,12 @@ export default function CompanyCard({ company, onUpdate, onPersonalize }) {
                 onClick={(e) => e.stopPropagation()}
                 title={`Find HR recruiters at ${company.name} on LinkedIn`}
               >
-                Find HR on LinkedIn
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z" />
+                  <rect x="2" y="9" width="4" height="12" />
+                  <circle cx="4" cy="4" r="2" />
+                </svg>
+                <span>Find HR</span>
               </a>
             </div>
           )}
