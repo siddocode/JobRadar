@@ -39,12 +39,26 @@ export default function DiscoveredPlacesMap({
   citySlug = '',
   centerCoords = null,
   userLocation = null,
-  onBackToList = null
+  onBackToList = null,
+  viewMode = 'split'
 }) {
   const mapContainerRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const markersLayerRef = useRef(null);
   const activeMarkerRef = useRef(null);
+
+  // Auto-invalidate map size when view mode changes (Split <-> Map <-> List)
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+    map.invalidateSize();
+    const timers = [40, 120, 260, 480].map((delay) =>
+      setTimeout(() => {
+        if (mapInstanceRef.current) mapInstanceRef.current.invalidateSize();
+      }, delay)
+    );
+    return () => timers.forEach(clearTimeout);
+  }, [viewMode]);
 
   // Initial Leaflet Map Setup
   useEffect(() => {
@@ -314,6 +328,7 @@ export default function DiscoveredPlacesMap({
   const handleResetCityView = () => {
     const map = mapInstanceRef.current;
     if (!map) return;
+    if (onSelectPlace) onSelectPlace(null);
     const cityKey = (citySlug || cityName || 'all').toLowerCase();
     const defaultCenter = centerCoords?.lat && centerCoords?.lng
       ? { lat: centerCoords.lat, lng: centerCoords.lng, zoom: 12 }
@@ -324,6 +339,8 @@ export default function DiscoveredPlacesMap({
     });
   };
 
+  const mapTitle = cityName ? `${cityName} Tech Map` : 'Tech Radar Map';
+
   return (
     <div className="discovered-map-wrapper">
       <div ref={mapContainerRef} className="discovered-leaflet-canvas" />
@@ -332,11 +349,11 @@ export default function DiscoveredPlacesMap({
       <div className="discovered-map-floating-header">
         <div className="discovered-map-header-content">
           <span className="live-pulse-dot" />
-          <strong>{selectedPlace?.name || cityName || 'Discovered'} Tech Radar Map</strong>
-          <span className="places-count-pill">{places.length} Places Pinpointed</span>
+          <span className="map-floating-title" title={mapTitle}>{mapTitle}</span>
+          <span className="places-count-pill">{places.length}</span>
         </div>
         <div className="discovered-map-controls-group">
-          {onBackToList && (
+          {onBackToList && viewMode === 'map' && (
             <button
               type="button"
               className="map-back-list-btn"
@@ -347,7 +364,7 @@ export default function DiscoveredPlacesMap({
                 <line x1="19" y1="12" x2="5" y2="12" />
                 <polyline points="12 19 5 12 12 5" />
               </svg>
-              <span>Back to List</span>
+              <span>List</span>
             </button>
           )}
           <button
@@ -364,6 +381,51 @@ export default function DiscoveredPlacesMap({
           </button>
         </div>
       </div>
+
+      {/* Selected Place Floating Card */}
+      {selectedPlace && (
+        <div className="discovered-selected-place-card">
+          <div className="selected-place-main">
+            <div className="selected-place-title-row">
+              <span className="selected-pin-dot">📍</span>
+              <strong className="selected-place-name" title={selectedPlace.name}>
+                {selectedPlace.name}
+              </strong>
+              {selectedPlace.rating && (
+                <span className="selected-place-rating">★ {selectedPlace.rating}</span>
+              )}
+            </div>
+            {selectedPlace.address && (
+              <p className="selected-place-address" title={selectedPlace.address}>
+                {selectedPlace.address}
+              </p>
+            )}
+          </div>
+          <div className="selected-place-actions">
+            <a
+              href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(`${selectedPlace.name}, ${selectedPlace.address || ''}`)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="selected-place-dir-btn"
+              title="Navigate with Google Maps"
+            >
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <polygon points="3 11 22 2 13 21 11 13 3 11" />
+              </svg>
+              <span>Directions</span>
+            </a>
+            <button
+              type="button"
+              className="selected-place-dismiss-btn"
+              onClick={() => onSelectPlace && onSelectPlace(null)}
+              title="Dismiss place details"
+              aria-label="Dismiss place details"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

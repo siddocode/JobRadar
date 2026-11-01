@@ -489,7 +489,7 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
             </svg>
           </div>
           <div className="metric-content">
-            <span className="metric-number">{aggregateStats.total || totalCount}</span>
+            <span className="metric-number">{Number(aggregateStats.total || totalCount || 0).toLocaleString()}</span>
             <span className="metric-label">Companies</span>
           </div>
         </div>
@@ -503,7 +503,7 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
             </svg>
           </div>
           <div className="metric-content">
-            <span className="metric-number text-green">{aggregateStats.hiring}</span>
+            <span className="metric-number text-green">{Number(aggregateStats.hiring || 0).toLocaleString()}</span>
             <span className="metric-label text-green">Hiring now</span>
           </div>
         </div>
@@ -516,7 +516,7 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
             </svg>
           </div>
           <div className="metric-content">
-            <span className="metric-number">{aggregateStats.offices || totalCount}</span>
+            <span className="metric-number">{Number(aggregateStats.offices || totalCount || 0).toLocaleString()}</span>
             <span className="metric-label">Verified offices</span>
           </div>
         </div>
@@ -1213,6 +1213,7 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
                               centerCoords={scanStatus.lastSummary?.center}
                               userLocation={userLocation}
                               onBackToList={() => setPlacesViewMode('list')}
+                              viewMode={placesViewMode}
                             />
                           </div>
                         )}
