@@ -13,6 +13,8 @@
  */
 
 const { PDFParse } = require('pdf-parse');
+const dns = require('node:dns').promises;
+const net = require('node:net');
 const { TECH_TAXONOMY, stripHtml } = require('./eligibilityAnalyzer');
 
 // Extended skills dictionary for comprehensive CV parsing
@@ -59,7 +61,54 @@ const EXTENDED_SKILL_KEYWORDS = [
   { name: 'PyTorch', regex: /\bpytorch\b/i },
   { name: 'TensorFlow', regex: /\btensorflow\b/i },
   { name: 'LLMs & GenAI', regex: /\bllm[s]?|generative ai|langchain|openai|rag\b/i },
-  { name: 'System Design', regex: /\bsystem design|distributed systems|microservices\b/i }
+  { name: 'System Design', regex: /\bsystem design|distributed systems|microservices\b/i },
+  { name: 'Redux', regex: /\bredux(?: toolkit)?\b/i },
+  { name: 'Zustand', regex: /\bzustand\b/i },
+  { name: 'React Native', regex: /\breact native\b/i },
+  { name: 'Astro', regex: /\bastro\b/i },
+  { name: 'Nuxt.js', regex: /\bnuxt(?:\.js)?\b/i },
+  { name: 'Bootstrap', regex: /\bbootstrap\b/i },
+  { name: 'Sass / SCSS', regex: /\b(?:sass|scss)\b/i },
+  { name: 'Material UI', regex: /\b(?:material ui|mui)\b/i },
+  { name: 'Vite', regex: /\bvite\b/i },
+  { name: 'Webpack', regex: /\bwebpack\b/i },
+  { name: 'jQuery', regex: /\bjquery\b/i },
+  { name: 'NestJS', regex: /\bnest(?:\.js|js)?\b/i },
+  { name: 'Hono', regex: /\bhono\b/i },
+  { name: 'Prisma', regex: /\bprisma\b/i },
+  { name: 'Sequelize', regex: /\bsequelize\b/i },
+  { name: 'TypeORM', regex: /\btypeorm\b/i },
+  { name: 'Ruby on Rails', regex: /\bruby on rails|\brails\b/i },
+  { name: 'Laravel', regex: /\blaravel\b/i },
+  { name: 'ASP.NET', regex: /\basp\.net\b/i },
+  { name: 'gRPC', regex: /\bgrpc\b/i },
+  { name: 'WebSockets', regex: /\bwebsockets?\b/i },
+  { name: 'SQLite', regex: /\bsqlite\b/i },
+  { name: 'DynamoDB', regex: /\bdynamodb\b/i },
+  { name: 'Supabase', regex: /\bsupabase\b/i },
+  { name: 'Firebase', regex: /\bfirebase\b/i },
+  { name: 'Elasticsearch', regex: /\belasticsearch\b/i },
+  { name: 'Neo4j', regex: /\bneo4j\b/i },
+  { name: 'Terraform', regex: /\bterraform\b/i },
+  { name: 'Vercel', regex: /\bvercel\b/i },
+  { name: 'Netlify', regex: /\bnetlify\b/i },
+  { name: 'Cloudflare', regex: /\bcloudflare\b/i },
+  { name: 'CircleCI', regex: /\bcircleci\b/i },
+  { name: 'Prometheus', regex: /\bprometheus\b/i },
+  { name: 'Grafana', regex: /\bgrafana\b/i },
+  { name: 'Postman', regex: /\bpostman\b/i },
+  { name: 'Figma', regex: /\bfigma\b/i },
+  { name: 'Jest', regex: /\bjest\b/i },
+  { name: 'Cypress', regex: /\bcypress\b/i },
+  { name: 'Playwright', regex: /\bplaywright\b/i },
+  { name: 'Vitest', regex: /\bvitest\b/i },
+  { name: 'Storybook', regex: /\bstorybook\b/i },
+  { name: 'Jira', regex: /\bjira\b/i },
+  { name: 'Confluence', regex: /\bconfluence\b/i },
+  { name: 'Swagger / OpenAPI', regex: /\bswagger|openapi\b/i },
+  { name: 'Data Structures & Algorithms', regex: /\bdata structures?(?: and| &) algorithms?|\bdsa\b/i },
+  { name: 'Object-Oriented Programming', regex: /\bobject[- ]oriented programming|\boop\b/i },
+  { name: 'Agile', regex: /\bagile\b/i }
 ];
 
 const INDIAN_CITIES_REGEX = /\b(bengaluru|bangalore|hyderabad|noida|gurgaon|gurugram|delhi|new delhi|ncr|pune|mumbai|chennai|kolkata|ahmedabad|kochi|indore|chandigarh|jaipur|trivandrum|thiruvananthapuram|coimbatore)\b/i;
@@ -76,6 +125,214 @@ const OTHER_COUNTRIES = [
   { name: 'Australia', regex: /\b(australia|sydney|melbourne|brisbane)\b/i },
   { name: 'UAE / Dubai', regex: /\b(dubai|uae|united arab emirates|abu dhabi)\b/i }
 ];
+
+function htmlToReadableText(html = '') {
+  const lineBreakToken = 'JOBRADAR_LINE_BREAK_TOKEN';
+  return stripHtml(
+    html
+      .replace(/<script\b(?![^>]*type=["']application\/ld\+json["'])[^>]*>[\s\S]*?<\/script>/gi, ' ')
+      .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ')
+      .replace(/<(?:br|hr)\b[^>]*\/?\s*>/gi, lineBreakToken)
+      .replace(/<\/(?:p|div|li|ul|ol|section|article|header|footer|h[1-6]|tr|td|th|dt|dd)\s*>/gi, lineBreakToken)
+      .replace(/<(?:p|div|li|ul|ol|section|article|header|footer|h[1-6]|tr|td|th|dt|dd)\b[^>]*>/gi, lineBreakToken)
+  ).split(lineBreakToken).map(line => line.trim()).filter(Boolean).join('\n');
+}
+
+function collectStructuredPersonFields(value, fields = {}, depth = 0) {
+  if (!value || depth > 8) return fields;
+  if (Array.isArray(value)) {
+    value.forEach(item => collectStructuredPersonFields(item, fields, depth + 1));
+    return fields;
+  }
+  if (typeof value !== 'object') return fields;
+
+  for (const [key, fieldValue] of Object.entries(value)) {
+    const normalizedKey = key.toLowerCase();
+    const values = Array.isArray(fieldValue) ? fieldValue : [fieldValue];
+    const flatValues = values.flatMap(item => {
+      if (typeof item === 'string') return [item];
+      if (item && typeof item === 'object') return [item.name, item.value, item.addressLocality, item.addressCountry].filter(Boolean);
+      return [];
+    }).filter(item => typeof item === 'string' && item.trim());
+
+    if (flatValues.length) {
+      if (/^(name|givenname|familyname)$/.test(normalizedKey)) {
+        const value = flatValues.join(' ').trim();
+        fields.name = normalizedKey === 'familyname' && fields.name ? `${fields.name} ${value}` : (fields.name || value);
+      } else if (/^(jobtitle|worksfor|description)$/.test(normalizedKey) && !fields.headline) {
+        fields.headline = flatValues.join(', ');
+      } else if (/^(knowsabout|skills|skill|keywords)$/.test(normalizedKey)) {
+        fields.skills = [...(fields.skills || []), ...flatValues];
+      } else if (/^(alumniof|hascredential|credential|education|educationalcredential)$/.test(normalizedKey)) {
+        fields.education = [...(fields.education || []), ...flatValues];
+      } else if (/^(email)$/.test(normalizedKey)) {
+        fields.email = fields.email || flatValues[0];
+      } else if (/^(addresslocality|addresscountry|location)$/.test(normalizedKey)) {
+        fields.location = [...(fields.location || []), ...flatValues];
+      }
+    }
+    collectStructuredPersonFields(fieldValue, fields, depth + 1);
+  }
+  return fields;
+}
+
+function extractSkillSection(html, visibleText) {
+  const chunks = [];
+  const sectionBlocks = html.match(/<(?:section|article|div)\b[^>]*(?:id|class|aria-label)=["'][^"']*(?:skill|technology|tech-stack|expertise)[^"']*["'][^>]*>[\s\S]*?<\/(?:section|article|div)>/gi) || [];
+  for (const block of sectionBlocks) chunks.push(htmlToReadableText(block));
+
+  const headingBlocks = html.match(/<h[1-6]\b[^>]*>\s*[^<]*(?:skills?|technologies|tech stack|expertise)[^<]*<\/h[1-6]>[\s\S]*?(?=<h[1-6]\b|$)/gi) || [];
+  for (const block of headingBlocks) chunks.push(htmlToReadableText(block));
+
+  const markedItems = [];
+  const markedItemRegex = /<(span|li|a|div)\b([^>]*)>([\s\S]*?)<\/\1>/gi;
+  for (const match of html.matchAll(markedItemRegex)) {
+    if (!/(?:skill|technology|tech-stack|expertise|badge|tag)/i.test(match[2])) continue;
+    const label = match[2].match(/(?:data-skill|aria-label|title)=["']([^"']+)["']/i)?.[1];
+    const content = htmlToReadableText(match[3]);
+    const value = label || content;
+    if (value && value.length <= 50) markedItems.push(value);
+  }
+  for (const match of html.matchAll(/\bdata-skill=["']([^"']+)["']/gi)) markedItems.push(match[1]);
+  if (markedItems.length) chunks.push(markedItems.join('\n'));
+
+  const sectionMatch = visibleText.match(/(?:^|\n)\s*(?:technical\s+skills|skills|technologies|tech stack|tools(?:\s*&\s*technologies)?|areas of expertise)\s*:?\s*\n([\s\S]*?)(?=\n\s*(?:experience|work history|education|projects|certifications|contact|about|summary|interests)\b|$)/i);
+  if (sectionMatch) chunks.push(sectionMatch[1]);
+  return chunks.filter(Boolean).join('\n');
+}
+
+function extractExplicitSkillNames(text) {
+  const candidates = [];
+  const directMatches = text.matchAll(/(?:^|\n)\s*(?:portfolio\s+)?(?:technical\s+)?(?:skills|technologies|tech stack)\s*:\s*([^\n]+)/gi);
+  for (const match of directMatches) candidates.push(...match[1].split(/[,;|•·\n]+/));
+
+  const portfolioSection = text.match(/(?:^|\n)\s*Portfolio Skills\s*:\s*\n([\s\S]*?)(?=\n\s*(?:Title|Summary|Data|Structured Data|Experience|Education|Projects|Contact)\s*[:\n]|$)/i);
+  if (portfolioSection) candidates.push(...portfolioSection[1].split(/[,;|•·\n]+/));
+
+  const resumeSection = text.match(/(?:^|\n)\s*(?:technical\s+skills|skills|technologies|tech stack)\s*:?\s*\n([\s\S]*?)(?=\n\s*(?:experience|work history|education|projects|certifications|awards|publications|summary|contact|interests)\b|$)/i);
+  if (resumeSection) candidates.push(...resumeSection[1].split(/[,;|•·\n]+/));
+
+  const seen = new Set();
+  return candidates.map(skill => skill.replace(/^[\s\-–—*•]+|[\s\-–—*•]+$/g, '').trim())
+    .filter(skill => skill.length >= 2 && skill.length <= 50 && !/^(skills?|technical skills|technologies|tech stack|tools|expertise)$/i.test(skill))
+    .filter(skill => {
+      const key = skill.toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
+function isPrivateAddress(address) {
+  if (net.isIP(address) === 4) {
+    const parts = address.split('.').map(Number);
+    return parts[0] === 0 || parts[0] === 10 || parts[0] === 127 ||
+      (parts[0] === 169 && parts[1] === 254) || (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) ||
+      (parts[0] === 192 && parts[1] === 168) || parts[0] >= 224;
+  }
+  if (net.isIP(address) === 6) {
+    const normalized = address.toLowerCase();
+    return normalized === '::1' || normalized === '::' || normalized.startsWith('fe8') ||
+      normalized.startsWith('fe9') || normalized.startsWith('fea') || normalized.startsWith('feb') ||
+      normalized.startsWith('fc') || normalized.startsWith('fd') || normalized.startsWith('ff') || normalized.startsWith('::ffff:127.') ||
+      normalized.startsWith('::ffff:10.') || normalized.startsWith('::ffff:192.168.');
+  }
+  return true;
+}
+
+async function isPublicWebUrl(value) {
+  try {
+    const target = new URL(value);
+    if (!['http:', 'https:'].includes(target.protocol) || target.username || target.password ||
+      target.hostname === 'localhost' || target.hostname.endsWith('.local')) return false;
+    if (net.isIP(target.hostname)) return !isPrivateAddress(target.hostname);
+    const addresses = await dns.lookup(target.hostname, { all: true });
+    return addresses.length > 0 && addresses.every(({ address }) => !isPrivateAddress(address));
+  } catch (_) {
+    return false;
+  }
+}
+
+function serializePortfolioApiData(value, depth = 0) {
+  if (depth > 7 || value == null) return '';
+  if (typeof value === 'string' || typeof value === 'number') return String(value);
+  if (Array.isArray(value)) return value.map(item => serializePortfolioApiData(item, depth + 1)).filter(Boolean).join('\n');
+  if (typeof value !== 'object') return '';
+  const lines = [];
+  for (const [key, item] of Object.entries(value)) {
+    if (/token|secret|password|hash|svg|icon|base64/i.test(key) || item == null) continue;
+    const label = /^(fullName|givenName)$/i.test(key) ? 'Candidate Name' :
+      /^(headline|title|jobTitle|professionalTitle)$/i.test(key) ? 'Headline' :
+        key.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ');
+    const content = serializePortfolioApiData(item, depth + 1);
+    if (content) lines.push(`${label}: ${content}`);
+  }
+  return lines.join('\n');
+}
+
+async function extractPublicPortfolioApiData(html, pageUrl) {
+  const page = new URL(pageUrl);
+  const scriptUrls = [...html.matchAll(/<script\b[^>]*\bsrc=["']([^"']+)["'][^>]*>/gi)]
+    .map(match => { try { return new URL(match[1], page).href; } catch (_) { return ''; } })
+    .filter((value, index, all) => value && new URL(value).origin === page.origin && all.indexOf(value) === index)
+    .slice(0, 5);
+  const bundles = await Promise.all(scriptUrls.map(async scriptUrl => {
+    try {
+      const response = await fetch(scriptUrl, { signal: AbortSignal.timeout(7000), redirect: 'error', headers: { Accept: 'application/javascript,text/javascript,*/*' } });
+      if (!response.ok) return '';
+      return (await response.text()).slice(0, 2_000_000);
+    } catch (_) { return ''; }
+  }));
+
+  const endpointMap = new Map();
+  for (const bundle of bundles) {
+    const bases = [...bundle.matchAll(/(?:const|let|var)\s+[\w$]+\s*=\s*["'](https?:\/\/[^"']+)["'](?:\.replace\([^)]*\))?/g)]
+      .map(match => match[1].replace(/\/+$/, ''));
+    const prefixes = [...bundle.matchAll(/(?:const|let|var)\s+[\w$]+\s*=\s*["'](\/[^"']*)["']/g)]
+      .map(match => match[1]).filter(path => /api/i.test(path));
+    const routes = [...bundle.matchAll(/(?:get|fetch|load)(Profile|About|Site|Skills?|Experience|Education|Projects?|Timeline|Achievements?|Resume|Stats)\s*:\s*(?:\([^)]*\)|[\w$]+)\s*=>\s*[\w$]+\(\s*["'](\/[^"']+)["']/gi)];
+    for (const route of routes) {
+      const routePath = route[2];
+      const prefix = prefixes.find(item => routePath === item || routePath.startsWith(`${item}/`)) || '';
+      const endpoint = routePath.startsWith('/') ? routePath : `/${routePath}`;
+      const base = bases[0] || page.origin;
+      const apiUrl = new URL(prefix && !endpoint.startsWith(`${prefix}/`) && endpoint !== prefix ? `${prefix}${endpoint}` : endpoint, base).href;
+      endpointMap.set(apiUrl, route[1]);
+    }
+  }
+
+  const endpoints = [...endpointMap.entries()].slice(0, 12);
+  const responses = await Promise.all(endpoints.map(async ([apiUrl, label]) => {
+    if (!await isPublicWebUrl(apiUrl)) return '';
+    try {
+      const response = await fetch(apiUrl, { signal: AbortSignal.timeout(7000), redirect: 'error', headers: { Accept: 'application/json' } });
+      if (!response.ok || !(response.headers.get('content-type') || '').includes('json')) return '';
+      const raw = await response.text();
+      if (raw.length > 1_000_000) return '';
+      const data = JSON.parse(raw);
+      if (/skills?/i.test(label)) {
+        const skills = [];
+        const collectSkills = (item, depth = 0) => {
+          if (depth > 6 || item == null) return;
+          if (typeof item === 'string' || typeof item === 'number') { skills.push(String(item)); return; }
+          if (Array.isArray(item)) { item.forEach(child => collectSkills(child, depth + 1)); return; }
+          if (typeof item === 'object') {
+            if (item.visible === false || item.published === false || item.isPublished === false) return;
+            const skill = item.name || item.skill || item.technology || item.label;
+            if (typeof skill === 'string') skills.push(skill);
+            else Object.values(item).forEach(child => collectSkills(child, depth + 1));
+          }
+        };
+        collectSkills(data);
+        const uniqueSkills = [...new Set(skills.map(skill => skill.trim()).filter(Boolean))];
+        return uniqueSkills.length ? `Technical Skills:\n${uniqueSkills.join('\n')}` : '';
+      }
+      const serialized = serializePortfolioApiData(data);
+      return serialized ? `${label}:\n${serialized}` : '';
+    } catch (_) { return ''; }
+  }));
+  return responses.filter(Boolean).join('\n\n');
+}
 
 /**
  * Extract raw text from a PDF Buffer using pdf-parse.
@@ -268,7 +525,7 @@ async function parsePortfolioUrl(url) {
         .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
         .join(' ');
     }
-    return `Candidate Name: ${candidateName || 'Software Engineer'}\nHeadline: Software Engineer\nLocation: India\nProfile: ${formattedUrl}\nNote: Parsed from LinkedIn profile URL.`;
+    return `${candidateName ? `Candidate Name: ${candidateName}\n` : ''}Profile: ${formattedUrl}\nNote: Parsed from LinkedIn profile URL.`;
   }
 
   try {
@@ -301,12 +558,31 @@ async function parsePortfolioUrl(url) {
 
     const html = await response.text();
     let textParts = [];
+    const publicApiText = await extractPublicPortfolioApiData(html, response.url || formattedUrl);
+    if (publicApiText) textParts.push(publicApiText);
 
     // Extract <title>
     const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
     if (titleMatch && titleMatch[1]) {
       textParts.push(`Title: ${titleMatch[1].trim()}`);
     }
+
+    const h1Match = html.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i);
+    if (h1Match?.[1]) {
+      const heading = htmlToReadableText(h1Match[1]);
+      const introName = heading.match(/(?:(?:hi|hello|hey)[,!]?\s*)?(?:i am|i['’]m|this is)\s+([A-ZÀ-Ý][\p{L}.'-]*(?:\s+[A-ZÀ-Ý][\p{L}.'-]*){0,3})/iu);
+      const headingName = introName?.[1] || heading.split(/\s+(?:[-–—|,]|\b(?:software|frontend|front-end|backend|back-end|full.?stack|developer|engineer|designer|student|building|creating|portfolio)\b)/i)[0].trim();
+      if (headingName.length >= 2 && headingName.length <= 50 && !/^(?:software|full.?stack|frontend|backend|developer|engineer|designer|welcome|portfolio|home|hello|hey|good morning|good afternoon|hey there|i build|i create|i craft)\b/i.test(headingName)) {
+        textParts.push(`Candidate Name: ${headingName}`);
+      }
+    }
+
+    const firstNameMatch = html.match(/<meta\b[^>]*(?:name|property)=["']profile:first_name["'][^>]*content=["']([^"']+)["'][^>]*>/i);
+    const lastNameMatch = html.match(/<meta\b[^>]*(?:name|property)=["']profile:last_name["'][^>]*content=["']([^"']+)["'][^>]*>/i);
+    const authorMatch = html.match(/<meta\b[^>]*(?:name|property)=["'](?:author|og:title)["'][^>]*content=["']([^"']+)["'][^>]*>/i) ||
+      html.match(/<meta\b[^>]*content=["']([^"']+)["'][^>]*(?:name|property)=["'](?:author|profile:first_name|og:title)["'][^>]*>/i);
+    if (firstNameMatch?.[1]) textParts.push(`Candidate Name: ${firstNameMatch[1].trim()}${lastNameMatch?.[1] ? ` ${lastNameMatch[1].trim()}` : ''}`);
+    else if (authorMatch?.[1]) textParts.push(`Candidate Name: ${authorMatch[1].trim()}`);
 
     // Extract meta description & keywords
     const metaDescMatch = html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i) ||
@@ -328,7 +604,7 @@ async function parsePortfolioUrl(url) {
         const nextJson = JSON.parse(nextDataMatch[1]);
         const extractedJsonText = extractStringsFromJson(nextJson?.props?.pageProps || nextJson);
         if (extractedJsonText) {
-          textParts.push(`Data: ${extractedJsonText.slice(0, 3000)}`);
+          textParts.push(`Data: ${extractedJsonText.slice(0, 20000)}`);
         }
       } catch (_) {}
     }
@@ -338,6 +614,13 @@ async function parsePortfolioUrl(url) {
     for (const m of ldJsonMatches) {
       try {
         const ldData = JSON.parse(m[1]);
+        const personFields = collectStructuredPersonFields(ldData);
+        if (personFields.name) textParts.push(`Candidate Name: ${personFields.name}`);
+        if (personFields.headline) textParts.push(`Headline: ${personFields.headline}`);
+        if (personFields.email) textParts.push(`Email: ${personFields.email}`);
+        if (personFields.location?.length) textParts.push(`Location: ${personFields.location.join(', ')}`);
+        if (personFields.education?.length) textParts.push(`Education: ${personFields.education.join(', ')}`);
+        if (personFields.skills?.length) textParts.push(`Skills: ${personFields.skills.join(', ')}`);
         const ldText = extractStringsFromJson(ldData);
         if (ldText) {
           textParts.push(`Structured Data: ${ldText.slice(0, 2000)}`);
@@ -346,17 +629,18 @@ async function parsePortfolioUrl(url) {
     }
 
     // Extract visible body content
-    const cleanBodyText = stripHtml(html);
+    const cleanBodyText = htmlToReadableText(html);
     if (cleanBodyText) {
       textParts.push(cleanBodyText);
+      const skillText = extractSkillSection(html, cleanBodyText);
+      if (skillText) textParts.push(`Portfolio Skills:\n${skillText}`);
     }
 
     const combined = textParts.join('\n\n').trim();
 
     // Fallback: If minimal text extracted, construct a basic portfolio context using hostname and title
     if (!combined || combined.length < 30) {
-      const siteHint = hostname.replace(/\.(com|org|dev|io|in|net|app|me|tech)$/i, '').replace(/[-_]/g, ' ');
-      return `Portfolio Website: ${formattedUrl}\nCandidate Profile: ${siteHint}\nRole: Software Engineer\nLocation: India`;
+      return `Portfolio Website: ${formattedUrl}`;
     }
 
     return combined;
@@ -399,9 +683,14 @@ function extractCandidateProfile(rawText = '', meta = {}) {
   }
 
   // Explicit Name marker check (e.g. from GitHub, LinkedIn, or structured tags)
-  const explicitNameMatch = text.match(/(?:Candidate Name|Full Name|Name):\s*([a-zA-Z\s.'-]+)/i);
-  if (explicitNameMatch && explicitNameMatch[1].trim().length >= 3 && explicitNameMatch[1].trim().length <= 35) {
-    name = explicitNameMatch[1].trim();
+  const explicitNameMatch = text.match(/(?:Candidate Name|Full Name|Name|Author):\s*([^\r\n|;,]+)/i);
+  if (explicitNameMatch) {
+    const candidateName = explicitNameMatch[1].trim()
+      .replace(/^(?:portfolio|resume|profile)\s+(?:of|for)\s+/i, '')
+      .replace(/\s*(?:[-–—|:]\s*)(?:portfolio|developer|engineer|software|full\s*stack|homepage|official|home).*$/i, '')
+      .replace(/\s+(?:portfolio|website)$/i, '')
+      .trim();
+    if (candidateName.length >= 2 && candidateName.length <= 50 && /^[a-zA-ZÀ-ÿ\s.'-]+$/.test(candidateName)) name = candidateName;
   }
 
   // Name inference: check title or top lines
@@ -440,26 +729,29 @@ function extractCandidateProfile(rawText = '', meta = {}) {
   }
 
   // Headline / Role
-  let headline = 'Software Engineer';
+  const explicitHeadline = text.match(/(?:^|\n)\s*Headline:\s*([^\r\n]+)/i);
+  let headline = explicitHeadline?.[1]?.trim() || '';
   const roleKeywords = [
-    'Full Stack Developer', 'Frontend Developer', 'Backend Developer', 'Software Engineer',
-    'DevOps Engineer', 'Machine Learning Engineer', 'Data Scientist', 'Cloud Engineer',
+    'Full-Stack Developer', 'Full Stack Developer', 'Frontend Developer', 'Backend Developer', 'Software Engineer',
+    'Junior Web Developer', 'DevOps Engineer', 'Machine Learning Engineer', 'Data Scientist', 'Cloud Engineer',
     'System Architect', 'Mobile Developer', 'Full Stack Engineer', 'Junior Software Developer'
   ];
-  for (const rk of roleKeywords) {
-    if (new RegExp(`\\b${rk}\\b`, 'i').test(text)) {
-      headline = rk;
-      break;
+  if (!headline) {
+    for (const rk of roleKeywords) {
+      if (new RegExp(`\\b${rk}\\b`, 'i').test(text)) {
+        headline = rk;
+        break;
+      }
     }
   }
 
   // --------------------------------------------------------------------------
   // 2. COUNTRY & LOCATION & WORK AUTHORIZATION DETECTION (CRITICAL REQUIREMENT)
   // --------------------------------------------------------------------------
-  let country = 'India'; // Default context for JobRadar
+  let country = 'Unspecified';
   let city = '';
-  let workAuthNotes = 'Authorized to work in India (Local Citizen / Resident)';
-  let isIndiaResident = true;
+  let workAuthNotes = 'Location and work authorization not detected';
+  let isIndiaResident = false;
   let hasUSWorkAuth = false;
 
   // Check explicit US work authorization flags
@@ -631,7 +923,7 @@ function extractCandidateProfile(rawText = '', meta = {}) {
   } else if (fresherFlag && !hasActiveJob) {
     totalExperienceMonths = 0;
   } else {
-    totalExperienceMonths = hasActiveJob ? 8 : 0;
+    totalExperienceMonths = 0;
   }
 
   const totalYears = Math.floor(totalExperienceMonths / 12);
@@ -640,14 +932,14 @@ function extractCandidateProfile(rawText = '', meta = {}) {
   // Fresher classification:
   // If candidate has >= 6 months of professional work experience or active SDE role, they are NOT a 0-experience fresher!
   let isFresher = false;
-  if (totalExperienceMonths === 0 || (totalExperienceMonths < 6 && fresherFlag && !hasActiveJob)) {
+  if (fresherFlag && (totalExperienceMonths === 0 || (totalExperienceMonths < 6 && !hasActiveJob))) {
     isFresher = true;
   }
 
   // Friendly experience display text
   let experienceDisplay = '';
   if (totalExperienceMonths === 0) {
-    experienceDisplay = isFresher ? 'Fresher (0 Exp)' : '0 Yrs Exp';
+    experienceDisplay = isFresher ? 'Fresher (0 Exp)' : 'Not detected';
   } else if (totalExperienceMonths < 12) {
     experienceDisplay = `${totalExperienceMonths} Months`;
   } else if (experienceMonths === 0) {
@@ -658,8 +950,10 @@ function extractCandidateProfile(rawText = '', meta = {}) {
 
   // Seniority classification
   let seniorityLevel = '';
-  if (isFresher || totalExperienceMonths === 0) {
+  if (isFresher) {
     seniorityLevel = 'Fresher / Early Career (0 Exp)';
+  } else if (totalExperienceMonths === 0) {
+    seniorityLevel = 'Not detected';
   } else if (totalExperienceMonths < 12) {
     seniorityLevel = `Early Career (< 1 Year, ${totalExperienceMonths} Months)`;
   } else if (totalExperienceMonths < 24) {
@@ -675,30 +969,49 @@ function extractCandidateProfile(rawText = '', meta = {}) {
   // --------------------------------------------------------------------------
   // 4. TECHNICAL SKILLS & TECH STACK DETECTION
   // --------------------------------------------------------------------------
-  const candidateSkills = [];
+  const candidateSkills = extractExplicitSkillNames(text);
+  const knownSkillKeys = new Set(candidateSkills.map(skill => skill.toLowerCase().replace(/[^a-z0-9]/g, '')));
   for (const item of EXTENDED_SKILL_KEYWORDS) {
-    if (item.regex.test(text)) {
+    const normalized = item.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (item.regex.test(text) && !knownSkillKeys.has(normalized)) {
       candidateSkills.push(item.name);
+      knownSkillKeys.add(normalized);
     }
-  }
-
-  // Fallbacks if very few skills parsed
-  if (candidateSkills.length === 0) {
-    candidateSkills.push('Software Engineering', 'Problem Solving', 'Data Structures & Algorithms');
   }
 
   // --------------------------------------------------------------------------
   // 5. EDUCATION & DEGREE
   // --------------------------------------------------------------------------
-  let education = 'B.Tech / B.E. in Computer Science or Equivalent';
-  if (/\b(?:ph\.?d|doctorate)\b/i.test(text)) {
+  const educationText = (text.match(/(?:^|\n)\s*(?:education|academic background|academic qualifications|qualifications)\s*:?\s*\n?([\s\S]*?)(?=\n\s*(?:experience|employment|projects|skills|certifications|awards|publications|summary|contact)\b|$)/i) || [])[1] || text;
+  let education = '';
+  if (/\b(?:ph\.?d|doctorate)\b/i.test(educationText)) {
     education = 'Ph.D. / Doctorate in Computer Science or quantitative field';
   } else if (/\b(?:master['’]s(?:\s+degree)?|m\.?tech|m\.s\b|mca)\b/i.test(text) && !/\b(?:scrum\s*master|master\s*branch|webmaster|ms\s*office|\d+\s*ms)\b/i.test(text)) {
     education = "Master's Degree (M.Tech / M.S. / MCA) in Computer Science";
-  } else if (/\b(?:b\.?tech|b\.?e\.?|bachelor of technology|bachelor of engineering)\b/i.test(text)) {
+  } else if (/\b(?:b\.?tech|b\.?e\.?|bachelor of technology|bachelor of engineering)\b/i.test(educationText)) {
     education = 'B.Tech / B.E. in Computer Science or Information Technology';
-  } else if (/\b(?:bca|b\.?sc)\b/i.test(text)) {
+  } else if (/\b(?:bca|b\.?sc)\b/i.test(educationText)) {
     education = 'BCA / B.Sc in Computer Science or related degree';
+  }
+
+  if (/\b(?:master|m\.?tech|m\.?s\b|mca|mba)\b/i.test(educationText) && !/\b(?:scrum\s*master|master\s*branch|webmaster|ms\s*office)\b/i.test(educationText)) {
+    education = "Master's Degree (M.Tech / M.S. / MCA) in Computer Science";
+  }
+
+  if (education || (/\b(?:mba|master|m\.?tech|mca)\b/i.test(educationText) && !/\b(?:scrum\s*master|master\s*branch|webmaster|ms\s*office)\b/i.test(educationText))) {
+    const highestDegreePatterns = [
+      /ph\.?d|doctorate/i,
+      /master|m\.?tech|m\.?s(?:c|c\.)?\b|mca|mba|m\.?eng|m\.?phil|m\.?com|m\.?a\b/i,
+      /b\.?tech|b\.?e\.?|bachelor|bca|b\.?sc|b\.?com|bba|b\.?a\b|b\.?eng|b\.?s\b/i,
+      /diploma/i
+    ];
+    for (const degreePattern of highestDegreePatterns) {
+      const degreeLineMatch = educationText.split(/\r?\n/).find((line) => degreePattern.test(line));
+      if (degreeLineMatch) {
+        education = degreeLineMatch.trim().slice(0, 180);
+        break;
+      }
+    }
   }
 
   return {
@@ -737,21 +1050,21 @@ function createEmptyProfile(meta = {}) {
     name: meta.name || '',
     email: '',
     phone: '',
-    headline: 'Software Developer',
-    country: 'India',
+    headline: '',
+    country: 'Unspecified',
     city: '',
-    isIndiaResident: true,
+    isIndiaResident: false,
     hasUSWorkAuth: false,
-    workAuthNotes: 'Eligible for Direct India hiring',
-    totalYearsExperience: 2,
+    workAuthNotes: 'Location and work authorization not detected',
+    totalYearsExperience: 0,
     experienceMonths: 0,
-    totalExperienceMonths: 24,
-    experienceDisplay: '2 Years',
+    totalExperienceMonths: 0,
+    experienceDisplay: 'Not detected',
     isFresher: false,
-    seniorityLevel: 'Mid-Level Professional',
-    skills: ['JavaScript', 'Python', 'React', 'Node.js', 'SQL'],
-    skillsCount: 5,
-    education: 'B.Tech / B.E. in Computer Science or Equivalent',
+    seniorityLevel: 'Not detected',
+    skills: [],
+    skillsCount: 0,
+    education: '',
     textLength: 0,
     rawSnippet: ''
   };

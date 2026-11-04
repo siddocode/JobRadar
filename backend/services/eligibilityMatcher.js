@@ -39,7 +39,8 @@ function evaluateCandidateEligibility(jobEligibility, candidateProfile) {
   // 1. COUNTRY & WORK AUTHORIZATION ELIGIBILITY (CRITICAL FACTOR)
   // --------------------------------------------------------------------------
   const indiaPolicy = jobEligibility.indiaEligibility || {};
-  const candCountry = (candidateProfile.country || 'India').trim();
+  const candCountry = (candidateProfile.country || 'Unspecified').trim();
+  const candidateCountryKnown = !/^(?:unspecified|unknown|not detected)$/i.test(candCountry);
   const candIsIndia = candidateProfile.isIndiaResident || candCountry.toLowerCase() === 'india';
   const candHasUSAuth = candidateProfile.hasUSWorkAuth || false;
   const jobCountry = (jobEligibility.workplace?.country || 'India').trim();
@@ -58,7 +59,14 @@ function evaluateCandidateEligibility(jobEligibility, candidateProfile) {
     recommendation: null
   };
 
-  if (indiaPolicy.status === 'direct_india') {
+  if (!candidateCountryKnown) {
+    countryScore = 25;
+    countryResult.title = 'Country Fit: Confirm Your Work Location';
+    countryResult.detail = 'Your profile does not include a detected country. Verify the job’s location and work authorization requirements before applying.';
+    countryResult.icon = 'ℹ️';
+    countryResult.badgeTone = 'info';
+    eligibleFactors.push(countryResult);
+  } else if (indiaPolicy.status === 'direct_india') {
     // DIRECT INDIA ROLE
     if (candIsIndia) {
       countryScore = 35;

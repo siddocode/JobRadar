@@ -559,7 +559,7 @@ export default function CandidateProfileUploadModal({ isOpen, onClose, onProfile
                 </label>
                 <select
                   className="review-select"
-                  value={parsedData.country || 'India'}
+                  value={parsedData.country || 'Unspecified'}
                   onChange={(e) => {
                     const c = e.target.value;
                     setParsedData({
@@ -569,12 +569,15 @@ export default function CandidateProfileUploadModal({ isOpen, onClose, onProfile
                     });
                   }}
                 >
+                  <option value="Unspecified">Not detected — select your country</option>
                   <option value="India">India (Eligible for Direct India Openings)</option>
                   <option value="United States">United States (Holds US Work Auth)</option>
                   <option value="United Kingdom">United Kingdom</option>
                   <option value="Canada">Canada</option>
                   <option value="Germany">Germany</option>
                   <option value="Singapore">Singapore</option>
+                  <option value="Australia">Australia</option>
+                  <option value="UAE / Dubai">UAE / Dubai</option>
                   <option value="Other">Other / International</option>
                 </select>
               </div>

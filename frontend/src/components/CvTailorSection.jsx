@@ -406,12 +406,9 @@ export default function CvTailorSection({ job, candidateProfile, token, onProfil
                 </p>
                 {candidateProfile.skills?.length > 0 && (
                   <div className="tailor-profile-skills-preview">
-                    {candidateProfile.skills.slice(0, 5).map((sk, idx) => (
+                    {candidateProfile.skills.map((sk, idx) => (
                       <span key={`sk-prev-${idx}`} className="setup-skill-tag">{sk}</span>
                     ))}
-                    {candidateProfile.skills.length > 5 && (
-                      <span className="setup-skill-more">+{candidateProfile.skills.length - 5} more</span>
-                    )}
                   </div>
                 )}
               </label>

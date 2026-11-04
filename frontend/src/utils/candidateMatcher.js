@@ -18,7 +18,7 @@ export function evaluateCandidateMatch(jobEligibility, candidateProfile) {
 
   // 1. Country & Location Eligibility
   // 1. Universal Country & Work Authorization Eligibility
-  const candCountry = (candidateProfile.country || 'India').trim();
+  const candCountry = (candidateProfile.country || 'Unspecified').trim();
   const candCountryLower = candCountry.toLowerCase();
   const candIsIndia = Boolean(candidateProfile.isIndiaResident || candCountryLower === 'india');
   const candHasUSAuth = Boolean(candidateProfile.hasUSWorkAuth);
@@ -57,7 +57,14 @@ export function evaluateCandidateMatch(jobEligibility, candidateProfile) {
     recommendation: null
   };
 
-  if (isDomesticFit) {
+  if (!candCountryLower || /^(unspecified|unknown|not detected)$/.test(candCountryLower)) {
+    countryScore = 25;
+    countryResult.title = 'Country Fit: Confirm Your Work Location';
+    countryResult.detail = 'Your profile does not include a detected country. Verify the job’s location and work authorization requirements before applying.';
+    countryResult.icon = 'info';
+    countryResult.badgeTone = 'info';
+    eligibleFactors.push(countryResult);
+  } else if (isDomesticFit) {
     countryScore = 35;
     countryResult.title = `Country Fit: 100% Eligible (Domestic ${candCountry} Opening)`;
     countryResult.detail = `This job is based in ${candCountry} (${jobCity || jobLoc}). You reside in ${candCountry} and qualify for direct domestic employment.`;
@@ -77,6 +84,15 @@ export function evaluateCandidateMatch(jobEligibility, candidateProfile) {
     countryResult.detail = 'Role is US-based. Your profile indicates US residency or work authorization.';
     countryResult.icon = 'check';
     countryResult.badgeTone = 'success';
+    eligibleFactors.push(countryResult);
+  } else if (jobEligibility.indiaEligibility?.status === 'conditional') {
+    // Missing or ambiguous location data is not evidence that a candidate is
+    // legally ineligible. Keep the job visible and ask them to verify the ATS.
+    countryScore = 30;
+    countryResult.title = 'Country Fit: Location Requirements Need Confirmation';
+    countryResult.detail = `The posting does not establish a location or work authorization restriction. Confirm the requirements with ${jobEligibility.company || 'the employer'} before applying.`;
+    countryResult.icon = 'info';
+    countryResult.badgeTone = 'info';
     eligibleFactors.push(countryResult);
   } else {
     countryScore = 0;

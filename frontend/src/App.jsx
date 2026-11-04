@@ -718,7 +718,9 @@ export default function App() {
     return jobs.filter((job) => {
       const qm = getJobMatchQuick(job, candidateProfile);
       if (!qm) return false;
-      return qm.overall.canApply && !qm.overall.isHardBlocker && qm.overall.status !== 'NOT_ELIGIBLE';
+      // The filter should remove confirmed blockers only. Low scores often mean
+      // the posting/profile lacks enough detail and should not hide a usable role.
+      return !qm.overall.isHardBlocker;
     });
   }, [jobs, onlyEligibleJobs, isAuthenticated, candidateProfile]);
 
