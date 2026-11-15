@@ -1,6 +1,15 @@
+const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'jobradar_jwt_dev_secret_key_2026';
+let JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('FATAL SECURITY ERROR: JWT_SECRET environment variable is missing in production!');
+  }
+  // Generate an ephemeral random secret in development if not specified
+  JWT_SECRET = 'jobradar_jwt_dev_secret_' + crypto.randomBytes(16).toString('hex');
+  console.warn('[AuthMiddleware] Warning: JWT_SECRET not set in .env. Using ephemeral development key.');
+}
 
 function getTokenFromReq(req) {
   // 1. From parsed cookies (cookie-parser)

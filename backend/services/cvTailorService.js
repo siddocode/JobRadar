@@ -50,18 +50,12 @@ function parseCandidateResume(rawCvText = '', candidateProfile = {}) {
       finalName = candidateProfile.fullName.trim();
     } else if (candidateProfile.userName) {
       finalName = candidateProfile.userName.trim();
-    } else if (candidateProfile.portfolio && /siddharth/i.test(candidateProfile.portfolio)) {
-      finalName = 'Siddharth';
     } else if (candidateProfile.email) {
       const u = candidateProfile.email.split('@')[0];
-      if (/sid/i.test(u)) {
-        finalName = 'Siddharth';
-      } else {
-        const cleaned = u.replace(/[._\d-]+/g, ' ').trim();
-        finalName = cleaned ? cleaned.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ') : 'Siddharth';
-      }
+      const cleaned = u.replace(/[._\d-]+/g, ' ').trim();
+      finalName = cleaned ? cleaned.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ') : 'Candidate';
     } else {
-      finalName = 'Siddharth';
+      finalName = 'Candidate';
     }
   }
 

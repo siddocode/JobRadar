@@ -33,6 +33,8 @@ const { fetchGoogleJobs } = require('../adapters/google');
 const { fetchEightfoldJobs } = require('../adapters/eightfold');
 const { fetchUniversalJobs } = require('../adapters/universalFeed');
 const { fetchAdzunaJobs } = require('../adapters/adzuna');
+const { fetchWorkableJobs } = require('../adapters/workable');
+const { fetchRecruiteeJobs } = require('../adapters/recruitee');
 const Job = require('../models/Job');
 const SourceRun = require('../models/SourceRun');
 const { resolveCorridor, classifyRole } = require('../utils/corridorResolver');
@@ -139,6 +141,12 @@ async function collectForCompany(company) {
         break;
       case 'universal':
         fetchResult = await fetchUniversalJobs(company, company.name);
+        break;
+      case 'workable':
+        fetchResult = await fetchWorkableJobs(slug, company.name);
+        break;
+      case 'recruitee':
+        fetchResult = await fetchRecruiteeJobs(slug, company.name);
         break;
       default:
         fetchResult = {

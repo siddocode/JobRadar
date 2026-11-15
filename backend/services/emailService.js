@@ -9,9 +9,8 @@
 
 const BREVO_API_ENDPOINT = 'https://api.brevo.com/v3/smtp/email';
 
-const DEFAULT_API_KEY = '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';
-const DEFAULT_SENDER_EMAIL = 'siddocode@gmail.com';
-const DEFAULT_SENDER_NAME = 'JobRadar';
+const DEFAULT_SENDER_EMAIL = process.env.BREVO_SENDER_EMAIL || 'no-reply@jobradar.local';
+const DEFAULT_SENDER_NAME = process.env.BREVO_SENDER_NAME || 'JobRadar';
 const DEFAULT_APP_URL = (process.env.NODE_ENV === 'production' || process.env.RENDER === 'true')
   ? 'https://job-radarr.vercel.app'
   : 'http://localhost:5173';
@@ -20,16 +19,25 @@ const DEFAULT_APP_URL = (process.env.NODE_ENV === 'production' || process.env.RE
  * Dispatches an email via Brevo REST API
  */
 async function sendTransactionalEmail({ to, toName = '', subject, htmlContent, textContent }) {
-  const apiKey = process.env.BREVO_API_KEY || DEFAULT_API_KEY;
+  const apiKey = (process.env.BREVO_API_KEY || '').trim();
   const senderEmail = process.env.BREVO_SENDER_EMAIL || DEFAULT_SENDER_EMAIL;
   const senderName = process.env.BREVO_SENDER_NAME || DEFAULT_SENDER_NAME;
 
-  if (!apiKey) {
-    throw new Error('Brevo API key is not configured.');
-  }
-
   if (!to || !to.includes('@')) {
     throw new Error('A valid recipient email address is required.');
+  }
+
+  // If no API key is configured
+  if (!apiKey) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('BREVO_API_KEY environment variable is not configured in production.');
+    }
+    // In development/test mode, simulate dispatch and log to terminal
+    console.log(`[EmailService] [DEV SIMULATION] Email to "${to}" | Subject: "${subject}"`);
+    if (textContent) {
+      console.log(`[EmailService] [DEV SIMULATION] Content: ${textContent.slice(0, 200)}...`);
+    }
+    return { success: true, simulated: true, messageId: 'simulated-dev-msg-' + Date.now() };
   }
 
   const payload = {

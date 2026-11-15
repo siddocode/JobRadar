@@ -16,9 +16,12 @@ const mongoose = require('mongoose');
 const jobRoutes = require('./routes/jobRoutes');
 const directoryRoutes = require('./routes/directoryRoutes');
 const authRoutes = require('./routes/authRoutes');
+const applicationRoutes = require('./routes/applicationRoutes');
+const autopilotRoutes = require('./routes/autopilotRoutes');
 const jobController = require('./controllers/jobController');
 
 const cookieParser = require('cookie-parser');
+const { generalApiLimiter } = require('./utils/rateLimiter');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -49,10 +52,15 @@ app.get('/', (req, res) => {
   });
 });
 
+// Apply general API rate limiting to all /api endpoints
+app.use('/api', generalApiLimiter);
+
 // Mount API routes
 app.use('/api/auth', authRoutes);
 app.use('/api/jobs', jobRoutes);
 app.use('/api/directory', directoryRoutes);
+app.use('/api/applications', applicationRoutes);
+app.use('/api/autopilot', autopilotRoutes);
 app.get('/api/cities', jobController.getCities);
 app.get('/api/corridors', jobController.getCorridors);
 app.get('/api/countries', jobController.getCountries);
@@ -96,6 +104,9 @@ async function startServer() {
   try {
     await connectWithRetry(3);
 
+    const { startQueueWorker } = require('./services/jobQueue');
+    startQueueWorker(5000);
+
     app.listen(PORT, () => {
       console.log(`[Server] JobRadar API running on http://localhost:${PORT}`);
       setupCronScheduler();
@@ -120,6 +131,7 @@ function setupCronScheduler() {
       const cron = require('node-cron');
       const { runCollection } = require('./scripts/collect');
       const { harvestAllMajorHubs } = require('./services/autoJobHarvester');
+      const { runScheduledAutopilotBatch } = require('./controllers/autopilotController');
 
       console.log(`[Scheduler] Autonomous 100% Free Job Harvester active (Schedule: "${cronSchedule}")`);
       cron.schedule(cronSchedule, async () => {
@@ -130,6 +142,8 @@ function setupCronScheduler() {
           // 2. Run board sync
           const summary = await runCollection();
           console.log(`[Scheduler] Automated sync complete: ${summary.totalUpserted} upserted, ${summary.totalClosed} closed.`);
+          // 3. Run scheduled autopilot screening & preparation for active subscribers
+          await runScheduledAutopilotBatch();
         } catch (err) {
           console.error('[Scheduler] Automated sync error:', err.message);
         }

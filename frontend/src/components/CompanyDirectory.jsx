@@ -82,6 +82,39 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
   const [selectedPreviewPlace, setSelectedPreviewPlace] = useState(null);
   const [placesViewMode, setPlacesViewMode] = useState('split'); // 'split' | 'list' | 'map'
 
+  // ATS Detector State
+  const [showAtsModal, setShowAtsModal] = useState(false);
+  const [atsDetectUrl, setAtsDetectUrl] = useState('');
+  const [atsDetectName, setAtsDetectName] = useState('');
+  const [isDetectingAts, setIsDetectingAts] = useState(false);
+  const [atsDetectResult, setAtsDetectResult] = useState(null);
+  const [atsDetectError, setAtsDetectError] = useState(null);
+
+  const handleDetectAts = async (e) => {
+    if (e) e.preventDefault();
+    if (!atsDetectUrl.trim()) return;
+    setIsDetectingAts(true);
+    setAtsDetectError(null);
+    setAtsDetectResult(null);
+    try {
+      const res = await authFetch('/api/directory/detect-ats', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: atsDetectName.trim(), url: atsDetectUrl.trim() })
+      });
+      const data = await res.json();
+      if (res.ok && data.success && data.result) {
+        setAtsDetectResult(data.result);
+      } else {
+        setAtsDetectError(data.error || 'Failed to detect ATS for this domain.');
+      }
+    } catch (err) {
+      setAtsDetectError(err.message || 'Detection failed');
+    } finally {
+      setIsDetectingAts(false);
+    }
+  };
+
   const handleCopyPreviewText = (text, id) => {
     if (!text) return;
     navigator.clipboard.writeText(text);
@@ -603,6 +636,17 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
                 ? `Scan ${cities.find(c => c.slug === selectedCity)?.name || selectedCity} (Google / Map)` 
                 : 'Map-Wise Places Scanner'}
             </span>
+          </button>
+
+          {/* Quick ATS Detector Trigger */}
+          <button
+            className="osm-scan-trigger-btn"
+            style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}
+            onClick={() => setShowAtsModal(true)}
+            title="Automatically detect and verify ATS provider for any company career portal"
+          >
+            <span className="osm-scan-icon">⚡</span>
+            <span className="osm-scan-text">Detect ATS</span>
           </button>
 
           {/* Quick Add Company Button - Preserved for upcoming Admin portal (hidden for general users to prevent spam) */}
@@ -1695,6 +1739,104 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
             handleCompanyUpdate(id, { notes: note, followUpStatus: nextStatus || 'to_contact' });
           }}
         />
+      )}
+
+      {/* Automated ATS Sniffer Modal */}
+      {showAtsModal && (
+        <div className="modal-backdrop" onClick={() => !isDetectingAts && setShowAtsModal(false)}>
+          <div className="discovery-modal-card" style={{ maxWidth: '540px' }} onClick={(e) => e.stopPropagation()}>
+            <div className="discovery-modal-header">
+              <div className="header-badge-title-group">
+                <span className="discovery-engine-badge">⚡ Real-Time ATS Sniffer</span>
+                <h3 className="discovery-modal-title">Detect Company ATS Provider</h3>
+                <p className="discovery-modal-subtitle">
+                  Inspects company websites and career portals to identify and verify public ATS feeds (Greenhouse, Lever, Ashby, Workable, Recruitee, SmartRecruiters).
+                </p>
+              </div>
+              <button
+                type="button"
+                className="discovery-modal-close-btn"
+                onClick={() => setShowAtsModal(false)}
+                disabled={isDetectingAts}
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleDetectAts} className="discovery-modal-body" style={{ padding: '20px 24px' }}>
+              <div className="form-group" style={{ marginBottom: '16px' }}>
+                <label className="form-label">Company Name (Optional)</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="e.g. Figma, Swiggy, Razorpay"
+                  value={atsDetectName}
+                  onChange={(e) => setAtsDetectName(e.target.value)}
+                />
+              </div>
+
+              <div className="form-group" style={{ marginBottom: '16px' }}>
+                <label className="form-label">Company Website or Career URL *</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="e.g. figma.com or boards.greenhouse.io/figma"
+                  value={atsDetectUrl}
+                  onChange={(e) => setAtsDetectUrl(e.target.value)}
+                  required
+                />
+              </div>
+
+              {atsDetectError && (
+                <div style={{ padding: '12px', background: 'var(--danger-light)', color: 'var(--danger)', borderRadius: 'var(--radius-md)', fontSize: '13px', marginBottom: '16px' }}>
+                  {atsDetectError}
+                </div>
+              )}
+
+              {atsDetectResult && (
+                <div style={{ padding: '16px', background: 'var(--bg-card-subtle)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', marginBottom: '16px' }}>
+                  {atsDetectResult.detected ? (
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--success)', fontWeight: '700', fontSize: '14px', marginBottom: '8px' }}>
+                        <span>✓ Verified ATS Feed Found!</span>
+                      </div>
+                      <div style={{ fontSize: '13px', color: 'var(--text-primary)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <div><strong>ATS Engine:</strong> <span style={{ textTransform: 'uppercase', color: 'var(--primary)' }}>{atsDetectResult.ats}</span></div>
+                        <div><strong>Target Slug:</strong> <code>{atsDetectResult.slug}</code></div>
+                        <div><strong>Detection Method:</strong> {atsDetectResult.method}</div>
+                        {atsDetectResult.sourceUrl && (
+                          <div><strong>Source:</strong> <a href={atsDetectResult.sourceUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)' }}>{atsDetectResult.sourceUrl}</a></div>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+                      No supported public ATS board detected for this URL. The company may use custom proprietary portals or gated intranet listings.
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => setShowAtsModal(false)}
+                  disabled={isDetectingAts}
+                >
+                  Close
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary btn-sm"
+                  disabled={isDetectingAts || !atsDetectUrl.trim()}
+                >
+                  {isDetectingAts ? 'Sniffing & Verifying...' : 'Scan & Verify ATS'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );

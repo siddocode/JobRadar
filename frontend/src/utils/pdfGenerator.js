@@ -480,3 +480,204 @@ export async function copyResumeToClipboard(tailoredResume) {
   const content = generateResumeMarkdown(tailoredResume);
   await navigator.clipboard.writeText(content);
 }
+
+function escapeLatex(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/\\/g, '\\textbackslash{}')
+    .replace(/([%&$#{}_])/g, '\\$1')
+    .replace(/\^/g, '\\textasciicircum{}')
+    .replace(/~/g, '\\textasciitilde{}');
+}
+
+/**
+ * Generates compile-ready Overleaf / Jake's Resume LaTeX source code.
+ */
+export function generateLatexSource(tailoredResume) {
+  if (!tailoredResume) return '';
+  const { name, contact, summary, includeSummary, experience, projects, education, skills } = tailoredResume;
+
+  const contactItems = [];
+  if (contact?.phone) contactItems.push(escapeLatex(contact.phone));
+  if (contact?.email) contactItems.push(`\\href{mailto:${contact.email}}{${escapeLatex(contact.email)}}`);
+  if (contact?.portfolio) {
+    const p = contact.portfolio.replace(/^https?:\/\//, '');
+    contactItems.push(`\\href{https://${p}}{${escapeLatex(p)}}`);
+  }
+  if (contact?.github) {
+    const gh = contact.github.replace(/^https?:\/\//, '');
+    contactItems.push(`\\href{https://${gh}}{${escapeLatex(gh)}}`);
+  }
+  if (contact?.linkedin) {
+    const li = contact.linkedin.replace(/^https?:\/\//, '');
+    contactItems.push(`\\href{https://${li}}{${escapeLatex(li)}}`);
+  }
+  if (contact?.location) contactItems.push(escapeLatex(contact.location));
+
+  let out = `%-------------------------
+% Resume in LaTeX (Jake's Resume / Overleaf ATS Standard)
+% Exported via JobRadar 2.0
+%------------------------
+
+\\documentclass[letterpaper,11pt]{article}
+
+\\usepackage{latexsym}
+\\usepackage[empty]{fullpage}
+\\usepackage{titlesec}
+\\usepackage{marvosym}
+\\usepackage[usenames,dvipsnames]{color}
+\\usepackage{verbatim}
+\\usepackage{enumitem}
+\\usepackage[hidelinks]{hyperref}
+\\usepackage{fancyhdr}
+\\usepackage[english]{babel}
+\\usepackage{tabularx}
+
+\\pagestyle{fancy}
+\\fancyhf{}
+\\fancyfoot{}
+\\renewcommand{\\headrulewidth}{0pt}
+\\renewcommand{\\footrulewidth}{0pt}
+
+\\addtolength{\\oddsidemargin}{-0.5in}
+\\addtolength{\\evensidemargin}{-0.5in}
+\\addtolength{\\textwidth}{1in}
+\\addtolength{\\topmargin}{-.5in}
+\\addtolength{\\textheight}{1.0in}
+
+\\urlstyle{same}
+\\raggedbottom
+\\raggedright
+\\setlength{\\tabcolsep}{0in}
+
+\\titleformat{\\section}{
+  \\vspace{-4pt}\\scshape\\raggedright\\large
+}{}{0em}{}[\\color{black}\\titlerule \\vspace{-5pt}]
+
+\\begin{document}
+
+%----------HEADING----------
+\\begin{center}
+  \\textbf{\\Huge \\scshape ${escapeLatex(name || 'Candidate')}} \\\\ \\vspace{1pt}
+  \\small ${contactItems.join(' $|$ ')}
+\\end{center}
+`;
+
+  // Summary
+  if (includeSummary && summary) {
+    out += `
+%-----------SUMMARY-----------
+\\section{Summary}
+  \\small{${escapeLatex(summary)}}
+`;
+  }
+
+  // Skills
+  if (skills && (Array.isArray(skills) ? skills.length > 0 : Object.keys(skills).length > 0)) {
+    out += `
+%-----------TECHNICAL SKILLS-----------
+\\section{Technical Skills}
+ \\begin{itemize}[leftmargin=0.15in, label={}]
+    \\small{\\item{
+`;
+    if (Array.isArray(skills)) {
+      out += `     \\textbf{Technologies}{: ${escapeLatex(skills.join(', '))}} \\\\\n`;
+    } else {
+      for (const [category, items] of Object.entries(skills)) {
+        if (items && items.length > 0) {
+          const catLabel = category.charAt(0).toUpperCase() + category.slice(1);
+          const itemList = Array.isArray(items) ? items.join(', ') : String(items);
+          out += `     \\textbf{${escapeLatex(catLabel)}}{: ${escapeLatex(itemList)}} \\\\\n`;
+        }
+      }
+    }
+    out += `    }}
+ \\end{itemize}
+`;
+  }
+
+  // Experience
+  if (experience && experience.length > 0) {
+    out += `
+%-----------EXPERIENCE-----------
+\\section{Experience}
+  \\resumeSubHeadingListStart
+`;
+    for (const exp of experience) {
+      out += `    \\resumeSubheading
+      {${escapeLatex(exp.role || exp.title || 'Engineer')}}{${escapeLatex(exp.period || '')}}
+      {${escapeLatex(exp.company || '')}}{${escapeLatex(exp.location || '')}}
+      \\resumeItemListStart
+`;
+      if (Array.isArray(exp.bulletPoints)) {
+        for (const pt of exp.bulletPoints) {
+          out += `        \\resumeItem{${escapeLatex(pt)}}\n`;
+        }
+      }
+      out += `      \\resumeItemListEnd\n\n`;
+    }
+    out += `  \\resumeSubHeadingListEnd\n`;
+  }
+
+  // Projects
+  if (projects && projects.length > 0) {
+    out += `
+%-----------PROJECTS-----------
+\\section{Projects}
+    \\resumeSubHeadingListStart
+`;
+    for (const proj of projects) {
+      const techStr = proj.technologies ? ` $|$ \\emph{${escapeLatex(Array.isArray(proj.technologies) ? proj.technologies.join(', ') : proj.technologies)}}` : '';
+      out += `      \\resumeProjectHeading
+          {\\textbf{${escapeLatex(proj.name || 'Project')}}${techStr}}{${escapeLatex(proj.period || '')}}
+          \\resumeItemListStart
+`;
+      if (Array.isArray(proj.bulletPoints)) {
+        for (const pt of proj.bulletPoints) {
+          out += `            \\resumeItem{${escapeLatex(pt)}}\n`;
+        }
+      }
+      out += `          \\resumeItemListEnd\n\n`;
+    }
+    out += `    \\resumeSubHeadingListEnd\n`;
+  }
+
+  // Education
+  if (education && education.length > 0) {
+    out += `
+%-----------EDUCATION-----------
+\\section{Education}
+  \\resumeSubHeadingListStart
+`;
+    for (const edu of education) {
+      out += `    \\resumeSubheading
+      {${escapeLatex(edu.institution || edu.school || 'University')}}{${escapeLatex(edu.location || '')}}
+      {${escapeLatex(edu.degree || '')}}{${escapeLatex(edu.year || edu.period || '')}}
+`;
+    }
+    out += `  \\resumeSubHeadingListEnd\n`;
+  }
+
+  out += `
+\\end{document}
+`;
+
+  return out;
+}
+
+export function downloadLatexFile(tailoredResume, filename) {
+  const content = generateLatexSource(tailoredResume);
+  const defaultFilename = (tailoredResume?.name?.trim())
+    ? `${tailoredResume.name.trim().replace(/\s+/g, '_')}_Resume.tex`
+    : 'Tailored_Resume.tex';
+  const saveName = filename || defaultFilename;
+  const blob = new Blob([content], { type: 'application/x-latex;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = saveName;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}

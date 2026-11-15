@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const jobController = require('../controllers/jobController');
+const { requireAuth, optionalAuth } = require('../middleware/authMiddleware');
 
 // Multer in-memory storage for PDF CV upload (up to 10MB)
 const upload = multer({
@@ -29,31 +30,40 @@ router.get('/countries', jobController.getCountries);
 // GET /api/jobs/stats - Aggregate counts and latest sync runs
 router.get('/stats', jobController.getJobStats);
 
-// POST /api/jobs/sync - Trigger on-demand job collection
-router.post('/sync', jobController.triggerSync);
+// GET /api/jobs/queue-status - Background task queue metrics & telemetry (Protected)
+router.get('/queue-status', requireAuth, async (req, res) => {
+  try {
+    const { getQueueStats } = require('../services/jobQueue');
+    const stats = await getQueueStats();
+    res.status(200).json({ success: true, ...stats });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/jobs/sync - Trigger on-demand job collection (Protected)
+router.post('/sync', requireAuth, jobController.triggerSync);
 
 // GET /api/jobs/sync/status - Check ongoing sync status
 router.get('/sync/status', jobController.getSyncStatus);
 
-// POST /api/jobs/harvest?city={cityName} - Automated public ATS job harvest for a city
-router.post('/harvest', jobController.harvestJobs);
+// POST /api/jobs/harvest?city={cityName} - Automated public ATS job harvest for a city (Protected)
+router.post('/harvest', requireAuth, jobController.harvestJobs);
 
 // GET /api/jobs/harvest/status - Check ongoing automated harvest status
 router.get('/harvest/status', jobController.getHarvestState);
 
-// POST /api/jobs/re-enrich - Re-enrich corridor and metadata on existing jobs
-router.post('/re-enrich', jobController.reEnrichJobs);
+// POST /api/jobs/re-enrich - Re-enrich corridor and metadata on existing jobs (Protected)
+router.post('/re-enrich', requireAuth, jobController.reEnrichJobs);
 
-// GET /api/jobs/audit-urls - Audit applyUrl patterns across all jobs
-router.get('/audit-urls', jobController.auditUrls);
+// GET /api/jobs/audit-urls - Audit applyUrl patterns across all jobs (Protected)
+router.get('/audit-urls', requireAuth, jobController.auditUrls);
 
-// POST /api/jobs/fix-urls - Fix broken or guessed applyUrls across all jobs
-router.post('/fix-urls', jobController.fixBrokenUrls);
+// POST /api/jobs/fix-urls - Fix broken or guessed applyUrls across all jobs (Protected)
+router.post('/fix-urls', requireAuth, jobController.fixBrokenUrls);
 
 // GET /api/jobs/:id/eligibility - Analyze job eligibility, freshers suitability, skills & work auth
 router.get('/:id/eligibility', jobController.getJobEligibility);
-
-const { requireAuth, optionalAuth } = require('../middleware/authMiddleware');
 
 // Candidate CV / Portfolio parsing & match endpoints (AUTHENTICATION REQUIRED)
 // POST /api/jobs/candidate/parse-cv - Upload and parse candidate CV PDF

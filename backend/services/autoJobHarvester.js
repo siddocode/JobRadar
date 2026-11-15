@@ -308,12 +308,30 @@ async function probePublicAts(slug, preferredAts = null) {
     return null;
   };
 
+  const probeRecruitee = async () => {
+    try {
+      const recruiteeUrl = `https://${encodeURIComponent(slug)}.recruitee.com/api/offers/`;
+      const res = await fetch(recruiteeUrl, {
+        headers: { 'Accept': 'application/json' },
+        signal: AbortSignal.timeout(6000)
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && Array.isArray(data.offers) && data.offers.length > 0) {
+          return { ats: 'recruitee', slug, jobs: data.offers, rawFormat: 'recruitee' };
+        }
+      }
+    } catch (_) {}
+    return null;
+  };
+
   const probers = [];
-  if (preferredAts === 'workable') probers.push(probeWorkable, probeLever, probeGreenhouse, probeSmartRecruiters, probeAshby);
-  else if (preferredAts === 'lever') probers.push(probeLever, probeGreenhouse, probeSmartRecruiters, probeAshby, probeWorkable);
-  else if (preferredAts === 'smartrecruiters') probers.push(probeSmartRecruiters, probeGreenhouse, probeLever, probeAshby, probeWorkable);
-  else if (preferredAts === 'ashby') probers.push(probeAshby, probeGreenhouse, probeLever, probeSmartRecruiters, probeWorkable);
-  else probers.push(probeGreenhouse, probeLever, probeSmartRecruiters, probeAshby, probeWorkable);
+  if (preferredAts === 'workable') probers.push(probeWorkable, probeLever, probeGreenhouse, probeSmartRecruiters, probeAshby, probeRecruitee);
+  else if (preferredAts === 'recruitee') probers.push(probeRecruitee, probeWorkable, probeLever, probeGreenhouse, probeSmartRecruiters, probeAshby);
+  else if (preferredAts === 'lever') probers.push(probeLever, probeGreenhouse, probeSmartRecruiters, probeAshby, probeWorkable, probeRecruitee);
+  else if (preferredAts === 'smartrecruiters') probers.push(probeSmartRecruiters, probeGreenhouse, probeLever, probeAshby, probeWorkable, probeRecruitee);
+  else if (preferredAts === 'ashby') probers.push(probeAshby, probeGreenhouse, probeLever, probeSmartRecruiters, probeWorkable, probeRecruitee);
+  else probers.push(probeGreenhouse, probeLever, probeSmartRecruiters, probeAshby, probeWorkable, probeRecruitee);
 
   for (const fn of probers) {
     const res = await fn();
@@ -368,6 +386,13 @@ function standardizeAtsJob(rawItem, atsType, companyName, companyMeta, targetCit
     const loc = rawItem.location || {};
     locationRaw = loc.raw || [loc.city, loc.region, loc.country].filter(Boolean).join(', ');
     descriptionHtml = rawItem.description || '';
+  } else if (atsType === 'recruitee') {
+    title = (rawItem.title || '').trim();
+    sourceJobId = String(rawItem.id || rawItem.guid || '').trim();
+    applyUrl = (rawItem.careers_apply_url || rawItem.careers_url || '').trim();
+    const locParts = [rawItem.city, rawItem.state_name || rawItem.state_code, rawItem.country || rawItem.country_code].filter(Boolean);
+    locationRaw = locParts.length > 0 ? locParts.join(', ') : (rawItem.remote ? 'Remote' : (rawItem.location || ''));
+    descriptionHtml = [rawItem.description || '', rawItem.requirements || ''].filter(Boolean).join('\n');
   }
 
   if (!title || !sourceJobId) return null;

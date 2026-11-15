@@ -1,4 +1,25 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import {
+  LayoutDashboard,
+  Briefcase,
+  Layers,
+  Building2,
+  User,
+  Bot,
+  Sparkles,
+  MapPin,
+  Search,
+  SlidersHorizontal,
+  RefreshCw,
+  Sun,
+  Moon,
+  ExternalLink,
+  Plus
+} from 'lucide-react';
+import OverviewView from './components/OverviewView';
+import ApplicationsView from './components/ApplicationsView';
+import CareerProfileView from './components/CareerProfileView';
+import AutopilotView from './components/AutopilotView';
 import CompanyDirectory from './components/CompanyDirectory';
 import ReachOutView from './components/ReachOutView';
 import AuthModal from './components/AuthModal';
@@ -33,7 +54,7 @@ export default function App() {
     setSortByDistance,
     maxDistanceKm
   } = useLocation();
-  const [activeTab, setActiveTab] = useState('jobs'); // 'jobs' | 'directory' | 'reachout'
+  const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'jobs' | 'applications' | 'companies' | 'profile' | 'autopilot'
   const [theme, setTheme] = useState(() => localStorage.getItem('jobradar_theme') || 'light');
 
   const [directoryCities, setDirectoryCities] = useState([]);
@@ -801,58 +822,72 @@ export default function App() {
 
         <nav className="sidebar-nav">
           <button
+            className={`nav-item ${activeTab === 'overview' ? 'active' : ''}`}
+            onClick={() => { setActiveTab('overview'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+            id="tab-overview"
+          >
+            <span className="nav-item-icon">
+              <LayoutDashboard size={16} />
+            </span>
+            <span className="nav-item-text">Overview</span>
+          </button>
+
+          <button
             className={`nav-item ${activeTab === 'jobs' ? 'active' : ''}`}
-            onClick={() => setActiveTab('jobs')}
+            onClick={() => { setActiveTab('jobs'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
             id="tab-jobs"
           >
             <span className="nav-item-icon">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2">
-                <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
-                <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
-              </svg>
+              <Briefcase size={16} />
             </span>
-            <span className="nav-item-text">Live jobs</span>
+            <span className="nav-item-text">Discover Jobs</span>
             {meta.totalInDb > 0 && <span className="nav-item-badge">{meta.totalInDb.toLocaleString()}</span>}
           </button>
 
           <button
-            className={`nav-item ${activeTab === 'directory' ? 'active' : ''}`}
-            onClick={() => setActiveTab('directory')}
-            id="tab-directory"
+            className={`nav-item ${activeTab === 'applications' ? 'active' : ''}`}
+            onClick={() => { setActiveTab('applications'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+            id="tab-applications"
           >
             <span className="nav-item-icon">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2">
-                <rect x="4" y="2" width="16" height="20" rx="2" ry="2" />
-                <line x1="9" y1="22" x2="9" y2="22.01" />
-                <line x1="15" y1="22" x2="15" y2="22.01" />
-                <line x1="9" y1="6" x2="9" y2="6.01" />
-                <line x1="15" y1="6" x2="15" y2="6.01" />
-                <line x1="9" y1="10" x2="9" y2="10.01" />
-                <line x1="15" y1="10" x2="15" y2="10.01" />
-                <line x1="9" y1="14" x2="9" y2="14.01" />
-                <line x1="15" y1="14" x2="15" y2="14.01" />
-                <line x1="9" y1="18" x2="9" y2="18.01" />
-                <line x1="15" y1="18" x2="15" y2="18.01" />
-              </svg>
+              <Layers size={16} />
             </span>
-            <span className="nav-item-text">Company directory</span>
+            <span className="nav-item-text">Applications</span>
+          </button>
+
+          <button
+            className={`nav-item ${activeTab === 'companies' || activeTab === 'directory' ? 'active' : ''}`}
+            onClick={() => { setActiveTab('companies'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+            id="tab-companies"
+          >
+            <span className="nav-item-icon">
+              <Building2 size={16} />
+            </span>
+            <span className="nav-item-text">Companies</span>
             {companyCount > 0 && <span className="nav-item-badge">{companyCount}</span>}
           </button>
 
           <button
-            className={`nav-item ${activeTab === 'reachout' ? 'active' : ''}`}
-            onClick={() => setActiveTab('reachout')}
-            id="tab-reachout"
+            className={`nav-item ${activeTab === 'profile' ? 'active' : ''}`}
+            onClick={() => { setActiveTab('profile'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+            id="tab-profile"
           >
             <span className="nav-item-icon">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="12" cy="12" r="10" />
-                <circle cx="12" cy="12" r="6" />
-                <circle cx="12" cy="12" r="2" />
-              </svg>
+              <User size={16} />
             </span>
-            <span className="nav-item-text">Outreach pipeline</span>
-            {reachOutCount > 0 && <span className="nav-item-badge">{reachOutCount}</span>}
+            <span className="nav-item-text">My Profile</span>
+          </button>
+
+          <button
+            className={`nav-item ${activeTab === 'autopilot' ? 'active' : ''}`}
+            onClick={() => { setActiveTab('autopilot'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+            id="tab-autopilot"
+          >
+            <span className="nav-item-icon">
+              <Bot size={16} />
+            </span>
+            <span className="nav-item-text">Autopilot</span>
+            <span className="nav-item-badge tag-copper">Auto</span>
           </button>
         </nav>
       </aside>
@@ -885,14 +920,22 @@ export default function App() {
 
           <div className="topbar-title-block">
             <h1 className="page-heading">
-              {activeTab === 'jobs' && 'Live jobs'}
-              {activeTab === 'directory' && 'Company directory'}
-              {activeTab === 'reachout' && 'Outreach pipeline'}
+              {activeTab === 'overview' && 'Mission Control & Overview'}
+              {activeTab === 'jobs' && 'Discover Engineering Jobs'}
+              {activeTab === 'applications' && 'Application Lifecycle'}
+              {(activeTab === 'companies' || activeTab === 'directory') && 'Company Directory & Hubs'}
+              {activeTab === 'reachout' && 'Outreach Pipeline'}
+              {activeTab === 'profile' && 'Master Career Profile'}
+              {activeTab === 'autopilot' && 'Application Autopilot'}
             </h1>
             <p className="page-subheading">
-              {activeTab === 'jobs' && 'Real-time verified job openings directly from ATS boards.'}
-              {activeTab === 'directory' && 'Discover verified employers and track your outreach.'}
+              {activeTab === 'overview' && 'Key application milestones, urgent actions, and recommended technology opportunities.'}
+              {activeTab === 'jobs' && 'Verified direct public ATS postings across Indian tech capitals.'}
+              {activeTab === 'applications' && 'Track and manage your applications across all recruitment stages.'}
+              {(activeTab === 'companies' || activeTab === 'directory') && 'Verified employers, detected ATS portals, and physical office corridors.'}
               {activeTab === 'reachout' && 'Proactive outreach to companies before jobs are posted publicly.'}
+              {activeTab === 'profile' && 'Maintain your master credentials and verified competencies for smart matching.'}
+              {activeTab === 'autopilot' && 'Continuous screening, tailored preparation, and assisted dispatch.'}
             </p>
           </div>
 
@@ -1059,24 +1102,68 @@ export default function App() {
 
         <div className="main-content-body">
 
-          {/* View 1: Company Directory */}
-          {activeTab === 'directory' && (
+          {/* View 1: Mission Control & Overview */}
+          {activeTab === 'overview' && (
+            <OverviewView
+              jobs={jobs}
+              stats={stats}
+              onNavigateTab={(tab) => {
+                setActiveTab(tab);
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              onSelectJob={(job) => setEligibilityJob(job)}
+              onOpenProfile={() => {
+                setActiveTab('profile');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+            />
+          )}
+
+          {/* View 2: Applications Lifecycle */}
+          {activeTab === 'applications' && (
+            <ApplicationsView
+              onNavigateJobs={() => {
+                setActiveTab('jobs');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+            />
+          )}
+
+          {/* View 3: Company Directory */}
+          {(activeTab === 'companies' || activeTab === 'directory') && (
             <CompanyDirectory
               cities={directoryCities}
               onRefreshMeta={fetchDirectoryMeta}
             />
           )}
 
-          {/* View 2: Reach Out View */}
+          {/* View 4: Master Career Profile */}
+          {activeTab === 'profile' && (
+            <CareerProfileView
+              onOpenUploadModal={() => setIsProfileModalOpen(true)}
+            />
+          )}
+
+          {/* View 5: Application Autopilot */}
+          {activeTab === 'autopilot' && (
+            <AutopilotView
+              onNavigateApplications={() => {
+                setActiveTab('applications');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+            />
+          )}
+
+          {/* View 6: Reach Out View (Legacy Pipeline) */}
           {activeTab === 'reachout' && (
             <ReachOutView
               cities={directoryCities}
-              onNavigateToDirectory={() => setActiveTab('directory')}
+              onNavigateToDirectory={() => setActiveTab('companies')}
               onPipelineChange={fetchDirectoryMeta}
             />
           )}
 
-          {/* View 3: Live Jobs View */}
+          {/* View 7: Discover Jobs View */}
           {activeTab === 'jobs' && (
             <div className="live-jobs-container">
               {/* Aggregate Stats Ribbon */}
@@ -2060,6 +2147,22 @@ export default function App() {
       <nav className="mobile-bottom-nav" aria-label="Mobile Navigation">
         <button
           type="button"
+          className={`mobile-nav-btn ${activeTab === 'overview' ? 'active' : ''}`}
+          onClick={() => {
+            setActiveTab('overview');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+          id="mobile-tab-overview"
+          aria-label="Mission Control Overview"
+        >
+          <div className="mobile-nav-icon-wrap">
+            <LayoutDashboard size={20} />
+          </div>
+          <span className="mobile-nav-label">Overview</span>
+        </button>
+
+        <button
+          type="button"
           className={`mobile-nav-btn ${activeTab === 'jobs' ? 'active' : ''}`}
           onClick={() => {
             setActiveTab('jobs');
@@ -2069,81 +2172,78 @@ export default function App() {
           aria-label="Live jobs"
         >
           <div className="mobile-nav-icon-wrap">
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2">
-              <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
-              <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
-            </svg>
+            <Briefcase size={20} />
             {meta.totalInDb > 0 && (
               <span className="mobile-nav-badge">
                 {meta.totalInDb > 999 ? `${(meta.totalInDb / 1000).toFixed(1)}k` : meta.totalInDb}
               </span>
             )}
           </div>
-          <span className="mobile-nav-label">Live Jobs</span>
+          <span className="mobile-nav-label">Jobs</span>
         </button>
 
         <button
           type="button"
-          className={`mobile-nav-btn ${activeTab === 'directory' ? 'active' : ''}`}
+          className={`mobile-nav-btn ${activeTab === 'applications' ? 'active' : ''}`}
           onClick={() => {
-            setActiveTab('directory');
+            setActiveTab('applications');
             window.scrollTo({ top: 0, behavior: 'smooth' });
           }}
-          id="mobile-tab-directory"
+          id="mobile-tab-applications"
+          aria-label="Application Lifecycle"
+        >
+          <div className="mobile-nav-icon-wrap">
+            <Layers size={20} />
+          </div>
+          <span className="mobile-nav-label">Apps</span>
+        </button>
+
+        <button
+          type="button"
+          className={`mobile-nav-btn ${activeTab === 'companies' || activeTab === 'directory' ? 'active' : ''}`}
+          onClick={() => {
+            setActiveTab('companies');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+          id="mobile-tab-companies"
           aria-label="Company directory"
         >
           <div className="mobile-nav-icon-wrap">
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2">
-              <rect x="4" y="2" width="16" height="20" rx="2" ry="2" />
-              <line x1="9" y1="22" x2="9" y2="22.01" />
-              <line x1="15" y1="22" x2="15" y2="22.01" />
-              <line x1="9" y1="6" x2="9" y2="6.01" />
-              <line x1="15" y1="6" x2="15" y2="6.01" />
-              <line x1="9" y1="10" x2="9" y2="10.01" />
-              <line x1="15" y1="10" x2="15" y2="10.01" />
-              <line x1="9" y1="14" x2="9" y2="14.01" />
-              <line x1="15" y1="14" x2="15" y2="14.01" />
-              <line x1="9" y1="18" x2="9" y2="18.01" />
-              <line x1="15" y1="18" x2="15" y2="18.01" />
-            </svg>
+            <Building2 size={20} />
             {companyCount > 0 && <span className="mobile-nav-badge">{companyCount}</span>}
           </div>
-          <span className="mobile-nav-label">Directory</span>
+          <span className="mobile-nav-label">Companies</span>
         </button>
 
         <button
           type="button"
-          className={`mobile-nav-btn ${activeTab === 'reachout' ? 'active' : ''}`}
+          className={`mobile-nav-btn ${activeTab === 'autopilot' ? 'active' : ''}`}
           onClick={() => {
-            setActiveTab('reachout');
+            setActiveTab('autopilot');
             window.scrollTo({ top: 0, behavior: 'smooth' });
           }}
-          id="mobile-tab-reachout"
-          aria-label="Outreach pipeline"
+          id="mobile-tab-autopilot"
+          aria-label="Application Autopilot"
         >
           <div className="mobile-nav-icon-wrap">
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="12" cy="12" r="10" />
-              <circle cx="12" cy="12" r="6" />
-              <circle cx="12" cy="12" r="2" />
-            </svg>
-            {reachOutCount > 0 && <span className="mobile-nav-badge">{reachOutCount}</span>}
+            <Bot size={20} />
           </div>
-          <span className="mobile-nav-label">Outreach</span>
+          <span className="mobile-nav-label">Autopilot</span>
         </button>
 
         <button
           type="button"
-          className="mobile-nav-btn"
+          className={`mobile-nav-btn ${activeTab === 'profile' ? 'active' : ''}`}
           onClick={() => {
             if (!isAuthenticated) {
-              openAuthModal('Please sign in or create an account to personalize CV and track pipeline.');
+              openAuthModal('Please sign in or create an account to view and edit profile.');
             } else {
-              setIsProfileModalOpen(true);
+              setActiveTab('profile');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
             }
           }}
-          id="mobile-tab-account"
-          aria-label="Candidate profile or sign in"
+          id="mobile-tab-profile"
+          aria-label="Candidate master profile"
         >
           <div className="mobile-nav-icon-wrap">
             {isAuthenticated ? (
@@ -2151,13 +2251,10 @@ export default function App() {
                 {user?.name ? user.name.slice(0, 2).toUpperCase() : (user?.email ? user.email.slice(0, 2).toUpperCase() : 'UR')}
               </span>
             ) : (
-              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                <circle cx="12" cy="7" r="4" />
-              </svg>
+              <User size={20} />
             )}
           </div>
-          <span className="mobile-nav-label">{isAuthenticated ? 'Profile' : 'Sign In'}</span>
+          <span className="mobile-nav-label">Profile</span>
         </button>
       </nav>
 

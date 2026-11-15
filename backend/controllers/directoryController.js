@@ -1305,5 +1305,30 @@ exports.reverseGeocode = async (req, res) => {
   }
 };
 
+/**
+ * Automatically detects and verifies an ATS provider for a company or career URL.
+ * POST /api/directory/detect-ats
+ */
+exports.detectAts = async (req, res) => {
+  try {
+    const { name, url } = req.body || {};
+    if (!url) {
+      return res.status(400).json({ success: false, error: 'Target URL or domain is required.' });
+    }
+
+    const { detectCompanyAts } = require('../services/atsDetector');
+    const result = await detectCompanyAts(name || '', url);
+
+    return res.status(200).json({
+      success: true,
+      result
+    });
+  } catch (err) {
+    console.error('[DetectATS] Error:', err.message);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+};
+
+
 
 
