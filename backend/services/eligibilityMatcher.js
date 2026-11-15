@@ -48,23 +48,29 @@ function evaluateCandidateEligibility(jobEligibility, candidateProfile) {
 
   let countryResult = {
     id: 'country-eligibility',
+    factor: 'work_authorization',
     category: 'Work Authorization & Country',
     title: '',
     status: 'ELIGIBLE',
     isEligible: true,
     isBlocker: false,
+    severity: 'none',
     badgeTone: 'success',
     icon: '🇮🇳',
     detail: '',
-    recommendation: null
+    explanation: '',
+    recommendation: null,
+    chips: []
   };
 
   if (!candidateCountryKnown) {
     countryScore = 25;
     countryResult.title = 'Country Fit: Confirm Your Work Location';
     countryResult.detail = 'Your profile does not include a detected country. Verify the job’s location and work authorization requirements before applying.';
+    countryResult.explanation = 'Candidate country is unspecified or not detected from CV/portfolio. Work authorization should be verified directly against the ATS posting.';
     countryResult.icon = 'ℹ️';
     countryResult.badgeTone = 'info';
+    countryResult.chips = ['Location Unverified'];
     eligibleFactors.push(countryResult);
   } else if (indiaPolicy.status === 'direct_india') {
     // DIRECT INDIA ROLE
@@ -72,19 +78,24 @@ function evaluateCandidateEligibility(jobEligibility, candidateProfile) {
       countryScore = 35;
       countryResult.title = 'Country Fit: 100% Eligible (Direct India Entity)';
       countryResult.detail = `This job is based in India (${jobCity}). You reside in India and are 100% eligible for direct domestic hiring with Indian payroll, EPF, and statutory benefits.`;
+      countryResult.explanation = `Direct domestic hiring alignment: Role is located in ${jobCity}, India. Candidate is verified based in India with statutory right-to-work and immediate eligibility for domestic payroll.`;
       countryResult.icon = '✓';
       countryResult.badgeTone = 'success';
+      countryResult.chips = ['India Resident', jobCity || 'India'];
       eligibleFactors.push(countryResult);
     } else {
       countryScore = 10;
       countryResult.status = 'NOT_ELIGIBLE';
       countryResult.isEligible = false;
       countryResult.isBlocker = true;
+      countryResult.severity = 'blocker';
       countryResult.badgeTone = 'danger';
       countryResult.icon = '🚫';
       countryResult.title = 'Country Mismatch: India Employment Required';
       countryResult.detail = `Role is contracted under ${jobEligibility.company}'s Indian entity. Candidate profile indicates location in ${candCountry}. Legal right-to-work in India or relocation required.`;
+      countryResult.explanation = `Location gap: Role requires domestic employment in India under local corporate entity. Candidate profile indicates residency in ${candCountry}.`;
       countryResult.recommendation = 'Confirm whether company sponsors relocation to India or look for roles in your country.';
+      countryResult.missingItems = ['India Work Authorization'];
       nonEligibleFactors.push(countryResult);
       isHardBlocker = true;
     }
@@ -93,8 +104,10 @@ function evaluateCandidateEligibility(jobEligibility, candidateProfile) {
     countryScore = 35;
     countryResult.title = 'Country Fit: 100% Eligible (Global Remote)';
     countryResult.detail = `${jobEligibility.company} allows international remote candidates. Residing in ${candCountry} is fully eligible for remote contract or Employer of Record (EOR) hiring.`;
+    countryResult.explanation = `Global remote role: Employer hires internationally via EOR or cross-border contract. Candidate location (${candCountry}) satisfies remote criteria.`;
     countryResult.icon = '🌐';
     countryResult.badgeTone = 'success';
+    countryResult.chips = ['Global Remote', candCountry];
     eligibleFactors.push(countryResult);
   } else if (indiaPolicy.status === 'restricted_us') {
     // US RESTRICTED ROLE
@@ -102,19 +115,24 @@ function evaluateCandidateEligibility(jobEligibility, candidateProfile) {
       countryScore = 35;
       countryResult.title = 'Country Fit: US Work Authorization Satisfied';
       countryResult.detail = `Role is US-based. Your profile indicates US residency or work authorization.`;
+      countryResult.explanation = `US work authorization verified: Candidate satisfies domestic legal eligibility for US-hosted role.`;
       countryResult.icon = '🇺🇸';
       countryResult.badgeTone = 'success';
+      countryResult.chips = ['US Work Authorized'];
       eligibleFactors.push(countryResult);
     } else {
       countryScore = 0;
       countryResult.status = 'NOT_ELIGIBLE';
       countryResult.isEligible = false;
       countryResult.isBlocker = true;
+      countryResult.severity = 'blocker';
       countryResult.badgeTone = 'danger';
       countryResult.icon = '🚫';
       countryResult.title = 'Country Blocker: US Work Authorization Required';
       countryResult.detail = `This role is hosted in the United States (${jobEligibility.workplace?.locationDisplay || 'USA'}). Indian candidates cannot work cross-border without existing US citizenship, Green Card, or valid US visa.`;
+      countryResult.explanation = `Regulatory work authorization blocker: Role requires legal US authorization. Candidate is located in ${candCountry} without verified US visa or permanent residency.`;
       countryResult.recommendation = 'Filter for India-based openings or global remote roles on JobRadar to avoid visa rejection.';
+      countryResult.missingItems = ['US Citizenship / Green Card / Work Visa'];
       nonEligibleFactors.push(countryResult);
       isHardBlocker = true;
     }
@@ -124,19 +142,24 @@ function evaluateCandidateEligibility(jobEligibility, candidateProfile) {
       countryScore = 35;
       countryResult.title = `Country Fit: Local ${jobCountry} Candidate`;
       countryResult.detail = `Role is located in ${jobCountry} and matches your location.`;
+      countryResult.explanation = `Domestic local opening: Candidate residency (${candCountry}) matches the role's host country (${jobCountry}).`;
       countryResult.icon = '✓';
       countryResult.badgeTone = 'success';
+      countryResult.chips = [jobCountry];
       eligibleFactors.push(countryResult);
     } else {
       countryScore = 5;
       countryResult.status = 'NOT_ELIGIBLE';
       countryResult.isEligible = false;
       countryResult.isBlocker = true;
+      countryResult.severity = 'blocker';
       countryResult.badgeTone = 'danger';
       countryResult.icon = '🚫';
       countryResult.title = `Country Blocker: Requires ${jobCountry} Work Visa`;
       countryResult.detail = `This role is based in ${jobCountry}. Candidate is in ${candCountry}. Cross-border hiring without local visa is generally not supported.`;
+      countryResult.explanation = `Jurisdiction mismatch: Role is located in ${jobCountry}. Candidate is in ${candCountry}. Relocation or local work visa required.`;
       countryResult.recommendation = `Check company ATS for visa sponsorship availability before applying.`;
+      countryResult.missingItems = [`${jobCountry} Work Authorization`];
       nonEligibleFactors.push(countryResult);
       isHardBlocker = true;
     }
@@ -145,8 +168,10 @@ function evaluateCandidateEligibility(jobEligibility, candidateProfile) {
     countryScore = 30;
     countryResult.title = 'Country Fit: Location-Dependent (Check ATS)';
     countryResult.detail = `Location requirements are flexible or unstated. If ${jobEligibility.company} has an Indian entity or offers remote work, you can apply directly.`;
+    countryResult.explanation = `Location criteria are flexible or contingent on team. Confirm specific entity details directly in employer ATS.`;
     countryResult.icon = 'ℹ️';
     countryResult.badgeTone = 'info';
+    countryResult.chips = ['Flexible / Conditional'];
     eligibleFactors.push(countryResult);
   }
 
@@ -164,15 +189,19 @@ function evaluateCandidateEligibility(jobEligibility, candidateProfile) {
 
   let expResult = {
     id: 'experience-eligibility',
+    factor: 'experience_seniority',
     category: 'Experience & Seniority',
     title: '',
     status: 'ELIGIBLE',
     isEligible: true,
     isBlocker: false,
+    severity: 'none',
     badgeTone: 'success',
     icon: '🎓',
     detail: '',
-    recommendation: null
+    explanation: '',
+    recommendation: null,
+    chips: [candExpDisplay]
   };
 
   const jobMinMonths = jobMinYears * 12;
@@ -183,6 +212,7 @@ function evaluateCandidateEligibility(jobEligibility, candidateProfile) {
       experienceScore = 30;
       expResult.title = `Experience Fit: 100% Eligible (${candExpDisplay} Exp)`;
       expResult.detail = `Job specifically welcomes college grads, early career talent, and candidates with 0-2 years of experience. Your profile (${candExpDisplay}, ${candidateProfile.seniorityLevel || 'Early Career'}) is an ideal fit.`;
+      expResult.explanation = `Seniority alignment: Early-career / fresher opening. Candidate background (${candExpDisplay}) aligns cleanly with junior talent expectations.`;
       expResult.icon = '✓';
       expResult.badgeTone = 'success';
       eligibleFactors.push(expResult);
@@ -191,6 +221,7 @@ function evaluateCandidateEligibility(jobEligibility, candidateProfile) {
       experienceScore = 28;
       expResult.title = 'Experience Fit: Exceeds Minimum Entry-Level Requirement';
       expResult.detail = `Role is entry-level, but your ${candExpDisplay} of experience gives you strong foundational qualification.`;
+      expResult.explanation = `Qualification surplus: Candidate has ${candExpDisplay} of verified experience, exceeding the role's baseline 0-year requirement.`;
       expResult.icon = '✓';
       expResult.badgeTone = 'success';
       eligibleFactors.push(expResult);
@@ -201,6 +232,7 @@ function evaluateCandidateEligibility(jobEligibility, candidateProfile) {
       experienceScore = 30;
       expResult.title = `Experience Fit: Meets Seniority Requirement (${candExpDisplay} Exp)`;
       expResult.detail = `Job specifies ${jobSeniority.experienceText}. Your profile reflects ${candExpDisplay} of experience (${candidateProfile.seniorityLevel}).`;
+      expResult.explanation = `Experience prerequisite satisfied: Job requires ${jobSeniority.experienceText}. Candidate possesses ${candExpDisplay} (${candTotalMonths} total months), fully satisfying the seniority tier.`;
       expResult.icon = '✓';
       expResult.badgeTone = 'success';
       eligibleFactors.push(expResult);
@@ -209,6 +241,7 @@ function evaluateCandidateEligibility(jobEligibility, candidateProfile) {
       experienceScore = 22;
       expResult.title = `Experience Level: Close Match (${candExpDisplay} vs ${jobMinYears}+ Yrs)`;
       expResult.detail = `Role prefers ${jobSeniority.experienceText}; your profile shows ${candExpDisplay}. Your practical engineering experience and skill match provide strong qualification.`;
+      expResult.explanation = `Near-threshold experience: Candidate experience (${candExpDisplay}) is within acceptable recruiter variance of ${jobSeniority.experienceText}. Practical skills and projects offset slight seniority variance.`;
       expResult.icon = '✓';
       expResult.badgeTone = 'success';
       eligibleFactors.push(expResult);
@@ -221,11 +254,17 @@ function evaluateCandidateEligibility(jobEligibility, candidateProfile) {
       expResult.icon = '⚠️';
       expResult.title = `Experience Gap: Seniority Requirement Not Met`;
       expResult.detail = `Job requires ${jobSeniority.experienceText} (${jobSeniority.level}). Your profile reflects ${candExpDisplay} (${candidateProfile.seniorityLevel}).`;
+      expResult.explanation = `Seniority delta: Role requires ${jobSeniority.experienceText} (${jobMinMonths} months) whereas profile reflects ${candExpDisplay} (${candTotalMonths} months). Deficit of approximately ${Math.max(0, jobMinMonths - candTotalMonths)} months.`;
       expResult.recommendation = `Target roles matching your current experience level (0-${Math.max(2, candYears + 1)} years) or highlight deep hands-on project work in your application.`;
+      expResult.missingItems = [`${jobSeniority.experienceText} required`];
+      expResult.severity = 'gap';
       
       // If gap is large (e.g. Senior/Lead/Architect/Director requiring 4+ years while candidate has < 24 months)
       if (jobMinYears >= 4 && candTotalMonths < 24) {
         expResult.isBlocker = true;
+        expResult.severity = 'blocker';
+        expResult.badgeTone = 'danger';
+        expResult.icon = '🚫';
         isHardBlocker = true;
       }
       nonEligibleFactors.push(expResult);
@@ -263,13 +302,17 @@ function evaluateCandidateEligibility(jobEligibility, candidateProfile) {
 
     eligibleFactors.push({
       id: 'matched-skills',
+      factor: 'technical_skills',
       category: 'Technical Stack',
       title: `Technical Skills: ${matchedSkills.length} Core Requirements Matched`,
       status: 'ELIGIBLE',
       isEligible: true,
+      isBlocker: false,
+      severity: 'none',
       badgeTone: 'success',
       icon: '⚡',
       detail: `Your profile matches key technical competencies required for this position.`,
+      explanation: `Verified competencies in candidate profile: ${matchedSkills.join(', ')}. Candidate demonstrates proven overlap with ${Math.round(matchRatio * 100)}% of the specified tech stack.`,
       chips: matchedSkills
     });
   }
@@ -278,15 +321,19 @@ function evaluateCandidateEligibility(jobEligibility, candidateProfile) {
     const isMajorGap = matchRatio < 0.35 && jobSkills.length >= 3;
     nonEligibleFactors.push({
       id: 'missing-skills',
+      factor: 'technical_skills',
       category: 'Skill Gaps',
       title: isMajorGap ? `Skill Gap: ${missingSkills.length} Required Technologies Missing` : `Recommended Additional Skills (${missingSkills.length})`,
       status: isMajorGap ? 'NOT_ELIGIBLE' : 'RECOMMENDATION',
       isEligible: !isMajorGap,
+      isBlocker: false,
+      severity: isMajorGap ? 'gap' : 'notice',
       badgeTone: isMajorGap ? 'warning' : 'info',
       icon: isMajorGap ? '⚠️' : '💡',
       detail: isMajorGap
         ? `The job prioritizes several technologies not detected in your CV/portfolio.`
         : `These skills are mentioned in the job description and could strengthen your application if added.`,
+      explanation: `Skills requested in the posting but absent from candidate profile: ${missingSkills.join(', ')}.`,
       missingItems: missingSkills,
       recommendation: `Add experience, projects, or certifications covering ${missingSkills.slice(0, 3).join(', ')} to boost your ATS resume score.`
     });
@@ -299,13 +346,17 @@ function evaluateCandidateEligibility(jobEligibility, candidateProfile) {
   educationScore = 10;
   eligibleFactors.push({
     id: 'education-fit',
+    factor: 'education_credentials',
     category: 'Education & Credentials',
     title: 'Education Requirement Satisfied',
     status: 'ELIGIBLE',
     isEligible: true,
+    isBlocker: false,
+    severity: 'none',
     badgeTone: 'success',
     icon: '📜',
     detail: `Candidate credentials (${candEdu}) align with the standard education requirements for this engineering role.`,
+    explanation: `Academic criteria satisfied: Candidate has completed or is pursuing relevant engineering education (${candEdu}).`,
     chips: [candEdu]
   });
 
@@ -318,25 +369,33 @@ function evaluateCandidateEligibility(jobEligibility, candidateProfile) {
   if (jobMode === 'Remote') {
     eligibleFactors.push({
       id: 'work-mode',
+      factor: 'workplace_mode',
       category: 'Workplace & Commute',
       title: 'Work Mode: 100% Remote Compatible',
       status: 'ELIGIBLE',
       isEligible: true,
+      isBlocker: false,
+      severity: 'none',
       badgeTone: 'success',
       icon: '💻',
       detail: `This is a Remote position. You can work comfortably from your current location without office commuting.`,
+      explanation: `Zero mandatory office commute: Candidate can fulfill all duties remotely from current location (${candCountry}).`,
       chips: ['Remote Work']
     });
   } else {
     eligibleFactors.push({
       id: 'work-mode',
+      factor: 'workplace_mode',
       category: 'Workplace & Commute',
       title: `Work Mode: ${jobMode} (${jobLoc})`,
       status: 'ELIGIBLE',
       isEligible: true,
+      isBlocker: false,
+      severity: 'none',
       badgeTone: 'info',
       icon: '🏢',
       detail: `Role involves ${jobMode} presence in ${jobLoc}. Candidate should be based in or open to commuting/relocating to ${jobLoc}.`,
+      explanation: `Location presence requirement: Role specifies ${jobMode} presence in ${jobLoc}. Candidate location: ${candidateProfile.city ? `${candidateProfile.city}, ` : ''}${candCountry}.`,
       chips: [jobMode, jobLoc]
     });
   }
@@ -440,7 +499,19 @@ function evaluateCandidateEligibility(jobEligibility, candidateProfile) {
       nonEligibleCount: nonEligibleFactors.length,
       matchedSkillsCount: matchedSkills.length,
       missingSkillsCount: missingSkills.length,
-      matchRatio: Math.round(matchRatio * 100)
+      matchRatio: Math.round(matchRatio * 100),
+      fitCount: eligibleFactors.length,
+      gapCount: nonEligibleFactors.length
+    },
+    whyYouAreAFit: eligibleFactors,
+    requirementsGap: nonEligibleFactors,
+    explainableBreakdown: {
+      whyYouAreAFit: eligibleFactors,
+      requirementsGap: nonEligibleFactors,
+      fitSummary: `${eligibleFactors.length} positive match criteria satisfied.`,
+      gapSummary: nonEligibleFactors.length > 0
+        ? `${nonEligibleFactors.filter(g => g.isBlocker).length} hard blocker(s), ${nonEligibleFactors.filter(g => !g.isBlocker).length} addressable gap(s).`
+        : 'Zero blockers or critical requirements gaps detected.'
     },
     eligibleFactors,
     nonEligibleFactors

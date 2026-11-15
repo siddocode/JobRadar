@@ -8307,6 +8307,129 @@ body.modal-open .mobile-bottom-nav {
   box-shadow: 0 6px 18px rgba(37, 99, 235, 0.45);
 }
 
+/* Stage with Autopilot Button & Banner */
+.btn-stage-autopilot {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 18px;
+  border-radius: var(--radius-md, 8px);
+  background: linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%);
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 700;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.3);
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.btn-stage-autopilot:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(99, 102, 241, 0.45);
+  background: linear-gradient(135deg, #6d28d9 0%, #4338ca 100%);
+}
+
+.btn-stage-autopilot.staged {
+  background: rgba(16, 185, 129, 0.14);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  box-shadow: none;
+  cursor: default;
+}
+
+.btn-stage-autopilot:disabled {
+  opacity: 0.85;
+}
+
+.autopilot-stage-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 18px 0;
+  padding: 14px 18px;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.08) 0%, rgba(139, 92, 246, 0.08) 100%);
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  border-radius: var(--radius-md, 10px);
+}
+
+.autopilot-stage-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.autopilot-bolt-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: rgba(99, 102, 241, 0.15);
+  color: #6366f1;
+  flex-shrink: 0;
+}
+
+.autopilot-stage-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.autopilot-stage-text strong {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.autopilot-stage-text span {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* Modal Stage Feedback Banner */
+.modal-stage-feedback-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  margin: 0 0 12px 0;
+  border-radius: var(--radius-md, 8px);
+  font-size: 13px;
+  font-weight: 500;
+  animation: fadeIn 0.2s ease-in;
+}
+
+.modal-stage-feedback-banner.success {
+  background: rgba(16, 185, 129, 0.12);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.modal-stage-feedback-banner.error {
+  background: rgba(239, 68, 68, 0.12);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.feedback-dismiss-btn {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: inherit;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 4px;
+  opacity: 0.7;
+}
+
+.feedback-dismiss-btn:hover {
+  opacity: 1;
+}
+
 /* Dark Mode Overrides */
 [data-theme="dark"] .eligibility-modal-container {
   background: var(--bg-card);

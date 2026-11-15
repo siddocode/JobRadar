@@ -169,6 +169,8 @@ function collectStructuredPersonFields(value, fields = {}, depth = 0) {
         fields.email = fields.email || flatValues[0];
       } else if (/^(addresslocality|addresscountry|location)$/.test(normalizedKey)) {
         fields.location = [...(fields.location || []), ...flatValues];
+      } else if (/^(sameas|url)$/.test(normalizedKey)) {
+        fields.links = [...(fields.links || []), ...flatValues];
       }
     }
     collectStructuredPersonFields(fieldValue, fields, depth + 1);
@@ -621,6 +623,7 @@ async function parsePortfolioUrl(url) {
         if (personFields.location?.length) textParts.push(`Location: ${personFields.location.join(', ')}`);
         if (personFields.education?.length) textParts.push(`Education: ${personFields.education.join(', ')}`);
         if (personFields.skills?.length) textParts.push(`Skills: ${personFields.skills.join(', ')}`);
+        if (personFields.links?.length) textParts.push(`Links: ${personFields.links.join(' ')}`);
         const ldText = extractStringsFromJson(ldData);
         if (ldText) {
           textParts.push(`Structured Data: ${ldText.slice(0, 2000)}`);
@@ -648,6 +651,303 @@ async function parsePortfolioUrl(url) {
     console.error(`[candidateParser:parsePortfolioUrl] Failed for ${formattedUrl}:`, error.message);
     throw new Error(`Could not access portfolio URL (${error.message}). Please ensure the site is public or upload your CV PDF directly.`);
   }
+}
+
+/**
+ * Extract social, portfolio, and code repository links from candidate text or metadata.
+ */
+function extractLinksAndPortfolio(text = '', meta = {}) {
+  let portfolio = meta.portfolio || '';
+  let github = '';
+  let linkedin = '';
+  let twitter = '';
+  let leetcode = '';
+  const links = [];
+
+  if (!portfolio && meta.sourceType === 'url' && meta.sourceName) {
+    if (!/github\.com|linkedin\.com/i.test(meta.sourceName)) {
+      portfolio = meta.sourceName.trim();
+    }
+  }
+
+  // GitHub regex
+  const ghMatch = text.match(/(?:https?:\/\/)?(?:www\.)?github\.com\/([a-zA-Z0-9_-]+)/i);
+  if (ghMatch && !['topics', 'trending', 'features', 'pricing', 'login', 'signup', 'explore'].includes(ghMatch[1].toLowerCase())) {
+    github = `https://github.com/${ghMatch[1]}`;
+    links.push({ type: 'github', url: github, label: `github.com/${ghMatch[1]}` });
+  }
+
+  // LinkedIn regex
+  const liMatch = text.match(/(?:https?:\/\/)?(?:[a-zA-Z]{2,3}\.)?linkedin\.com\/in\/([a-zA-Z0-9_-]+)/i);
+  if (liMatch) {
+    linkedin = `https://linkedin.com/in/${liMatch[1]}`;
+    links.push({ type: 'linkedin', url: linkedin, label: `linkedin.com/in/${liMatch[1]}` });
+  }
+
+  // LeetCode regex
+  const lcMatch = text.match(/(?:https?:\/\/)?(?:www\.)?leetcode\.com\/(?:u\/)?([a-zA-Z0-9_-]+)/i);
+  if (lcMatch && !['problemset', 'contest', 'explore'].includes(lcMatch[1].toLowerCase())) {
+    leetcode = `https://leetcode.com/u/${lcMatch[1]}`;
+    links.push({ type: 'leetcode', url: leetcode, label: `leetcode.com/${lcMatch[1]}` });
+  }
+
+  // Twitter / X
+  const twMatch = text.match(/(?:https?:\/\/)?(?:www\.)?(?:twitter\.com|x\.com)\/([a-zA-Z0-9_]{1,15})/i);
+  if (twMatch && !['home', 'explore', 'notifications', 'messages'].includes(twMatch[1].toLowerCase())) {
+    twitter = `https://x.com/${twMatch[1]}`;
+    links.push({ type: 'twitter', url: twitter, label: `x.com/${twMatch[1]}` });
+  }
+
+  // Personal portfolio URL detection from text if not yet set
+  if (!portfolio) {
+    const withoutEmails = text.replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, '');
+    const urlMatches = withoutEmails.match(/(?:https?:\/\/)?(?:www\.)?[a-zA-Z0-9][a-zA-Z0-9-]{1,61}[a-zA-Z0-9]\.(?:com|org|net|tech|dev|io|me|app|site|xyz|in|co)(?:\/[^\s,|]*)?/gi) || [];
+    for (const u of urlMatches) {
+      if (!/github|linkedin|twitter|x\.com|gmail|outlook|yahoo|google|adobe|microsoft|amazon|leetcode|codeforces|hackerrank|npm|medium|substack|youtube|b\.tech|m\.tech|socket\.io/i.test(u)) {
+        const clean = u.trim().replace(/[.,;:)]+$/, '');
+        portfolio = clean.startsWith('http') ? clean : `https://${clean}`;
+        break;
+      }
+    }
+  }
+
+  if (portfolio && !links.some(l => l.type === 'portfolio')) {
+    links.unshift({ type: 'portfolio', url: portfolio, label: portfolio.replace(/^https?:\/\/(?:www\.)?/, '') });
+  }
+
+  return { portfolio, github, linkedin, twitter, leetcode, links };
+}
+
+/**
+ * Extract structured work experience entries from raw resume text.
+ */
+function extractStructuredExperience(text = '') {
+  const experiences = [];
+  const expHeaderRegex = /(?:^|\n)\s*(?:[0-9]+[.\-)]\s*)?(?:work\s+experience|professional\s+experience|employment\s+history|work\s+history|experience|employment|relevant\s+experience|career\s+history)\b/i;
+  const expHeaderMatch = text.match(expHeaderRegex);
+  if (!expHeaderMatch) return experiences;
+
+  const afterHeader = text.slice(expHeaderMatch.index + expHeaderMatch[0].length);
+  const nextSectionRegex = /(?:^|\n)\s*(?:[0-9]+[.\-)]\s*)?(?:education|academic(?:s|\s+background|\s+history)?|projects|featured\s+projects|personal\s+projects|open\s*source|technical\s+skills|skills(?:\s*&|\s+and|\s+technical)?|certifications?|licenses|awards?|achievements?|publications?|leadership|extracurricular|contact|about(?:\s+me)?|summary)\b/i;
+  const nextMatch = afterHeader.match(nextSectionRegex);
+  const expSectionText = nextMatch ? afterHeader.slice(0, nextMatch.index) : afterHeader;
+
+  const lines = expSectionText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const bulletSymbolRegex = /^[•\-\*–—▪▫◦⁃\+>]\s*|^\d+[\.\)]\s*/;
+  const dateRegex = /(?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s*)?\d{4}\s*[-–—to]+\s*(?:present|current|now|till date|(?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s*)?\d{4})|\b\d{4}\s*[-–—to]+\s*(?:present|current|\d{4})\b/i;
+  const actionVerbRegex = /^(?:developed|built|managed|led|created|implemented|designed|engineered|architected|maintained|reduced|increased|spearheaded|optimized|automated|collaborated|integrated|deployed|configured|resolved|authored|trained|researched|conducted|established|coordinated|assisted|executed|wrote|delivered|launched|formulated|programmed|tested|enhanced|scaled|analyzed|refactored|secured|streamlined|supervised|administered)\b/i;
+
+  let currExp = null;
+  for (const line of lines) {
+    const isBullet = bulletSymbolRegex.test(line);
+    const cleanBulletText = line.replace(bulletSymbolRegex, '').trim();
+    const hasDate = dateRegex.test(line);
+    const isAction = actionVerbRegex.test(cleanBulletText);
+    const isPureDateLine = hasDate && cleanBulletText.length <= 35 && !/[a-zA-Z]{5,}/.test(cleanBulletText.replace(/(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*|present|current|now|till date/gi, ''));
+
+    if (currExp && isPureDateLine && !currExp.duration) {
+      const dm = line.match(dateRegex);
+      if (dm) currExp.duration = dm[0].trim();
+      continue;
+    }
+
+    const hasRoleOrCompanyMarker = /^(?:software|senior|junior|lead|principal|staff|frontend|backend|full\s*stack|devops|data|machine\s*learning|sde|intern|engineer|developer|consultant|architect|manager|analyst|specialist|officer|director|associate|trainee|founder|co-founder|vp|head)\b/i.test(cleanBulletText) ||
+      /[–—\-–|]/.test(cleanBulletText) ||
+      /\bat\b/i.test(cleanBulletText);
+
+    const isNewEntry = !isBullet && !isAction && (
+      (hasDate && !isPureDateLine) ||
+      (!currExp) ||
+      (hasRoleOrCompanyMarker && currExp.bullets.length > 0)
+    );
+
+    if (isNewEntry) {
+      if (currExp && (currExp.role || currExp.company || currExp.bullets.length > 0)) {
+        experiences.push(currExp);
+      }
+      const dm = line.match(dateRegex);
+      const duration = dm ? dm[0].trim() : '';
+      const beforeDate = dm ? line.slice(0, dm.index).trim() : line;
+      const parts = beforeDate.split(/[–—\-–|]/);
+      const roleCompPart = parts[0] ? parts[0].trim() : beforeDate;
+      const roleParts = roleCompPart.split(',');
+
+      let role = roleParts[0] ? roleParts[0].trim() : '';
+      let company = roleParts[1] ? roleParts[1].trim() : (parts[1] ? parts[1].trim() : '');
+      let loc = parts[2] ? parts[2].trim() : (parts[1] && parts[1] !== company ? parts[1].trim() : '');
+
+      if (!role && company) {
+        role = company;
+        company = '';
+      }
+
+      currExp = {
+        role: role.replace(/^[#\*\-=\+_\[\]\(\)\d\.\sI|:]+/, '').trim(),
+        company: company.replace(/[#\*\-=\+_\[\]\(\)\s|:]+$/, '').trim(),
+        location: loc.trim(),
+        duration,
+        bullets: []
+      };
+    } else if (currExp) {
+      if (isBullet || isAction || currExp.bullets.length === 0) {
+        if (cleanBulletText) currExp.bullets.push(cleanBulletText);
+      } else if (currExp.bullets.length > 0 && line.length > 0) {
+        currExp.bullets[currExp.bullets.length - 1] += ' ' + line;
+      }
+    }
+  }
+
+  if (currExp && (currExp.role || currExp.company || currExp.bullets.length > 0)) {
+    experiences.push(currExp);
+  }
+
+  return experiences.filter(e => e.role || e.company);
+}
+
+/**
+ * Extract structured education records from raw resume text.
+ */
+function extractStructuredEducation(text = '') {
+  const educationEntries = [];
+  const eduHeaderRegex = /(?:^|\n)\s*(?:[0-9]+[.\-)]\s*)?(?:education|academic\s+background|academic\s+qualifications|academic\s+history|academics|qualifications|educational\s+background|degrees?)\b/i;
+  const eduMatch = text.match(eduHeaderRegex);
+  if (!eduMatch) return educationEntries;
+
+  const afterHeader = text.slice(eduMatch.index + eduMatch[0].length);
+  const nextSectionRegex = /(?:^|\n)\s*(?:[0-9]+[.\-)]\s*)?(?:experience|work\s+experience|professional\s+experience|projects|featured\s+projects|personal\s+projects|technical\s+skills|skills|certifications?|awards?|achievements?|publications?|leadership|extracurricular|contact|about|summary)\b/i;
+  const nextMatch = afterHeader.match(nextSectionRegex);
+  const eduSectionText = nextMatch ? afterHeader.slice(0, nextMatch.index) : afterHeader;
+
+  const lines = eduSectionText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const yearRegex = /\b\d{4}\s*[-–—to]+\s*\d{4}\b|\b\d{4}\b/;
+  const bulletSymbolRegex = /^[•\-\*–—▪▫◦⁃\+>]\s*|^\d+[\.\)]\s*/;
+
+  let currEdu = null;
+  for (const line of lines) {
+    const cleanText = line.replace(bulletSymbolRegex, '').trim();
+    const yrMatch = line.match(yearRegex);
+    const isDetailLine = /\b(?:gpa|cgpa|grade|score|percentage|honors|distinction|major|minor|coursework)\b/i.test(cleanText);
+    const hasDegreeKeyword = /\b(?:b\.?tech|b\.?e\b|b\.?sc|m\.?tech|mca|bca|m\.?s\b|ph\.?d|bachelor|master|degree|diploma|associate)\b/i.test(cleanText);
+    const hasInstKeyword = /\b(?:university|college|institute|school|academy|campus|iit|nit|bits|iiit)\b/i.test(cleanText);
+    const isPureYearLine = yrMatch && cleanText.length <= 25 && !/[a-zA-Z]{4,}/.test(cleanText);
+
+    if (isDetailLine && currEdu) {
+      currEdu.details = currEdu.details ? `${currEdu.details} • ${cleanText}` : cleanText;
+    } else if (currEdu && isPureYearLine && !currEdu.year) {
+      currEdu.year = yrMatch[0].trim();
+    } else if (currEdu && !currEdu.degree && hasDegreeKeyword) {
+      currEdu.degree = cleanText.replace(/\s*\((?:19|20)\d\d.*?\)/, '');
+      if (yrMatch && !currEdu.year) currEdu.year = yrMatch[0].trim();
+    } else if (currEdu && !currEdu.institution && hasInstKeyword) {
+      currEdu.institution = cleanText;
+      if (yrMatch && !currEdu.year) currEdu.year = yrMatch[0].trim();
+    } else {
+      if (currEdu && (currEdu.institution || currEdu.degree)) {
+        educationEntries.push(currEdu);
+      }
+      const year = yrMatch ? yrMatch[0].trim() : '';
+      const titlePart = yrMatch ? line.slice(0, yrMatch.index).trim() : line;
+      const parts = titlePart.split(/[,|–—]/);
+      currEdu = {
+        institution: hasInstKeyword || !hasDegreeKeyword ? (parts[0] ? parts[0].trim() : titlePart) : '',
+        degree: hasDegreeKeyword ? cleanText.replace(/\s*\((?:19|20)\d\d.*?\)/, '') : (parts[1] ? parts[1].trim() : ''),
+        year,
+        details: ''
+      };
+    }
+  }
+
+  if (currEdu && (currEdu.institution || currEdu.degree)) {
+    educationEntries.push(currEdu);
+  }
+
+  return educationEntries.filter(e => e.institution || e.degree);
+}
+
+/**
+ * Extract structured projects from raw resume text.
+ */
+function extractStructuredProjects(text = '') {
+  const projects = [];
+  const projHeaderRegex = /(?:^|\n)\s*(?:[0-9]+[.\-)]\s*)?(?:technical\s+projects|featured\s+projects|personal\s+projects|key\s+projects|academic\s+projects|projects\s*(?:&|and)\s*initiatives|projects|open\s*source(?:\s+projects)?|project\s+work|selected\s+projects)\b/i;
+  const projMatch = text.match(projHeaderRegex);
+  if (!projMatch) return projects;
+
+  const afterHeader = text.slice(projMatch.index + projMatch[0].length);
+  const nextSectionRegex = /(?:^|\n)\s*(?:[0-9]+[.\-)]\s*)?(?:education|experience|work\s+experience|professional\s+experience|technical\s+skills|skills|certifications?|awards?|achievements?|publications?|leadership|extracurricular|contact|about|summary)\b/i;
+  const nextMatch = afterHeader.match(nextSectionRegex);
+  const projSectionText = nextMatch ? afterHeader.slice(0, nextMatch.index) : afterHeader;
+
+  const lines = projSectionText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const bulletSymbolRegex = /^[•\-\*–—▪▫◦⁃\+>]\s*|^\d+[\.\)]\s*/;
+  const actionVerbRegex = /^(?:developed|built|managed|led|created|implemented|designed|engineered|architected|maintained|reduced|increased|spearheaded|optimized|automated|collaborated|integrated|deployed|configured|resolved|authored|trained|researched|conducted|established|coordinated|assisted|executed|wrote|delivered|launched|formulated|programmed|tested|enhanced|scaled|analyzed|refactored|secured|streamlined)\b/i;
+
+  let currProj = null;
+  for (const line of lines) {
+    const isBullet = bulletSymbolRegex.test(line);
+    const cleanBulletText = line.replace(bulletSymbolRegex, '').trim();
+    const isTechStack = /^•?\s*(?:tech(?:\s*stack)?|technologies(?:\s*used)?|tools|stack)\s*[:–—\-]\s*/i.test(line);
+    const isAction = actionVerbRegex.test(cleanBulletText);
+
+    if (isTechStack && currProj) {
+      currProj.techStack = line.replace(/^•?\s*(?:tech(?:\s*stack)?|technologies(?:\s*used)?|tools|stack)\s*[:–—\-]\s*/i, '').trim();
+    } else if (currProj && (isBullet || isAction)) {
+      if (cleanBulletText) currProj.bullets.push(cleanBulletText);
+    } else if (!isBullet && !isAction) {
+      if (currProj && (currProj.name || currProj.bullets.length > 0)) {
+        projects.push(currProj);
+      }
+      const cleanLine = line.replace(/[§Š€#\d\s]+$/, '').trim();
+      const pParts = cleanLine.split(/[—–|]/);
+      currProj = {
+        name: pParts[0] ? pParts[0].trim() : cleanLine,
+        tagline: pParts[1] ? pParts[1].trim() : '',
+        bullets: [],
+        techStack: pParts[2] ? pParts[2].trim() : ''
+      };
+    } else if (currProj && currProj.bullets.length > 0) {
+      currProj.bullets[currProj.bullets.length - 1] += ' ' + line;
+    }
+  }
+
+  if (currProj && (currProj.name || currProj.bullets.length > 0)) {
+    projects.push(currProj);
+  }
+
+  return projects.filter(p => p.name);
+}
+
+/**
+ * Categorize skills list into languages, frameworks, databases, and tools.
+ */
+function categorizeSkills(skills = []) {
+  const categorized = {
+    languages: [],
+    frameworks: [],
+    databases: [],
+    tools: []
+  };
+
+  const seen = new Set();
+  for (const s of skills) {
+    if (!s || typeof s !== 'string') continue;
+    const trimmed = s.trim();
+    const key = trimmed.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+
+    if (/\b(?:javascript|typescript|python|java\b|c\+\+|c#|\.net|golang|go\b|rust|ruby|php|sql|html|css|bash|shell|swift|kotlin|c\b|r\b|scala|dart|lua)\b/i.test(trimmed)) {
+      categorized.languages.push(trimmed);
+    } else if (/\b(?:react|next|vue|angular|svelte|node|express|django|flask|spring|fastapi|graphql|redux|tailwind|bootstrap|rest|restful|pytorch|tensorflow|keras|pandas|numpy|scikit|microservices|nest|hono|astro|nuxt|rails|laravel)\b/i.test(trimmed)) {
+      categorized.frameworks.push(trimmed);
+    } else if (/\b(?:postgres|postgresql|mongo|mongodb|redis|mysql|dynamodb|cassandra|elasticsearch|firebase|supabase|sqlite|mariadb|oracle|neo4j)\b/i.test(trimmed)) {
+      categorized.databases.push(trimmed);
+    } else {
+      categorized.tools.push(trimmed);
+    }
+  }
+
+  return categorized;
 }
 
 /**
@@ -1014,6 +1314,19 @@ function extractCandidateProfile(rawText = '', meta = {}) {
     }
   }
 
+  // Extract structured links, experience, education, projects, and categorized skills
+  const extractedLinks = extractLinksAndPortfolio(text, meta);
+  const structuredExperience = extractStructuredExperience(text);
+  const structuredEducation = extractStructuredEducation(text);
+  const structuredProjects = extractStructuredProjects(text);
+  const categorizedSkills = categorizeSkills(candidateSkills);
+
+  // If highest degree string was not found but structured education was extracted, use it
+  if (!education && structuredEducation.length > 0) {
+    const firstEdu = structuredEducation[0];
+    education = firstEdu.degree ? `${firstEdu.degree}${firstEdu.institution ? ` from ${firstEdu.institution}` : ''}` : firstEdu.institution;
+  }
+
   return {
     sourceType: meta.sourceType || 'manual',
     sourceName: meta.sourceName || (meta.sourceType === 'url' ? 'Portfolio Website' : 'Uploaded CV'),
@@ -1022,6 +1335,12 @@ function extractCandidateProfile(rawText = '', meta = {}) {
     email,
     phone,
     headline,
+    portfolio: extractedLinks.portfolio || meta.portfolio || '',
+    github: extractedLinks.github || meta.github || '',
+    linkedin: extractedLinks.linkedin || meta.linkedin || '',
+    twitter: extractedLinks.twitter || meta.twitter || '',
+    leetcode: extractedLinks.leetcode || meta.leetcode || '',
+    links: extractedLinks.links || [],
     country,
     city,
     isIndiaResident,
@@ -1035,7 +1354,11 @@ function extractCandidateProfile(rawText = '', meta = {}) {
     seniorityLevel,
     skills: candidateSkills,
     skillsCount: candidateSkills.length,
+    skillsByCategory: categorizedSkills,
     education,
+    educationEntries: structuredEducation,
+    experience: structuredExperience,
+    projects: structuredProjects,
     textLength: text.length,
     rawSnippet: text.slice(0, 300).replace(/\s+/g, ' ').trim(),
     rawCvText: text
@@ -1051,6 +1374,12 @@ function createEmptyProfile(meta = {}) {
     email: '',
     phone: '',
     headline: '',
+    portfolio: meta.portfolio || '',
+    github: meta.github || '',
+    linkedin: meta.linkedin || '',
+    twitter: '',
+    leetcode: '',
+    links: [],
     country: 'Unspecified',
     city: '',
     isIndiaResident: false,
@@ -1064,9 +1393,14 @@ function createEmptyProfile(meta = {}) {
     seniorityLevel: 'Not detected',
     skills: [],
     skillsCount: 0,
+    skillsByCategory: { languages: [], frameworks: [], databases: [], tools: [] },
     education: '',
+    educationEntries: [],
+    experience: [],
+    projects: [],
     textLength: 0,
-    rawSnippet: ''
+    rawSnippet: '',
+    rawCvText: ''
   };
 }
 
@@ -1078,5 +1412,10 @@ function capitalize(str) {
 module.exports = {
   parseCvPdf,
   parsePortfolioUrl,
-  extractCandidateProfile
+  extractCandidateProfile,
+  extractLinksAndPortfolio,
+  extractStructuredExperience,
+  extractStructuredEducation,
+  extractStructuredProjects,
+  categorizeSkills
 };

@@ -35,9 +35,28 @@ const { fetchUniversalJobs } = require('../adapters/universalFeed');
 const { fetchAdzunaJobs } = require('../adapters/adzuna');
 const { fetchWorkableJobs } = require('../adapters/workable');
 const { fetchRecruiteeJobs } = require('../adapters/recruitee');
+const { fetchPersonioJobs } = require('../adapters/personio');
+const { fetchTeamtailorJobs } = require('../adapters/teamtailor');
 const Job = require('../models/Job');
+const Company = require('../models/Company');
 const SourceRun = require('../models/SourceRun');
 const { resolveCorridor, classifyRole } = require('../utils/corridorResolver');
+const { slugify } = require('../utils/companyUtils');
+const { generateFingerprint } = require('../utils/normalizeLocation');
+
+// Authoritative direct ATS sources capable of full company board sync and absent job closure
+const AUTHORITATIVE_SOURCES = new Set([
+  'greenhouse',
+  'lever',
+  'ashby',
+  'smartrecruiters',
+  'workable',
+  'recruitee',
+  'personio',
+  'teamtailor',
+  'workday',
+  'eightfold'
+]);
 
 /**
  * Connect to MongoDB with timeout settings, retry logic, and CI environment detection.
@@ -148,6 +167,12 @@ async function collectForCompany(company) {
       case 'recruitee':
         fetchResult = await fetchRecruiteeJobs(slug, company.name);
         break;
+      case 'personio':
+        fetchResult = await fetchPersonioJobs(slug, company.name);
+        break;
+      case 'teamtailor':
+        fetchResult = await fetchTeamtailorJobs(slug, company.name);
+        break;
       default:
         fetchResult = {
           success: false,
@@ -163,10 +188,27 @@ async function collectForCompany(company) {
     };
   }
 
-  // Handle failed fetch: Log SourceRun and return WITHOUT closing any jobs
+  // Handle failed fetch: Log SourceRun, update company reliability, and return WITHOUT closing any jobs
   if (!fetchResult.success) {
     const durationMs = Date.now() - startTime;
     console.warn(`[Collect] Warning for "${company.name}": ${fetchResult.error}`);
+
+    // Update Company reliability metrics on failure
+    try {
+      const compSlug = slugify(company.name);
+      const existingComp = await Company.findOne({ $or: [{ slug: compSlug }, { name: company.name }] }).lean();
+      const newFailures = ((existingComp && existingComp.consecutiveFailures) || 0) + 1;
+      const newReliability = Math.max(0, 100 - (newFailures * 15));
+      await Company.updateOne(
+        { $or: [{ slug: compSlug }, { name: company.name }] },
+        {
+          $set: {
+            consecutiveFailures: newFailures,
+            reliabilityScore: newReliability
+          }
+        }
+      );
+    } catch (_) {}
 
     await SourceRun.create({
       source: ats,
@@ -193,6 +235,23 @@ async function collectForCompany(company) {
     };
   }
 
+  // Update Company reliability metrics on successful fetch
+  try {
+    const compSlug = slugify(company.name);
+    await Company.updateOne(
+      { $or: [{ slug: compSlug }, { name: company.name }] },
+      {
+        $set: {
+          consecutiveFailures: 0,
+          reliabilityScore: 100,
+          lastSuccessfulSync: now,
+          atsType: ats,
+          atsSlug: slug || company.slug
+        }
+      }
+    );
+  } catch (_) {}
+
   // Successful fetch: upsert jobs and close absent jobs for this company
   const jobs = fetchResult.jobs || [];
   const now = new Date();
@@ -217,6 +276,8 @@ async function collectForCompany(company) {
         });
         const roleData = classifyRole(job.title, job.descriptionHtml || '');
         const isFresher = roleData.seniority === 'entry' || (roleData.expMin != null && roleData.expMin <= 1);
+        const finalCity = corridorData.city || job.city;
+        const finalFingerprint = job.fingerprint || generateFingerprint(job.company, job.title, finalCity);
 
         return {
           updateOne: {
@@ -227,7 +288,7 @@ async function collectForCompany(company) {
                 title: job.title,
                 location: job.location,
                 locationRaw: job.locationRaw,
-                city: corridorData.city || job.city,
+                city: finalCity,
                 state: corridorData.state || job.state,
                 country: corridorData.country || job.country || 'India',
                 techCorridor: corridorData.techCorridor || null,
@@ -241,7 +302,7 @@ async function collectForCompany(company) {
                 expMin: roleData.expMin,
                 expMax: roleData.expMax,
                 workMode: (job.workMode && job.workMode !== 'unknown') ? job.workMode : corridorData.workMode,
-                fingerprint: job.fingerprint,
+                fingerprint: finalFingerprint,
                 descriptionHtml: job.descriptionHtml,
                 applyUrl: job.applyUrl,
                 updatedAt: job.updatedAt,
@@ -259,23 +320,53 @@ async function collectForCompany(company) {
 
       if (bulkOps.length > 0) {
         await Job.bulkWrite(bulkOps, { ordered: false });
+
+        // Cross-source deduplication: close or supersede any stale aggregator jobs with identical fingerprint
+        if (AUTHORITATIVE_SOURCES.has(ats)) {
+          const fps = bulkOps.map(op => op.updateOne.update.$set.fingerprint).filter(Boolean);
+          if (fps.length > 0) {
+            await Job.updateMany(
+              { source: 'adzuna', fingerprint: { $in: fps }, status: 'open' },
+              { $set: { status: 'closed' } }
+            ).catch(() => {});
+          }
+        }
       }
     }
 
-    // Mark jobs that were previously open for this company but missing from latest feed as closed
-    const closeResult = await Job.updateMany(
-      {
+    // Mark absent jobs as closed ONLY when the fetch is authoritative
+    let jobsClosed = 0;
+    if (AUTHORITATIVE_SOURCES.has(ats)) {
+      const existingOpenCount = await Job.countDocuments({
         source: ats,
         company: company.name,
-        status: 'open',
-        sourceJobId: { $nin: activeIds }
-      },
-      {
-        $set: { status: 'closed' }
-      }
-    );
+        status: 'open'
+      });
 
-    const jobsClosed = closeResult.modifiedCount || 0;
+      // Anomaly guard: if 0 jobs returned but previously > 5 open jobs, skip closure to protect against false positives
+      if (jobs.length === 0 && existingOpenCount > 5) {
+        console.warn(
+          `[Collect] Anomalous 0 jobs returned for "${company.name}" (had ${existingOpenCount} open jobs). ` +
+          `Skipping closure to prevent premature expiration.`
+        );
+      } else {
+        const closeResult = await Job.updateMany(
+          {
+            source: ats,
+            company: company.name,
+            status: 'open',
+            sourceJobId: { $nin: activeIds }
+          },
+          {
+            $set: { status: 'closed' }
+          }
+        );
+        jobsClosed = closeResult.modifiedCount || 0;
+      }
+    } else {
+      console.log(`[Collect] Skipping absent job closure for non-authoritative source "${ats}"`);
+    }
+
     const durationMs = Date.now() - startTime;
 
     console.log(`[Collect] Successfully processed "${company.name}":`);
@@ -368,7 +459,16 @@ async function collectAdzuna() {
         }
       }
 
-      const bulkOps = uniqueJobs.map((job) => ({
+      // Cross-source deduplication: filter out Adzuna aggregator records that duplicate open authoritative ATS jobs
+      const authoritativeFPs = new Set(
+        (await Job.find({ source: { $in: Array.from(AUTHORITATIVE_SOURCES) }, status: 'open' }, { fingerprint: 1 }).lean())
+          .map((j) => j.fingerprint)
+          .filter(Boolean)
+      );
+
+      const deduplicatedJobs = uniqueJobs.filter((j) => !authoritativeFPs.has(j.fingerprint));
+
+      const bulkOps = deduplicatedJobs.map((job) => ({
         updateOne: {
           filter: { source: 'adzuna', sourceJobId: job.sourceJobId },
           update: {

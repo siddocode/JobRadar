@@ -294,13 +294,42 @@ exports.migratePipelineToApplications = async (req, res) => {
 };
 
 /**
+ * Stages an application with Autopilot (prefilled snapshot & ATS blueprint).
+ * POST /api/applications/stage
+ */
+exports.stageApplication = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { jobId, submissionMode, notes, matchScore, status } = req.body;
+    if (!jobId) {
+      return res.status(400).json({ success: false, error: 'jobId is required to stage application.' });
+    }
+    const { stageApplication } = require('../services/browserSubmissionService');
+    const application = await stageApplication(userId, jobId, {
+      submissionMode,
+      notes,
+      matchScore,
+      status
+    });
+    return res.status(200).json({
+      success: true,
+      application,
+      message: 'Job staged with Autopilot prefilled snapshot.'
+    });
+  } catch (err) {
+    console.error('[ApplicationController] Stage error:', err.message);
+    return res.status(400).json({ success: false, error: err.message });
+  }
+};
+
+/**
  * Dispatches an application (1-click assisted or automated dispatch).
  * POST /api/applications/:id/dispatch
  */
 exports.dispatchApplication = async (req, res) => {
   try {
     const { dispatchApplication } = require('../services/browserSubmissionService');
-    const result = await dispatchApplication(req.params.id, req.user.id);
+    const result = await dispatchApplication(req.params.id, req.user.id, req.body);
     return res.status(200).json({ success: true, ...result });
   } catch (err) {
     console.error('[ApplicationController] Dispatch error:', err.message);
@@ -322,6 +351,141 @@ exports.ingestRecruiterMessage = async (req, res) => {
     return res.status(400).json({ success: false, error: err.message });
   }
 };
+
+/**
+ * Returns Google OAuth 2.0 authorization URL for read-only Gmail access.
+ * GET /api/applications/gmail/auth-url
+ */
+exports.getGmailAuthUrl = (req, res) => {
+  try {
+    const { getGmailAuthUrl } = require('../services/emailTrackingService');
+    const state = Buffer.from(JSON.stringify({ userId: req.user.id, timestamp: Date.now() })).toString('base64');
+    const result = getGmailAuthUrl(state);
+    return res.status(200).json({ success: true, ...result });
+  } catch (err) {
+    console.error('[ApplicationController] Gmail auth URL error:', err.message);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+};
+
+/**
+ * Exchanges Google OAuth 2.0 authorization code and associates credentials with user.
+ * POST /api/applications/gmail/exchange
+ */
+exports.exchangeGmailAuthCode = async (req, res) => {
+  try {
+    const { code } = req.body;
+    if (!code) {
+      return res.status(400).json({ success: false, error: 'Authorization code is required' });
+    }
+    const { exchangeGmailCode } = require('../services/emailTrackingService');
+    const tokens = await exchangeGmailCode(code);
+
+    const User = require('../models/User');
+    const user = await User.findById(req.user.id);
+    if (user) {
+      if (!user.candidateProfile) user.candidateProfile = {};
+      user.candidateProfile.gmailIntegration = {
+        connected: true,
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken || (user.candidateProfile.gmailIntegration?.refreshToken || null),
+        expiresAt: Date.now() + (tokens.expiresIn * 1000),
+        lastSyncedAt: new Date()
+      };
+      user.markModified('candidateProfile');
+      await user.save();
+    }
+
+    return res.status(200).json({
+      success: true,
+      connected: true,
+      message: 'Gmail successfully connected for recruiter response tracking.'
+    });
+  } catch (err) {
+    console.error('[ApplicationController] Gmail exchange error:', err.message);
+    return res.status(400).json({ success: false, error: err.message });
+  }
+};
+
+/**
+ * Gets Gmail integration configuration & connection status for current user.
+ * GET /api/applications/gmail/status
+ */
+exports.getGmailStatus = async (req, res) => {
+  try {
+    const configured = Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
+    const User = require('../models/User');
+    const user = await User.findById(req.user.id).select('candidateProfile');
+    const gmail = user?.candidateProfile?.gmailIntegration;
+
+    return res.status(200).json({
+      success: true,
+      configured,
+      connected: Boolean(gmail && gmail.connected && gmail.accessToken),
+      lastSyncedAt: gmail?.lastSyncedAt || null
+    });
+  } catch (err) {
+    console.error('[ApplicationController] Gmail status error:', err.message);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+};
+
+/**
+ * Scans recent candidate inbox messages from Gmail and advances matching applications.
+ * POST /api/applications/gmail/sync
+ */
+exports.syncGmailInbox = async (req, res) => {
+  try {
+    const User = require('../models/User');
+    const user = await User.findById(req.user.id);
+    const gmail = user?.candidateProfile?.gmailIntegration;
+
+    if (!gmail || !gmail.accessToken) {
+      return res.status(400).json({
+        success: false,
+        error: 'Gmail is not connected. Please connect your Gmail account first.'
+      });
+    }
+
+    const { syncUserGmailInbox } = require('../services/emailTrackingService');
+    const result = await syncUserGmailInbox(req.user.id, gmail.accessToken);
+
+    gmail.lastSyncedAt = new Date();
+    user.markModified('candidateProfile');
+    await user.save();
+
+    return res.status(200).json(result);
+  } catch (err) {
+    console.error('[ApplicationController] Gmail sync error:', err.message);
+    return res.status(400).json({ success: false, error: err.message });
+  }
+};
+
+/**
+ * Disconnects Gmail integration and clears stored tokens.
+ * POST /api/applications/gmail/disconnect
+ */
+exports.disconnectGmail = async (req, res) => {
+  try {
+    const User = require('../models/User');
+    const user = await User.findById(req.user.id);
+    if (user && user.candidateProfile?.gmailIntegration) {
+      user.candidateProfile.gmailIntegration = {
+        connected: false,
+        accessToken: null,
+        refreshToken: null,
+        lastSyncedAt: null
+      };
+      user.markModified('candidateProfile');
+      await user.save();
+    }
+    return res.status(200).json({ success: true, connected: false });
+  } catch (err) {
+    console.error('[ApplicationController] Gmail disconnect error:', err.message);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+};
+
 
 
 

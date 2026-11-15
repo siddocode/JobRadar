@@ -8,6 +8,7 @@ const Office = require('../models/Office');
 const City = require('../models/City');
 const { resolveCorridor, classifyRole } = require('../utils/corridorResolver');
 const { extractDomain, slugify } = require('../utils/companyUtils');
+const { parsePersonioXml } = require('../adapters/personio');
 const { TECH_HUB_SEEDS } = require('../data/seeds/techHubSeeds');
 const techHubCorridors = require('../config/techHubCorridors.json');
 
@@ -325,13 +326,68 @@ async function probePublicAts(slug, preferredAts = null) {
     return null;
   };
 
+  const probePersonio = async () => {
+    try {
+      const pUrl = `https://${encodeURIComponent(slug)}.jobs.personio.de/xml?language=en`;
+      const res = await fetch(pUrl, {
+        headers: { 'Accept': 'application/xml, text/xml, */*' },
+        signal: AbortSignal.timeout(6000)
+      });
+      if (res.ok) {
+        const text = await res.text();
+        if (text && text.includes('<workzag-jobs>')) {
+          const positions = parsePersonioXml(text);
+          if (positions.length > 0) {
+            return { ats: 'personio', slug, jobs: positions, rawFormat: 'personio' };
+          }
+        }
+      } else if (res.status === 404) {
+        const comUrl = `https://${encodeURIComponent(slug)}.jobs.personio.com/xml?language=en`;
+        const comRes = await fetch(comUrl, {
+          headers: { 'Accept': 'application/xml, text/xml, */*' },
+          signal: AbortSignal.timeout(6000)
+        });
+        if (comRes.ok) {
+          const comText = await comRes.text();
+          if (comText && comText.includes('<workzag-jobs>')) {
+            const positions = parsePersonioXml(comText);
+            if (positions.length > 0) {
+              return { ats: 'personio', slug, jobs: positions, rawFormat: 'personio' };
+            }
+          }
+        }
+      }
+    } catch (_) {}
+    return null;
+  };
+
+  const probeTeamtailor = async () => {
+    try {
+      const ttUrl = `https://${encodeURIComponent(slug)}.teamtailor.com/jobs.json`;
+      const res = await fetch(ttUrl, {
+        headers: { 'Accept': 'application/json' },
+        signal: AbortSignal.timeout(6000)
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const items = Array.isArray(data?.items) ? data.items : (Array.isArray(data?.data) ? data.data : []);
+        if (items.length > 0) {
+          return { ats: 'teamtailor', slug, jobs: items, rawFormat: 'teamtailor' };
+        }
+      }
+    } catch (_) {}
+    return null;
+  };
+
   const probers = [];
-  if (preferredAts === 'workable') probers.push(probeWorkable, probeLever, probeGreenhouse, probeSmartRecruiters, probeAshby, probeRecruitee);
-  else if (preferredAts === 'recruitee') probers.push(probeRecruitee, probeWorkable, probeLever, probeGreenhouse, probeSmartRecruiters, probeAshby);
-  else if (preferredAts === 'lever') probers.push(probeLever, probeGreenhouse, probeSmartRecruiters, probeAshby, probeWorkable, probeRecruitee);
-  else if (preferredAts === 'smartrecruiters') probers.push(probeSmartRecruiters, probeGreenhouse, probeLever, probeAshby, probeWorkable, probeRecruitee);
-  else if (preferredAts === 'ashby') probers.push(probeAshby, probeGreenhouse, probeLever, probeSmartRecruiters, probeWorkable, probeRecruitee);
-  else probers.push(probeGreenhouse, probeLever, probeSmartRecruiters, probeAshby, probeWorkable, probeRecruitee);
+  if (preferredAts === 'workable') probers.push(probeWorkable, probeLever, probeGreenhouse, probeSmartRecruiters, probeAshby, probeRecruitee, probePersonio, probeTeamtailor);
+  else if (preferredAts === 'recruitee') probers.push(probeRecruitee, probeWorkable, probeLever, probeGreenhouse, probeSmartRecruiters, probeAshby, probePersonio, probeTeamtailor);
+  else if (preferredAts === 'personio') probers.push(probePersonio, probeTeamtailor, probeGreenhouse, probeLever, probeAshby, probeSmartRecruiters, probeWorkable, probeRecruitee);
+  else if (preferredAts === 'teamtailor') probers.push(probeTeamtailor, probePersonio, probeGreenhouse, probeLever, probeAshby, probeSmartRecruiters, probeWorkable, probeRecruitee);
+  else if (preferredAts === 'lever') probers.push(probeLever, probeGreenhouse, probeSmartRecruiters, probeAshby, probeWorkable, probeRecruitee, probePersonio, probeTeamtailor);
+  else if (preferredAts === 'smartrecruiters') probers.push(probeSmartRecruiters, probeGreenhouse, probeLever, probeAshby, probeWorkable, probeRecruitee, probePersonio, probeTeamtailor);
+  else if (preferredAts === 'ashby') probers.push(probeAshby, probeGreenhouse, probeLever, probeSmartRecruiters, probeWorkable, probeRecruitee, probePersonio, probeTeamtailor);
+  else probers.push(probeGreenhouse, probeLever, probeSmartRecruiters, probeAshby, probeWorkable, probeRecruitee, probePersonio, probeTeamtailor);
 
   for (const fn of probers) {
     const res = await fn();
@@ -393,6 +449,29 @@ function standardizeAtsJob(rawItem, atsType, companyName, companyMeta, targetCit
     const locParts = [rawItem.city, rawItem.state_name || rawItem.state_code, rawItem.country || rawItem.country_code].filter(Boolean);
     locationRaw = locParts.length > 0 ? locParts.join(', ') : (rawItem.remote ? 'Remote' : (rawItem.location || ''));
     descriptionHtml = [rawItem.description || '', rawItem.requirements || ''].filter(Boolean).join('\n');
+  } else if (atsType === 'personio') {
+    title = (rawItem.name || '').trim();
+    sourceJobId = String(rawItem.id || '').trim();
+    const pSlug = companyMeta?.atsSlug || companyMeta?.slug || encodeURIComponent(companyName);
+    applyUrl = `https://${pSlug}.jobs.personio.de/job/${sourceJobId}`;
+    locationRaw = (rawItem.office || '').trim();
+    descriptionHtml = rawItem.descriptionHtml || '';
+  } else if (atsType === 'teamtailor') {
+    title = (rawItem.title || rawItem._jobposting?.title || '').trim();
+    sourceJobId = String(rawItem.id || rawItem._jobposting?.identifier?.value || '').trim();
+    const ttSlug = companyMeta?.atsSlug || companyMeta?.slug || encodeURIComponent(companyName);
+    applyUrl = (rawItem.url || rawItem._jobposting?.url || `https://${ttSlug}.teamtailor.com/jobs/${sourceJobId}`).trim();
+    const jobLocations = Array.isArray(rawItem._jobposting?.jobLocation)
+      ? rawItem._jobposting.jobLocation
+      : (rawItem._jobposting?.jobLocation ? [rawItem._jobposting.jobLocation] : []);
+    const parts = [];
+    for (const l of jobLocations) {
+      const a = l.address || l;
+      const s = [a.addressLocality, a.addressRegion, a.addressCountry].filter(Boolean).join(', ');
+      if (s) parts.push(s);
+    }
+    locationRaw = parts.length > 0 ? parts.join('; ') : (rawItem.location || '');
+    descriptionHtml = rawItem.content_html || rawItem._jobposting?.description || '';
   }
 
   if (!title || !sourceJobId) return null;
@@ -548,7 +627,10 @@ async function harvestCompanyJobs(companyData, targetCity) {
   if (!matchedAts || !rawJobs || rawJobs.length === 0) {
     await Company.updateOne(
       { slug: slugify(companyName) },
-      { $set: { isHiring: false, jobCount: 0 } }
+      {
+        $set: { isHiring: false, jobCount: 0 },
+        $inc: { consecutiveFailures: 1 }
+      }
     ).catch(() => {});
     return { success: false, companyName, jobsCount: 0 };
   }
@@ -598,6 +680,9 @@ async function harvestCompanyJobs(companyData, targetCity) {
         jobCount: validJobs.length,
         atsType: matchedAts,
         atsSlug,
+        reliabilityScore: 100,
+        consecutiveFailures: 0,
+        lastSuccessfulSync: new Date(),
         isTech: true,
         category: 'Tech / Startups'
       }

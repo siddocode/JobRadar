@@ -341,10 +341,19 @@ async function getJobs(req, res) {
     const seenFingerprints = new Map();
 
     const ATS_PRIORITY = {
-      greenhouse: 4,
-      lever: 3,
-      ashby: 3,
-      smartrecruiters: 3,
+      greenhouse: 5,
+      lever: 4,
+      ashby: 4,
+      smartrecruiters: 4,
+      workable: 4,
+      recruitee: 4,
+      personio: 4,
+      teamtailor: 4,
+      workday: 4,
+      amazon: 4,
+      google: 4,
+      eightfold: 4,
+      custom: 2,
       adzuna: 1
     };
 

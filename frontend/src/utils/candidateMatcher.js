@@ -379,7 +379,19 @@ export function evaluateCandidateMatch(jobEligibility, candidateProfile) {
       nonEligibleCount: nonEligibleFactors.length,
       matchedSkillsCount: matchedSkills.length,
       missingSkillsCount: missingSkills.length,
-      matchRatio: Math.round(matchRatio * 100)
+      matchRatio: Math.round(matchRatio * 100),
+      fitCount: eligibleFactors.length,
+      gapCount: nonEligibleFactors.length
+    },
+    whyYouAreAFit: eligibleFactors,
+    requirementsGap: nonEligibleFactors,
+    explainableBreakdown: {
+      whyYouAreAFit: eligibleFactors,
+      requirementsGap: nonEligibleFactors,
+      fitSummary: `${eligibleFactors.length} positive match criteria satisfied.`,
+      gapSummary: nonEligibleFactors.length > 0
+        ? `${nonEligibleFactors.filter(g => g.isBlocker).length} hard blocker(s), ${nonEligibleFactors.filter(g => !g.isBlocker).length} addressable gap(s).`
+        : 'Zero blockers or critical requirements gaps detected.'
     },
     eligibleFactors,
     nonEligibleFactors

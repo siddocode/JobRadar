@@ -21,13 +21,40 @@ export default function JobEligibilityModal({
   onOpenProfileModal,
   isInPipeline = false
 }) {
-  const { candidateProfile, isAuthenticated, openAuthModal, token, updateCandidateProfile } = useAuth();
+  const { candidateProfile, isAuthenticated, openAuthModal, token, updateCandidateProfile, authFetch } = useAuth();
 
   useModalScrollLock(Boolean(job));
 
   const [eligibility, setEligibility] = useState(() => job?.eligibility || null);
   const [loading, setLoading] = useState(() => !job?.eligibility);
   const [copiedSummary, setCopiedSummary] = useState(false);
+  const [isStaged, setIsStaged] = useState(false);
+  const [isStaging, setIsStaging] = useState(false);
+  const [stageFeedback, setStageFeedback] = useState(null);
+
+  // Check if job is already staged in user's Application collection
+  useEffect(() => {
+    if (!isAuthenticated || !job) return;
+    let isMounted = true;
+    const checkStagedStatus = async () => {
+      try {
+        const jobId = job._id || job.id;
+        const res = await authFetch('/api/applications?limit=100');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && isMounted) {
+            const found = data.applications?.some(app =>
+              (app.jobId && (app.jobId._id === jobId || app.jobId === jobId)) ||
+              (app.jobTitle === job.title && app.companyName === job.company)
+            );
+            if (found) setIsStaged(true);
+          }
+        }
+      } catch (_) {}
+    };
+    checkStagedStatus();
+    return () => { isMounted = false; };
+  }, [isAuthenticated, job, authFetch]);
 
   // Tab: 'match' (Personalized Candidate Match) | 'job' (General Job Requirements)
   const [viewTab, setViewTab] = useState((isAuthenticated && candidateProfile) ? 'match' : 'job');
@@ -129,6 +156,59 @@ export default function JobEligibilityModal({
     navigator.clipboard.writeText(lines.join('\n'));
     setCopiedSummary(true);
     setTimeout(() => setCopiedSummary(false), 2000);
+  };
+
+  // 1-Click Autopilot Application Staging
+  const handleStageWithAutopilot = async () => {
+    if (!isAuthenticated) {
+      openAuthModal('Please sign in or create an account to stage this job with Autopilot.', 'login');
+      return;
+    }
+    if (!candidateProfile) {
+      if (onOpenProfileModal) {
+        onClose();
+        onOpenProfileModal();
+      } else {
+        alert('Please upload your CV in the Career Profile tab to stage with a tailored snapshot.');
+      }
+      return;
+    }
+
+    setIsStaging(true);
+    setStageFeedback(null);
+    try {
+      const jobId = job._id || job.id;
+      const res = await authFetch('/api/applications/stage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jobId,
+          submissionMode: 'assisted_browser',
+          matchScore: candidateMatch?.overall?.score || null
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setIsStaged(true);
+        setStageFeedback({
+          type: 'success',
+          message: 'Job successfully staged into your Applications pipeline with prefilled ATS blueprint & tailored resume snapshot!'
+        });
+        setTimeout(() => setStageFeedback(null), 6000);
+      } else {
+        setStageFeedback({
+          type: 'error',
+          message: data.error || 'Failed to stage application with Autopilot.'
+        });
+      }
+    } catch (err) {
+      setStageFeedback({
+        type: 'error',
+        message: 'Error staging application: ' + err.message
+      });
+    } finally {
+      setIsStaging(false);
+    }
   };
 
   if (!job) return null;
@@ -479,6 +559,46 @@ export default function JobEligibilityModal({
                         </button>
                       </div>
 
+                      {/* CALLOUT TO STAGE DIRECTLY WITH AUTOPILOT */}
+                      <div className="autopilot-stage-banner">
+                        <div className="autopilot-stage-info">
+                          <span className="autopilot-bolt-icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                            </svg>
+                          </span>
+                          <div className="autopilot-stage-text">
+                            <strong>Stage this job with Autopilot</strong>
+                            <span>1-click stage into your application pipeline with prefilled {job.source || 'ATS'} form blueprint and tailored snapshot.</span>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          className={`btn-stage-autopilot ${isStaged ? 'staged' : ''}`}
+                          onClick={handleStageWithAutopilot}
+                          disabled={isStaging || isStaged}
+                          title={isStaged ? 'Job is already staged in your Applications pipeline' : '1-click stage into application pipeline with prefilled snapshot'}
+                        >
+                          {isStaging ? (
+                            <span>Staging...</span>
+                          ) : isStaged ? (
+                            <>
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                <polyline points="20 6 9 17 4 12" />
+                              </svg>
+                              <span>✓ Staged in Pipeline</span>
+                            </>
+                          ) : (
+                            <>
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                              </svg>
+                              <span>Stage with Autopilot</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+
                       {/* SECTION B: NON-ELIGIBLE FACTORS & GAPS (What is Missing or Blocking) */}
                       <div className="factors-section non-eligible-section">
                         <div className="factors-section-header">
@@ -769,6 +889,22 @@ export default function JobEligibilityModal({
           </div>
         )}
 
+        {/* Stage Feedback Notification */}
+        {stageFeedback && (
+          <div className={`modal-stage-feedback-banner ${stageFeedback.type}`}>
+            <span className="feedback-icon">{stageFeedback.type === 'success' ? '✓' : '⚠️'}</span>
+            <span className="feedback-text">{stageFeedback.message}</span>
+            <button
+              type="button"
+              className="feedback-dismiss-btn"
+              onClick={() => setStageFeedback(null)}
+              aria-label="Dismiss notification"
+            >
+              ×
+            </button>
+          </div>
+        )}
+
         {/* Modal Action Footer */}
         <div className="eligibility-modal-footer">
           <div className="footer-left-actions">
@@ -820,6 +956,31 @@ export default function JobEligibilityModal({
               onClick={onClose}
             >
               Close
+            </button>
+            <button
+              type="button"
+              className={`btn-stage-autopilot ${isStaged ? 'staged' : ''}`}
+              onClick={handleStageWithAutopilot}
+              disabled={isStaging || isStaged}
+              title={isStaged ? 'Job is already staged in your Applications pipeline' : '1-click stage into application pipeline with prefilled snapshot'}
+            >
+              {isStaging ? (
+                <span>Staging...</span>
+              ) : isStaged ? (
+                <>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                  <span>✓ Staged with Autopilot</span>
+                </>
+              ) : (
+                <>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                  </svg>
+                  <span>Stage with Autopilot</span>
+                </>
+              )}
             </button>
             <a
               href={job.applyUrl}

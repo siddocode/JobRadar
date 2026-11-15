@@ -125,13 +125,15 @@ export function downloadResumePdf(tailoredResume, filename) {
       doc.setFont('times', 'normal');
       doc.text(compStr + locStr, margin + roleWidth, y);
 
-      if (exp.duration) {
-        doc.text(exp.duration, pageWidth - margin, y, { align: 'right' });
+      const durationStr = exp.duration || exp.period || '';
+      if (durationStr) {
+        doc.text(durationStr, pageWidth - margin, y, { align: 'right' });
       }
       y += 14;
 
-      if (exp.bullets && exp.bullets.length > 0) {
-        for (const b of exp.bullets) {
+      const expBullets = Array.isArray(exp.bullets) ? exp.bullets : (Array.isArray(exp.bulletPoints) ? exp.bulletPoints : []);
+      if (expBullets.length > 0) {
+        for (const b of expBullets) {
           const lines = doc.splitTextToSize(b, contentWidth - 18);
           const needed = (lines.length * 13.2) + 2;
           checkPageBreak(needed);
@@ -165,8 +167,9 @@ export function downloadResumePdf(tailoredResume, filename) {
       }
       y += 14;
 
-      if (p.bullets && p.bullets.length > 0) {
-        for (const pb of p.bullets) {
+      const projBullets = Array.isArray(p.bullets) ? p.bullets : (Array.isArray(p.bulletPoints) ? p.bulletPoints : []);
+      if (projBullets.length > 0) {
+        for (const pb of projBullets) {
           const lines = doc.splitTextToSize(pb, contentWidth - 18);
           const needed = (lines.length * 13.2) + 2;
           checkPageBreak(needed);
@@ -178,12 +181,13 @@ export function downloadResumePdf(tailoredResume, filename) {
         }
       }
 
-      if (p.techStack) {
+      const techStackStr = p.techStack || (Array.isArray(p.technologies) ? p.technologies.join(', ') : p.technologies);
+      if (techStackStr) {
         const prefix = '• Tech Stack: ';
         doc.setFont('times', 'bold');
         doc.setFontSize(9.5);
         const pw = doc.getTextWidth(prefix);
-        const tLines = doc.splitTextToSize(p.techStack, contentWidth - 18 - pw);
+        const tLines = doc.splitTextToSize(techStackStr, contentWidth - 18 - pw);
         const needed = (tLines.length * 13.2) + 2;
         checkPageBreak(needed);
         doc.text(prefix, margin + 6, y);
@@ -487,7 +491,9 @@ function escapeLatex(str) {
     .replace(/\\/g, '\\textbackslash{}')
     .replace(/([%&$#{}_])/g, '\\$1')
     .replace(/\^/g, '\\textasciicircum{}')
-    .replace(/~/g, '\\textasciitilde{}');
+    .replace(/~/g, '\\textasciitilde{}')
+    .replace(/</g, '\\textless{}')
+    .replace(/>/g, '\\textgreater{}');
 }
 
 /**
@@ -495,22 +501,25 @@ function escapeLatex(str) {
  */
 export function generateLatexSource(tailoredResume) {
   if (!tailoredResume) return '';
-  const { name, contact, summary, includeSummary, experience, projects, education, skills } = tailoredResume;
+  const { name, contact, summary, includeSummary, experience, projects, education, skills, certifications, achievements, publications, leadership } = tailoredResume;
 
   const contactItems = [];
   if (contact?.phone) contactItems.push(escapeLatex(contact.phone));
-  if (contact?.email) contactItems.push(`\\href{mailto:${contact.email}}{${escapeLatex(contact.email)}}`);
+  if (contact?.email) {
+    const rawEmail = String(contact.email).trim();
+    contactItems.push(`\\href{mailto:${rawEmail}}{${escapeLatex(rawEmail)}}`);
+  }
   if (contact?.portfolio) {
-    const p = contact.portfolio.replace(/^https?:\/\//, '');
-    contactItems.push(`\\href{https://${p}}{${escapeLatex(p)}}`);
+    const rawP = String(contact.portfolio).replace(/^https?:\/\//, '').replace(/\/$/, '').trim();
+    contactItems.push(`\\href{https://${rawP}}{${escapeLatex(rawP)}}`);
   }
   if (contact?.github) {
-    const gh = contact.github.replace(/^https?:\/\//, '');
-    contactItems.push(`\\href{https://${gh}}{${escapeLatex(gh)}}`);
+    const rawGh = String(contact.github).replace(/^https?:\/\//, '').replace(/\/$/, '').trim();
+    contactItems.push(`\\href{https://${rawGh}}{${escapeLatex(rawGh)}}`);
   }
   if (contact?.linkedin) {
-    const li = contact.linkedin.replace(/^https?:\/\//, '');
-    contactItems.push(`\\href{https://${li}}{${escapeLatex(li)}}`);
+    const rawLi = String(contact.linkedin).replace(/^https?:\/\//, '').replace(/\/$/, '').trim();
+    contactItems.push(`\\href{https://${rawLi}}{${escapeLatex(rawLi)}}`);
   }
   if (contact?.location) contactItems.push(escapeLatex(contact.location));
 
@@ -550,10 +559,50 @@ export function generateLatexSource(tailoredResume) {
 \\raggedright
 \\setlength{\\tabcolsep}{0in}
 
+% Sections formatting
 \\titleformat{\\section}{
   \\vspace{-4pt}\\scshape\\raggedright\\large
 }{}{0em}{}[\\color{black}\\titlerule \\vspace{-5pt}]
 
+% Custom commands for Jake's Resume Standard
+\\newcommand{\\resumeItem}[1]{
+  \\item\\small{
+    {#1 \\vspace{-2pt}}
+  }
+}
+
+\\newcommand{\\resumeSubheading}[4]{
+  \\vspace{-2pt}\\item
+    \\begin{tabular*}{0.97\\textwidth}[t]{l@{\\extracolsep{\\fill}}r}
+      \\textbf{#1} & #2 \\\\
+      \\textit{\\small#3} & \\textit{\\small #4} \\\\
+    \\end{tabular*}\\vspace{-7pt}
+}
+
+\\newcommand{\\resumeSubSubheading}[2]{
+    \\item
+    \\begin{tabular*}{0.97\\textwidth}{l@{\\extracolsep{\\fill}}r}
+      \\textit{\\small#1} & \\textit{\\small #2} \\\\
+    \\end{tabular*}\\vspace{-7pt}
+}
+
+\\newcommand{\\resumeProjectHeading}[2]{
+    \\item
+    \\begin{tabular*}{0.97\\textwidth}{l@{\\extracolsep{\\fill}}r}
+      \\small#1 & #2 \\\\
+    \\end{tabular*}\\vspace{-7pt}
+}
+
+\\newcommand{\\resumeSubItem}[1]{\\resumeItem{#1}\\vspace{-4pt}}
+
+\\renewcommand\\labelitemii{$\\vcenter{\\hbox{\\tiny$\\bullet$}}$}
+
+\\newcommand{\\resumeSubHeadingListStart}{\\begin{itemize}[leftmargin=0.15in, label={}]}
+\\newcommand{\\resumeSubHeadingListEnd}{\\end{itemize}}
+\\newcommand{\\resumeItemListStart}{\\begin{itemize}}
+\\newcommand{\\resumeItemListEnd}{\\end{itemize}\\vspace{-5pt}}
+
+%-------------------------------------------
 \\begin{document}
 
 %----------HEADING----------
@@ -583,9 +632,15 @@ export function generateLatexSource(tailoredResume) {
     if (Array.isArray(skills)) {
       out += `     \\textbf{Technologies}{: ${escapeLatex(skills.join(', '))}} \\\\\n`;
     } else {
+      const skillCatLabels = {
+        languages: 'Languages',
+        frameworks: 'Frameworks & Libraries',
+        databases: 'Databases',
+        tools: 'Tools & Platforms'
+      };
       for (const [category, items] of Object.entries(skills)) {
         if (items && items.length > 0) {
-          const catLabel = category.charAt(0).toUpperCase() + category.slice(1);
+          const catLabel = skillCatLabels[category.toLowerCase()] || (category.charAt(0).toUpperCase() + category.slice(1));
           const itemList = Array.isArray(items) ? items.join(', ') : String(items);
           out += `     \\textbf{${escapeLatex(catLabel)}}{: ${escapeLatex(itemList)}} \\\\\n`;
         }
@@ -604,15 +659,19 @@ export function generateLatexSource(tailoredResume) {
   \\resumeSubHeadingListStart
 `;
     for (const exp of experience) {
+      const role = exp.role || exp.title || 'Software Engineer';
+      const company = exp.company || '';
+      const location = exp.location || '';
+      const duration = exp.duration || exp.period || '';
+      const bullets = Array.isArray(exp.bullets) ? exp.bullets : (Array.isArray(exp.bulletPoints) ? exp.bulletPoints : []);
+
       out += `    \\resumeSubheading
-      {${escapeLatex(exp.role || exp.title || 'Engineer')}}{${escapeLatex(exp.period || '')}}
-      {${escapeLatex(exp.company || '')}}{${escapeLatex(exp.location || '')}}
+      {${escapeLatex(role)}}{${escapeLatex(duration)}}
+      {${escapeLatex(company)}}{${escapeLatex(location)}}
       \\resumeItemListStart
 `;
-      if (Array.isArray(exp.bulletPoints)) {
-        for (const pt of exp.bulletPoints) {
-          out += `        \\resumeItem{${escapeLatex(pt)}}\n`;
-        }
+      for (const pt of bullets) {
+        out += `        \\resumeItem{${escapeLatex(pt)}}\n`;
       }
       out += `      \\resumeItemListEnd\n\n`;
     }
@@ -627,15 +686,18 @@ export function generateLatexSource(tailoredResume) {
     \\resumeSubHeadingListStart
 `;
     for (const proj of projects) {
-      const techStr = proj.technologies ? ` $|$ \\emph{${escapeLatex(Array.isArray(proj.technologies) ? proj.technologies.join(', ') : proj.technologies)}}` : '';
+      const name = proj.name || 'Project';
+      const tech = proj.techStack || (Array.isArray(proj.technologies) ? proj.technologies.join(', ') : (proj.technologies || proj.tagline || ''));
+      const techStr = tech ? ` $|$ \\emph{${escapeLatex(tech)}}` : '';
+      const duration = proj.duration || proj.period || '';
+      const bullets = Array.isArray(proj.bullets) ? proj.bullets : (Array.isArray(proj.bulletPoints) ? proj.bulletPoints : []);
+
       out += `      \\resumeProjectHeading
-          {\\textbf{${escapeLatex(proj.name || 'Project')}}${techStr}}{${escapeLatex(proj.period || '')}}
+          {\\textbf{${escapeLatex(name)}}${techStr}}{${escapeLatex(duration)}}
           \\resumeItemListStart
 `;
-      if (Array.isArray(proj.bulletPoints)) {
-        for (const pt of proj.bulletPoints) {
-          out += `            \\resumeItem{${escapeLatex(pt)}}\n`;
-        }
+      for (const pt of bullets) {
+        out += `            \\resumeItem{${escapeLatex(pt)}}\n`;
       }
       out += `          \\resumeItemListEnd\n\n`;
     }
@@ -650,12 +712,75 @@ export function generateLatexSource(tailoredResume) {
   \\resumeSubHeadingListStart
 `;
     for (const edu of education) {
+      const inst = edu.institution || edu.school || 'University';
+      const loc = edu.location || '';
+      const deg = edu.degree || '';
+      const yr = edu.year || edu.period || '';
+
       out += `    \\resumeSubheading
-      {${escapeLatex(edu.institution || edu.school || 'University')}}{${escapeLatex(edu.location || '')}}
-      {${escapeLatex(edu.degree || '')}}{${escapeLatex(edu.year || edu.period || '')}}
+      {${escapeLatex(inst)}}{${escapeLatex(loc)}}
+      {${escapeLatex(deg)}}{${escapeLatex(yr)}}
 `;
+      if (edu.details) {
+        out += `      \\resumeItemListStart
+        \\resumeItem{${escapeLatex(edu.details)}}
+      \\resumeItemListEnd
+`;
+      }
     }
     out += `  \\resumeSubHeadingListEnd\n`;
+  }
+
+  // Certifications
+  if (certifications && certifications.length > 0) {
+    out += `
+%-----------CERTIFICATIONS-----------
+\\section{Certifications}
+  \\resumeItemListStart
+`;
+    for (const cert of certifications) {
+      out += `    \\resumeItem{${escapeLatex(cert)}}\n`;
+    }
+    out += `  \\resumeItemListEnd\n`;
+  }
+
+  // Honors & Achievements
+  if (achievements && achievements.length > 0) {
+    out += `
+%-----------HONORS & ACHIEVEMENTS-----------
+\\section{Honors \\& Achievements}
+  \\resumeItemListStart
+`;
+    for (const ach of achievements) {
+      out += `    \\resumeItem{${escapeLatex(ach)}}\n`;
+    }
+    out += `  \\resumeItemListEnd\n`;
+  }
+
+  // Publications & Research
+  if (publications && publications.length > 0) {
+    out += `
+%-----------PUBLICATIONS & RESEARCH-----------
+\\section{Publications \\& Research}
+  \\resumeItemListStart
+`;
+    for (const pub of publications) {
+      out += `    \\resumeItem{${escapeLatex(pub)}}\n`;
+    }
+    out += `  \\resumeItemListEnd\n`;
+  }
+
+  // Leadership & Extracurricular
+  if (leadership && leadership.length > 0) {
+    out += `
+%-----------LEADERSHIP & EXTRACURRICULAR-----------
+\\section{Leadership \\& Extracurricular}
+  \\resumeItemListStart
+`;
+    for (const lead of leadership) {
+      out += `    \\resumeItem{${escapeLatex(lead)}}\n`;
+    }
+    out += `  \\resumeItemListEnd\n`;
   }
 
   out += `

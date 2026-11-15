@@ -50,6 +50,19 @@ const ATS_PATTERNS = [
     regex: /([\w-]+)\.recruitee\.com/i,
     testUrl: (slug) => `https://${encodeURIComponent(slug)}.recruitee.com/api/offers/`,
     validator: (data) => Array.isArray(data?.offers)
+  },
+  {
+    ats: 'personio',
+    regex: /([\w-]+)\.jobs\.personio\.(?:de|com)/i,
+    testUrl: (slug) => `https://${encodeURIComponent(slug)}.jobs.personio.de/xml?language=en`,
+    isXml: true,
+    validator: (text) => typeof text === 'string' && (text.includes('<workzag-jobs>') || text.includes('<position>'))
+  },
+  {
+    ats: 'teamtailor',
+    regex: /([\w-]+)\.teamtailor\.com/i,
+    testUrl: (slug) => `https://${encodeURIComponent(slug)}.teamtailor.com/jobs.json`,
+    validator: (data) => Array.isArray(data?.items) || Array.isArray(data?.data)
   }
 ];
 
@@ -63,9 +76,12 @@ async function verifyAtsSlug(ats, slug) {
 
   try {
     const url = config.testUrl(slug);
+    const host = new URL(url).host;
+    await rateLimitHost(host);
+
     const options = {
       headers: {
-        'Accept': 'application/json',
+        'Accept': config.isXml ? 'application/xml, text/xml, */*' : 'application/json',
         'User-Agent': 'JobRadar/2.0'
       },
       signal: AbortSignal.timeout(7000)
@@ -78,7 +94,24 @@ async function verifyAtsSlug(ats, slug) {
     }
 
     const res = await fetch(url, options);
-    if (!res.ok) return false;
+    if (!res.ok) {
+      // For Personio, if .de returned 404, fallback to .com
+      if (ats === 'personio' && res.status === 404) {
+        const comUrl = `https://${encodeURIComponent(slug)}.jobs.personio.com/xml?language=en`;
+        await rateLimitHost(new URL(comUrl).host);
+        const comRes = await fetch(comUrl, options);
+        if (comRes.ok) {
+          const comText = await comRes.text();
+          return config.validator(comText);
+        }
+      }
+      return false;
+    }
+
+    if (config.isXml) {
+      const text = await res.text();
+      return config.validator(text);
+    }
 
     const data = await res.json();
     return config.validator(data);

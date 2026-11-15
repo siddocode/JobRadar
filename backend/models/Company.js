@@ -59,7 +59,7 @@ const companySchema = new mongoose.Schema(
     },
     atsType: {
       type: String,
-      enum: ['greenhouse', 'lever', 'ashby', 'smartrecruiters', 'workday', 'amazon', 'google', 'custom', null],
+      enum: ['greenhouse', 'lever', 'ashby', 'smartrecruiters', 'workday', 'amazon', 'google', 'workable', 'recruitee', 'personio', 'teamtailor', 'custom', null],
       default: null
     },
     atsSlug: {
@@ -143,6 +143,21 @@ const companySchema = new mongoose.Schema(
       type: String,
       enum: ['pending', 'enriched', 'manual', 'skipped'],
       default: 'pending'
+    },
+    reliabilityScore: {
+      type: Number,
+      default: 100,
+      min: 0,
+      max: 100
+    },
+    consecutiveFailures: {
+      type: Number,
+      default: 0,
+      min: 0
+    },
+    lastSuccessfulSync: {
+      type: Date,
+      default: null
     }
   },
   {
@@ -155,5 +170,6 @@ companySchema.index({ slug: 1 });
 companySchema.index({ name: 1 });
 companySchema.index({ isTech: 1 });
 companySchema.index({ followUpStatus: 1 });
+companySchema.index({ reliabilityScore: 1 });
 
 module.exports = mongoose.model('Company', companySchema);

@@ -381,6 +381,36 @@
     "ats": "greenhouse",
     "slug": "speechify",
     "verifiedAt": "2026-10-29T11:00:00.000Z"
+  },
+  {
+    "name": "Mercari India",
+    "ats": "workable",
+    "slug": "mercari-india",
+    "verifiedAt": "2026-11-15T12:00:00.000Z"
+  },
+  {
+    "name": "Fortanix",
+    "ats": "workable",
+    "slug": "fortanix",
+    "verifiedAt": "2026-11-15T12:00:00.000Z"
+  },
+  {
+    "name": "Bunq",
+    "ats": "recruitee",
+    "slug": "bunq",
+    "verifiedAt": "2026-11-15T12:00:00.000Z"
+  },
+  {
+    "name": "Personio",
+    "ats": "personio",
+    "slug": "personio",
+    "verifiedAt": "2026-11-15T12:00:00.000Z"
+  },
+  {
+    "name": "Volumental",
+    "ats": "teamtailor",
+    "slug": "volumental",
+    "verifiedAt": "2026-11-15T12:00:00.000Z"
   }
 ]
 

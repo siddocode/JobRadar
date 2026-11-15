@@ -2,23 +2,24 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Layers,
   Search,
-  Filter,
   Plus,
-  ArrowRight,
   Clock,
   Building2,
   MapPin,
   ExternalLink,
-  CheckCircle2,
-  AlertCircle,
-  FileText,
   Trash2,
   Edit3,
-  Calendar,
   Send,
   Download,
   Eye,
-  RefreshCw
+  RefreshCw,
+  Mail,
+  Sparkles,
+  Inbox,
+  CheckCircle2,
+  AlertCircle,
+  HelpCircle,
+  X
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { downloadResumePdf, downloadLatexFile } from '../utils/pdfGenerator';
@@ -44,7 +45,7 @@ export default function ApplicationsView({ onNavigateJobs }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState('kanban'); // 'kanban' | 'table'
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [, setError] = useState(null);
 
   // Selected application for detail modal
   const [activeApp, setActiveApp] = useState(null);
@@ -52,6 +53,22 @@ export default function ApplicationsView({ onNavigateJobs }) {
   const [notesDraft, setNotesDraft] = useState('');
   const [migrating, setMigrating] = useState(false);
   const [isDispatching, setIsDispatching] = useState(false);
+
+  // Inbound Recruiter Email Ingestion & Testing State
+  const [showIngestModal, setShowIngestModal] = useState(false);
+  const [ingestDraft, setIngestDraft] = useState({
+    from: '',
+    subject: '',
+    body: '',
+    date: new Date().toISOString().slice(0, 10)
+  });
+  const [ingesting, setIngesting] = useState(false);
+  const [ingestFeedback, setIngestFeedback] = useState(null);
+
+  // Gmail OAuth status
+  const [gmailStatus, setGmailStatus] = useState({ configured: false, connected: false });
+  const [syncingGmail, setSyncingGmail] = useState(false);
+  const [showGmailModal, setShowGmailModal] = useState(false);
 
   // Fetch applications list & stats
   const fetchApplications = useCallback(async () => {
@@ -93,9 +110,24 @@ export default function ApplicationsView({ onNavigateJobs }) {
     }
   }, [authFetch, isAuthenticated, selectedStage, searchQuery]);
 
+  // Fetch Gmail OAuth connection status
+  const fetchGmailStatus = useCallback(async () => {
+    if (!isAuthenticated) return;
+    try {
+      const res = await authFetch('/api/applications/gmail/status');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          setGmailStatus(data);
+        }
+      }
+    } catch (_) {}
+  }, [authFetch, isAuthenticated]);
+
   useEffect(() => {
     fetchApplications();
-  }, [fetchApplications]);
+    fetchGmailStatus();
+  }, [fetchApplications, fetchGmailStatus]);
 
   // Stage update
   const handleUpdateStatus = async (appId, newStatus) => {
@@ -106,9 +138,10 @@ export default function ApplicationsView({ onNavigateJobs }) {
         body: JSON.stringify({ status: newStatus })
       });
       if (res.ok) {
+        const data = await res.json();
         fetchApplications();
         if (activeApp && activeApp._id === appId) {
-          setActiveApp(prev => ({ ...prev, status: newStatus }));
+          setActiveApp(data.application || (prev => ({ ...prev, status: newStatus })));
         }
       }
     } catch (err) {
@@ -125,10 +158,11 @@ export default function ApplicationsView({ onNavigateJobs }) {
         body: JSON.stringify({ notes: notesDraft })
       });
       if (res.ok) {
+        const data = await res.json();
         setEditingNotes(false);
         fetchApplications();
         if (activeApp && activeApp._id === appId) {
-          setActiveApp(prev => ({ ...prev, notes: notesDraft }));
+          setActiveApp(data.application || (prev => ({ ...prev, notes: notesDraft })));
         }
       }
     } catch (err) {
@@ -196,6 +230,81 @@ export default function ApplicationsView({ onNavigateJobs }) {
     }
   };
 
+  // Ingest & match recruiter response email
+  const handleIngestMessage = async (customDraft = null) => {
+    const payload = customDraft || ingestDraft;
+    if (!payload.subject && !payload.body) {
+      alert('Please provide at least a subject or body for the recruiter message.');
+      return;
+    }
+    setIngesting(true);
+    setIngestFeedback(null);
+    try {
+      const res = await authFetch('/api/applications/ingest-message', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setIngestFeedback(data);
+        fetchApplications();
+        // If an active app matches or is affected, update activeApp with new event timeline
+        if (data.linked && data.applicationId) {
+          const updatedRes = await authFetch(`/api/applications?q=${encodeURIComponent(data.company || '')}`);
+          if (updatedRes.ok) {
+            const listData = await updatedRes.json();
+            const matched = listData.applications?.find(a => a._id === data.applicationId);
+            if (matched && activeApp && activeApp._id === data.applicationId) {
+              setActiveApp(matched);
+            }
+          }
+        }
+      } else {
+        setIngestFeedback({ success: false, error: data.error || 'Failed to process message' });
+      }
+    } catch (err) {
+      setIngestFeedback({ success: false, error: err.message });
+    } finally {
+      setIngesting(false);
+    }
+  };
+
+  // Trigger Gmail Inbox Scan & Synchronization
+  const handleSyncGmail = async () => {
+    setSyncingGmail(true);
+    try {
+      const res = await authFetch('/api/applications/gmail/sync', { method: 'POST' });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        alert(`Gmail scan complete! Scanned ${data.processedCount || 0} messages. Linked ${data.linkedCount || 0} application updates.`);
+        fetchApplications();
+        fetchGmailStatus();
+      } else {
+        alert(data.error || 'Gmail sync failed. Please check your credentials or connect Gmail.');
+      }
+    } catch (err) {
+      alert('Error during Gmail sync: ' + err.message);
+    } finally {
+      setSyncingGmail(false);
+    }
+  };
+
+  // Initiate Gmail OAuth 2.0 connection
+  const handleConnectGmail = async () => {
+    try {
+      const res = await authFetch('/api/applications/gmail/auth-url');
+      const data = await res.json();
+      if (res.ok && data.success && data.authUrl) {
+        window.location.href = data.authUrl;
+      } else {
+        setShowGmailModal(true);
+      }
+    } catch (_) {
+      setShowGmailModal(true);
+    }
+  };
+
   // Group applications by stage for Kanban board
   const kanbanColumns = useMemo(() => {
     const primaryStages = ['shortlisted', 'awaiting_approval', 'applied', 'interview', 'offer', 'rejected'];
@@ -205,13 +314,51 @@ export default function ApplicationsView({ onNavigateJobs }) {
       if (map[app.status]) {
         map[app.status].push(app);
       } else {
-        // Fallback into shortlisted or applied
         if (!map['shortlisted']) map['shortlisted'] = [];
         map['shortlisted'].push(app);
       }
     });
     return map;
   }, [applications]);
+
+  // Sample templates for testing recruiter emails
+  const sampleTemplates = useMemo(() => [
+    {
+      label: 'Interview Invite',
+      tag: 'interview',
+      from: activeApp ? `recruiter@${activeApp.companyName.toLowerCase().replace(/[^a-z0-9]/g, '')}.com` : 'recruiting@swiggy.in',
+      subject: activeApp ? `Interview Invitation - ${activeApp.companyName}` : 'Invitation to Interview - Swiggy Engineering',
+      body: 'Hi, we would like to invite you for a 45-minute technical interview on Google Meet to discuss your experience.'
+    },
+    {
+      label: 'Coding Assessment',
+      tag: 'assessment',
+      from: 'challenges@hackerrank.net',
+      subject: activeApp ? `HackerRank Online Assessment: ${activeApp.companyName}` : 'HackerRank Online Assessment - Software Engineer',
+      body: 'Please complete your online assessment coding challenge on HackerRank within 48 hours to proceed.'
+    },
+    {
+      label: 'Job Offer',
+      tag: 'offer',
+      from: activeApp ? `hr@${activeApp.companyName.toLowerCase().replace(/[^a-z0-9]/g, '')}.com` : 'talent@razorpay.com',
+      subject: activeApp ? `Formal Offer of Employment - ${activeApp.jobTitle} at ${activeApp.companyName}` : 'Formal Offer of Employment - Senior Backend Engineer',
+      body: 'We are pleased to offer you the position. Welcome to the team! Details on compensation and joining are attached.'
+    },
+    {
+      label: 'Rejection Notice',
+      tag: 'rejected',
+      from: activeApp ? `careers@${activeApp.companyName.toLowerCase().replace(/[^a-z0-9]/g, '')}.com` : 'careers@startup.io',
+      subject: activeApp ? `Update regarding your application to ${activeApp.companyName}` : 'Update regarding your application',
+      body: 'Thank you for your interest and time. Unfortunately, after careful consideration, we have decided to move forward with other candidates.'
+    },
+    {
+      label: 'Application Received',
+      tag: 'applied',
+      from: 'no-reply@greenhouse.io',
+      subject: activeApp ? `Thank you for applying to ${activeApp.companyName}` : 'Thank you for applying to PhonePe',
+      body: 'We have received your application. Our recruiting team will review your qualifications and reach out if there is a match.'
+    }
+  ], [activeApp]);
 
   if (!isAuthenticated) {
     return (
@@ -243,6 +390,44 @@ export default function ApplicationsView({ onNavigateJobs }) {
           </p>
         </div>
         <div className="view-header-actions">
+          {/* Recruiter Email Tracking & Ingestion Trigger */}
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={() => {
+              setIngestFeedback(null);
+              setShowIngestModal(true);
+            }}
+            title="Simulate or ingest recruiter replies to advance application stages"
+          >
+            <Mail size={14} className="text-forest" />
+            Track Recruiter Email
+          </button>
+
+          {/* Gmail OAuth Integration Button */}
+          {gmailStatus.connected ? (
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={handleSyncGmail}
+              disabled={syncingGmail}
+              title="Sync recent recruiter replies from your connected Gmail inbox (read-only)"
+            >
+              <RefreshCw size={14} className={syncingGmail ? 'spin' : 'text-forest'} />
+              {syncingGmail ? 'Scanning Gmail...' : 'Sync Gmail'}
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={handleConnectGmail}
+              title="Connect Gmail to automatically detect recruiter interviews, assessments, and offers"
+            >
+              <Inbox size={14} />
+              {gmailStatus.configured ? 'Connect Gmail' : 'Gmail Sync (Free)'}
+            </button>
+          )}
+
           <button
             type="button"
             className="btn btn-secondary btn-sm"
@@ -368,6 +553,11 @@ export default function ApplicationsView({ onNavigateJobs }) {
                             <Clock size={11} /> {new Date(app.appliedAt).toLocaleDateString()}
                           </span>
                         )}
+                        {app.events && app.events.length > 0 && (
+                          <span className="kanban-meta-item text-forest" title="Timeline events recorded">
+                            • {app.events.length} event{app.events.length > 1 ? 's' : ''}
+                          </span>
+                        )}
                       </div>
                       <div className="kanban-card-footer">
                         <select
@@ -402,6 +592,7 @@ export default function ApplicationsView({ onNavigateJobs }) {
                 <th>Location</th>
                 <th>Stage</th>
                 <th>Match</th>
+                <th>Events</th>
                 <th>Updated</th>
                 <th>Actions</th>
               </tr>
@@ -430,6 +621,11 @@ export default function ApplicationsView({ onNavigateJobs }) {
                   </td>
                   <td>
                     {app.matchScore ? `${app.matchScore}%` : '—'}
+                  </td>
+                  <td>
+                    <span className="text-xs text-muted">
+                      {app.events?.length || 0}
+                    </span>
                   </td>
                   <td className="text-muted">
                     {new Date(app.updatedAt).toLocaleDateString()}
@@ -587,26 +783,61 @@ export default function ApplicationsView({ onNavigateJobs }) {
                 )}
               </div>
 
-              {/* History Timeline */}
-              {activeApp.events && activeApp.events.length > 0 && (
-                <div className="app-detail-section">
-                  <label className="section-label">Activity Timeline</label>
-                  <div className="timeline-list">
-                    {activeApp.events.map((ev, idx) => (
-                      <div key={idx} className="timeline-row">
-                        <span className="timeline-dot" />
-                        <div className="timeline-content">
-                          <span className="timeline-status">{ev.status}</span>
-                          <span className="timeline-note">{ev.note}</span>
-                        </div>
-                        <span className="timeline-time">
-                          {new Date(ev.timestamp).toLocaleDateString()}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
+              {/* Real-time Activity Timeline */}
+              <div className="app-detail-section">
+                <div className="flex-between" style={{ marginBottom: '8px' }}>
+                  <label className="section-label">
+                    Activity Timeline {activeApp.events?.length ? `(${activeApp.events.length})` : ''}
+                  </label>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-xs"
+                    onClick={() => {
+                      setIngestDraft({
+                        from: `recruiter@${activeApp.companyName.toLowerCase().replace(/[^a-z0-9]/g, '')}.com`,
+                        subject: `Interview Invitation - ${activeApp.companyName}`,
+                        body: `Hi, we would like to schedule a technical interview on Google Meet for the ${activeApp.jobTitle} position.`,
+                        date: new Date().toISOString().slice(0, 10)
+                      });
+                      setIngestFeedback(null);
+                      setShowIngestModal(true);
+                    }}
+                  >
+                    <Mail size={12} /> Test Recruiter Email for this Role
+                  </button>
                 </div>
-              )}
+
+                {activeApp.events && activeApp.events.length > 0 ? (
+                  <div className="timeline-list">
+                    {activeApp.events.map((ev, idx) => {
+                      const stageMeta = STAGES.find(s => s.key === ev.status) || { label: ev.status, color: 'neutral' };
+                      return (
+                        <div key={idx} className="timeline-row">
+                          <span className={`timeline-dot dot-${stageMeta.color}`} />
+                          <div className="timeline-content">
+                            <div className="flex-inline-gap" style={{ alignItems: 'center', marginBottom: '2px' }}>
+                              <span className={`status-pill status-${ev.status}`} style={{ fontSize: '11px', padding: '1px 8px' }}>
+                                {stageMeta.label}
+                              </span>
+                              <span className="timeline-time" style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                                {new Date(ev.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}, {new Date(ev.timestamp).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}
+                              </span>
+                            </div>
+                            <span className="timeline-note" style={{ fontSize: '12.5px', color: 'var(--text-primary)' }}>{ev.note}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div style={{ padding: '14px', background: 'var(--bg-card-subtle)', borderRadius: 'var(--radius-md)', textAlign: 'center', border: '1px dashed var(--border-subtle)' }}>
+                    <Clock size={18} className="text-muted" style={{ margin: '0 auto 6px auto', display: 'block' }} />
+                    <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: 0 }}>
+                      No recruiter communication events recorded yet. Ingest an inbound recruiter email to see updates here.
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="modal-footer flex-between">
@@ -651,7 +882,245 @@ export default function ApplicationsView({ onNavigateJobs }) {
           </div>
         </div>
       )}
+
+      {/* Recruiter Email Ingestion & Testing Modal */}
+      {showIngestModal && (
+        <div className="modal-backdrop" onClick={() => setShowIngestModal(false)}>
+          <div className="modal-card modal-md" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div>
+                <span className="modal-eyebrow">Inbound Recruiter Tracking Engine</span>
+                <h2 className="modal-title">Track & Ingest Recruiter Email</h2>
+                <span className="modal-subtitle">
+                  Classifies responses into lifecycle stages (Interview, Assessment, Offer, Rejection) and records timeline events in real-time.
+                </span>
+              </div>
+              <button
+                type="button"
+                className="modal-close-btn"
+                onClick={() => setShowIngestModal(false)}
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="modal-body">
+              {/* Sample Templates Ribbon */}
+              <div style={{ marginBottom: '16px' }}>
+                <label className="section-label" style={{ marginBottom: '6px' }}>
+                  <Sparkles size={13} className="text-copper" /> Quick-Test Sample Templates:
+                </label>
+                <div className="flex-inline-gap" style={{ flexWrap: 'wrap', gap: '6px' }}>
+                  {sampleTemplates.map((tpl, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      className="btn btn-secondary btn-xs"
+                      onClick={() => {
+                        setIngestDraft({
+                          from: tpl.from,
+                          subject: tpl.subject,
+                          body: tpl.body,
+                          date: new Date().toISOString().slice(0, 10)
+                        });
+                        setIngestFeedback(null);
+                      }}
+                    >
+                      {tpl.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Form Inputs */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div>
+                  <label className="section-label">Sender Email (From):</label>
+                  <input
+                    type="text"
+                    className="search-input-field"
+                    style={{ width: '100%', padding: '8px 12px' }}
+                    placeholder="e.g. recruiter@swiggy.in or hr@razorpay.com"
+                    value={ingestDraft.from}
+                    onChange={(e) => setIngestDraft(prev => ({ ...prev, from: e.target.value }))}
+                  />
+                </div>
+
+                <div>
+                  <label className="section-label">Subject Line:</label>
+                  <input
+                    type="text"
+                    className="search-input-field"
+                    style={{ width: '100%', padding: '8px 12px' }}
+                    placeholder="e.g. Invitation to Interview with Engineering Team"
+                    value={ingestDraft.subject}
+                    onChange={(e) => setIngestDraft(prev => ({ ...prev, subject: e.target.value }))}
+                  />
+                </div>
+
+                <div>
+                  <label className="section-label">Email Body Content:</label>
+                  <textarea
+                    className="notes-textarea"
+                    rows={4}
+                    style={{ width: '100%', padding: '8px 12px', fontSize: '13px' }}
+                    placeholder="Paste the recruiter message or email content here..."
+                    value={ingestDraft.body}
+                    onChange={(e) => setIngestDraft(prev => ({ ...prev, body: e.target.value }))}
+                  />
+                </div>
+              </div>
+
+              {/* Ingestion Feedback Result */}
+              {ingestFeedback && (
+                <div
+                  style={{
+                    marginTop: '16px',
+                    padding: '12px 16px',
+                    borderRadius: 'var(--radius-md)',
+                    background: ingestFeedback.linked ? 'var(--bg-card-subtle)' : 'var(--bg-card)',
+                    border: ingestFeedback.linked ? '1px solid var(--forest)' : '1px solid var(--border-color)'
+                  }}
+                >
+                  {ingestFeedback.linked ? (
+                    <div>
+                      <div className="flex-inline-gap" style={{ alignItems: 'center', marginBottom: '4px' }}>
+                        <CheckCircle2 size={16} className="text-success" />
+                        <span className="font-semibold" style={{ color: 'var(--forest)' }}>
+                          Matched to {ingestFeedback.company} ({ingestFeedback.jobTitle})
+                        </span>
+                      </div>
+                      <p style={{ margin: 0, fontSize: '12.5px', color: 'var(--text-secondary)' }}>
+                        Stage: <strong style={{ textTransform: 'capitalize' }}>{ingestFeedback.previousStatus}</strong> → <strong style={{ textTransform: 'capitalize', color: 'var(--forest)' }}>{ingestFeedback.newStatus}</strong>
+                        {ingestFeedback.stageAdvanced ? ' (Advanced!)' : ' (Preserved)'}. New event appended to timeline!
+                      </p>
+                    </div>
+                  ) : (
+                    <div>
+                      <div className="flex-inline-gap" style={{ alignItems: 'center', marginBottom: '4px' }}>
+                        <AlertCircle size={16} className="text-warning" />
+                        <span className="font-semibold" style={{ color: 'var(--warning)' }}>
+                          {ingestFeedback.detectedStatus ? `Detected: ${ingestFeedback.detectedStatus}` : 'No Match'}
+                        </span>
+                      </div>
+                      <p style={{ margin: 0, fontSize: '12.5px', color: 'var(--text-muted)' }}>
+                        {ingestFeedback.reason || ingestFeedback.error || 'Could not link message to an active application.'}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="modal-footer flex-between">
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => setShowIngestModal(false)}
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                disabled={ingesting}
+                onClick={() => handleIngestMessage()}
+              >
+                {ingesting ? <RefreshCw size={13} className="spin" /> : <Send size={13} />}
+                Process & Advance Stage
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Gmail Setup & Information Modal */}
+      {showGmailModal && (
+        <div className="modal-backdrop" onClick={() => setShowGmailModal(false)}>
+          <div className="modal-card modal-md" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div>
+                <span className="modal-eyebrow">Google Cloud Gmail Integration</span>
+                <h2 className="modal-title">Gmail Recruiter Reply Sync</h2>
+                <span className="modal-subtitle">
+                  100% Free tier • Read-only scope (https://www.googleapis.com/auth/gmail.readonly)
+                </span>
+              </div>
+              <button
+                type="button"
+                className="modal-close-btn"
+                onClick={() => setShowGmailModal(false)}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="modal-body" style={{ fontSize: '13px', lineHeight: 1.6 }}>
+              <div style={{ padding: '12px', background: 'var(--bg-card-subtle)', borderRadius: 'var(--radius-md)', marginBottom: '16px' }}>
+                <h4 style={{ margin: '0 0 6px 0', fontSize: '14px', color: 'var(--text-primary)' }}>
+                  How Gmail Integration Works in JobRadar
+                </h4>
+                <p style={{ margin: 0, color: 'var(--text-secondary)' }}>
+                  JobRadar uses Google's standard OAuth 2.0 flow with strict <strong>read-only</strong> access. It scans inbound emails matching recruiter keywords (interviews, assessments, offers, rejections) and advances your applications automatically.
+                </p>
+              </div>
+
+              <h4 style={{ margin: '14px 0 8px 0', fontSize: '13.5px', fontWeight: 600 }}>
+                Free Setup Checklist (Google Cloud Console):
+              </h4>
+              <ol style={{ paddingLeft: '20px', margin: 0, display: 'flex', flexDirection: 'column', gap: '8px', color: 'var(--text-secondary)' }}>
+                <li>
+                  Go to <strong>Google Cloud Console</strong> & create a free project (e.g. <em>JobRadar Tracker</em>).
+                </li>
+                <li>
+                  Enable <strong>Gmail API</strong> in APIs & Services (Free, 1B quota units/day).
+                </li>
+                <li>
+                  Under <em>OAuth consent screen</em>, choose <strong>External</strong>, status <strong>Testing</strong> (allows your personal Gmail with 0 cost and no verification review).
+                </li>
+                <li>
+                  Add scope: <code>https://www.googleapis.com/auth/gmail.readonly</code>.
+                </li>
+                <li>
+                  Create <strong>OAuth Client ID</strong> (Web Application) and add redirect URI:
+                  <br />
+                  <code>http://localhost:5000/api/applications/gmail/callback</code>
+                </li>
+                <li>
+                  Set <code>GOOGLE_CLIENT_ID</code> and <code>GOOGLE_CLIENT_SECRET</code> in <code>backend/.env</code>.
+                </li>
+              </ol>
+
+              <div style={{ marginTop: '16px', padding: '10px 14px', background: 'var(--bg-card-subtle)', borderRadius: 'var(--radius-md)', display: 'flex', gap: '10px', alignItems: 'center' }}>
+                <HelpCircle size={18} className="text-copper" style={{ flexShrink: 0 }} />
+                <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                  Full architecture and step-by-step credentials instructions are documented in <strong>docs/API_AND_SERVICES.md</strong>. You can also test with the &quot;Track Recruiter Email&quot; button anytime without Google credentials!
+                </span>
+              </div>
+            </div>
+
+            <div className="modal-footer flex-between">
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => setShowGmailModal(false)}
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                onClick={() => {
+                  setShowGmailModal(false);
+                  setShowIngestModal(true);
+                }}
+              >
+                <Mail size={13} /> Test with Recruiter Email Simulator
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
-

@@ -238,41 +238,14 @@ function parseCandidateResume(rawCvText = '', candidateProfile = {}) {
     }
   }
 
-  // Fallback for experience: ensure experience section is never empty
+  // Fallback for experience: strictly authentic data only (never inject fake companies)
   if (parsedExperience.length === 0) {
     if (Array.isArray(candidateProfile?.experience) && candidateProfile.experience.length > 0) {
       parsedExperience.push(...candidateProfile.experience);
     } else if (Array.isArray(candidateProfile?.workHistory) && candidateProfile.workHistory.length > 0) {
       parsedExperience.push(...candidateProfile.workHistory);
-    } else {
-      const expRole1 = candidateProfile?.headline || 'Senior Technical Program Manager';
-      const cityLoc = location || 'Noida, India';
-      parsedExperience.push(
-        {
-          role: expRole1,
-          company: 'Enterprise Intelligence & AI Labs',
-          location: cityLoc,
-          duration: '2022 – Present',
-          bullets: [
-            'Spearheaded the technical roadmap, architectural standards, and end-to-end delivery lifecycle for high-throughput enterprise software platforms.',
-            'Collaborated closely with cross-functional engineering, product, and data science teams to align product specifications with agile release milestones.',
-            'Architected distributed microservices and real-time data pipelines handling high-concurrency requests with 99.9% production availability.',
-            'Instituted automated CI/CD deployment pipelines, automated integration testing, and comprehensive observability dashboards.'
-          ]
-        },
-        {
-          role: 'Software Engineer / Product Analyst',
-          company: 'NextGen Digital Systems',
-          location: cityLoc,
-          duration: '2020 – 2022',
-          bullets: [
-            'Designed and implemented full-stack web applications and scalable RESTful APIs utilizing modern JavaScript/TypeScript and Python.',
-            'Optimized relational database queries and caching layers in PostgreSQL and Redis, reducing p95 latency by 38%.',
-            'Authored thorough technical documentation, API specifications, and standard operating procedures for distributed systems.'
-          ]
-        }
-      );
     }
+    // Truthfulness invariant: if candidate has no authentic experience recorded, leave empty for graceful omission
   }
 
   // 5. PARSE PROJECTS ENTRIES
@@ -312,34 +285,12 @@ function parseCandidateResume(rawCvText = '', candidateProfile = {}) {
     }
   }
 
-  // Fallback for projects: ensure projects section is never empty
+  // Fallback for projects: strictly authentic data only (never inject fake projects)
   if (parsedProjects.length === 0) {
     if (Array.isArray(candidateProfile?.projects) && candidateProfile.projects.length > 0) {
       parsedProjects.push(...candidateProfile.projects);
-    } else {
-      parsedProjects.push(
-        {
-          name: 'Applied AI & Workflow Intelligence Engine',
-          tagline: 'Predictive Analytics & Real-Time Orchestration Platform',
-          techStack: 'Python, PyTorch / TensorFlow, FastAPI, React, Docker',
-          bullets: [
-            'Engineered an intelligent prediction and automation platform delivering real-time inferences with sub-45ms latency.',
-            'Implemented automated data modeling and vector indexing pipelines to streamline unstructured telemetry processing.',
-            'Packaged containerized services via Docker and managed continuous deployment workflows with zero production downtime.'
-          ]
-        },
-        {
-          name: 'Distributed Cloud Service & Telemetry Hub',
-          tagline: 'High-Concurrency Event Processing Platform',
-          techStack: 'TypeScript, Node.js, Express, PostgreSQL, Redis, REST APIs',
-          bullets: [
-            'Architected an event-driven microservice system supporting 10k+ concurrent requests with Redis caching and rate limiting.',
-            'Streamlined data schemas and transaction isolation in PostgreSQL, accelerating query throughput by 42%.',
-            'Implemented health monitoring dashboards, structured audit logging, and automated failure recovery.'
-          ]
-        }
-      );
     }
+    // Truthfulness invariant: if candidate has no authentic projects recorded, leave empty for graceful omission
   }
 
   // 6. PARSE EDUCATION ENTRIES
@@ -390,24 +341,25 @@ function parseCandidateResume(rawCvText = '', candidateProfile = {}) {
     }
   }
 
-  // Fallback if education was not extracted from headings, or cleans placeholder 'University'
+  // Fallback if education was not extracted from headings: strictly authentic data only (never inject fake NIT/degrees)
   if (parsedEducation.length === 0) {
-    const inst = candidateProfile?.university || candidateProfile?.college || 'National Institute of Technology';
-    const degree = candidateProfile?.education || 'Bachelor of Technology in Computer Science & Engineering';
-    const yr = candidateProfile?.gradYear ? `${candidateProfile.gradYear}` : '2022';
-    parsedEducation.push({
-      institution: inst,
-      degree: degree,
-      year: yr,
-      details: 'Coursework: Data Structures, Algorithms, Distributed Systems, Software Engineering, Database Systems'
-    });
+    if (Array.isArray(candidateProfile?.educationEntries) && candidateProfile.educationEntries.length > 0) {
+      parsedEducation.push(...candidateProfile.educationEntries);
+    } else if (candidateProfile?.education) {
+      parsedEducation.push({
+        institution: candidateProfile?.university || candidateProfile?.college || '',
+        degree: candidateProfile.education,
+        year: candidateProfile?.gradYear ? `${candidateProfile.gradYear}` : '',
+        details: ''
+      });
+    }
   } else {
     for (const edu of parsedEducation) {
-      if (!edu.institution || edu.institution.toLowerCase() === 'university') {
-        edu.institution = candidateProfile?.university || candidateProfile?.college || 'National Institute of Technology';
+      if ((!edu.institution || edu.institution.toLowerCase() === 'university') && (candidateProfile?.university || candidateProfile?.college)) {
+        edu.institution = candidateProfile.university || candidateProfile.college;
       }
-      if (!edu.degree) {
-        edu.degree = candidateProfile?.education || 'Bachelor of Technology in Computer Science & Engineering';
+      if (!edu.degree && candidateProfile?.education) {
+        edu.degree = candidateProfile.education;
       }
     }
   }
@@ -569,75 +521,62 @@ function tailorCandidateResume({ candidateProfile, rawCvText, job, jobEligibilit
     }
   }
 
-  // Keywords to inject (up to 4 most relevant)
-  const injectedKeywords = missingSkills.slice(0, 4);
-
-  // 1. SMART SKILLS TAILORING:
-  // Inject target competencies into the appropriate category of the resume
-  const tailoredSkills = {
-    languages: [...(baseResume.skills.languages || [])],
-    frameworks: [...(baseResume.skills.frameworks || [])],
-    databases: [...(baseResume.skills.databases || [])],
-    tools: [...(baseResume.skills.tools || [])]
+  // TRUTHFULNESS INVARIANT ENFORCED:
+  // Never inject unverified skills that the candidate has no evidence for in their profile.
+  // Instead, optimize ATS keyword discoverability by prioritizing verified matched competencies
+  // to the front of their respective categories.
+  const prioritizeCategory = (items = [], matched = []) => {
+    const matchedInCat = [];
+    const otherInCat = [];
+    const seen = new Set();
+    for (const s of items) {
+      if (!s || typeof s !== 'string') continue;
+      const cleanS = s.toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (!cleanS || seen.has(cleanS)) continue;
+      seen.add(cleanS);
+      const isMatched = matched.some(m => {
+        const cleanM = m.toLowerCase().replace(/[^a-z0-9]/g, '');
+        return cleanS === cleanM || cleanS.includes(cleanM) || cleanM.includes(cleanS);
+      });
+      if (isMatched) matchedInCat.push(s);
+      else otherInCat.push(s);
+    }
+    return [...matchedInCat, ...otherInCat];
   };
 
-  for (const kw of injectedKeywords) {
-    if (/python|c\+\+|java\b|rust|golang|ruby|typescript|javascript|c#|sql/i.test(kw)) {
-      if (!tailoredSkills.languages.includes(kw)) tailoredSkills.languages.unshift(kw);
-    } else if (/machine learning|ml|ai|deep learning|pytorch|tensorflow|django|fastapi|react|next|node|spring/i.test(kw)) {
-      if (!tailoredSkills.frameworks.includes(kw)) tailoredSkills.frameworks.unshift(kw);
-    } else if (/postgres|mongo|redis|sql|kafka|dynamodb|mysql|elasticsearch/i.test(kw)) {
-      if (!tailoredSkills.databases.includes(kw)) tailoredSkills.databases.unshift(kw);
-    } else {
-      if (!tailoredSkills.tools.includes(kw)) tailoredSkills.tools.unshift(kw);
-    }
-  }
+  const tailoredSkills = {
+    languages: prioritizeCategory(baseResume.skills.languages || [], matchedSkills),
+    frameworks: prioritizeCategory(baseResume.skills.frameworks || [], matchedSkills),
+    databases: prioritizeCategory(baseResume.skills.databases || [], matchedSkills),
+    tools: prioritizeCategory(baseResume.skills.tools || [], matchedSkills)
+  };
 
-  // 2. SMART PROJECT TAILORING (ON THEIR ACTUAL PROJECTS):
-  // Weaves target competencies into the candidate's authentic projects
-  const tailoredProjects = (baseResume.projects || []).map((proj, pIdx) => {
-    const pCopy = {
-      ...proj,
-      bullets: [...proj.bullets]
-    };
+  // 2. AUTHENTIC PROJECT TAILORING (PRESERVES REAL CREDENTIALS ONLY):
+  const tailoredProjects = (baseResume.projects || []).map((proj) => ({
+    ...proj,
+    bullets: [...(proj.bullets || [])]
+  }));
 
-    // If candidate has projects and target job has relevant keywords, enhance relevant bullet
-    if (injectedKeywords.length > 0 && pIdx === 0 && pCopy.bullets.length > 0) {
-      const relevantKw = injectedKeywords[0];
-      // Only enhance if not already present
-      if (!pCopy.bullets.some(b => b.toLowerCase().includes(relevantKw.toLowerCase()))) {
-        pCopy.bullets[0] = pCopy.bullets[0].replace(/\.$/, '') + `, incorporating ${relevantKw} best practices.`;
-      }
-    }
-
-    return pCopy;
-  });
-
-  // 3. SMART EXPERIENCE TAILORING (ON THEIR ACTUAL EXPERIENCE):
-  const tailoredExperience = (baseResume.experience || []).map((exp, eIdx) => {
-    const eCopy = {
-      ...exp,
-      bullets: [...exp.bullets]
-    };
-    if (injectedKeywords.length > 1 && eIdx === 0 && eCopy.bullets.length > 0) {
-      const kw = injectedKeywords[1] || injectedKeywords[0];
-      if (!eCopy.bullets.some(b => b.toLowerCase().includes(kw.toLowerCase()))) {
-        eCopy.bullets[0] = eCopy.bullets[0].replace(/\.$/, '') + `, leveraging ${kw} architectures.`;
-      }
-    }
-    return eCopy;
-  });
+  // 3. AUTHENTIC EXPERIENCE TAILORING (PRESERVES REAL WORK HISTORY ONLY):
+  const tailoredExperience = (baseResume.experience || []).map((exp) => ({
+    ...exp,
+    bullets: [...(exp.bullets || [])]
+  }));
 
   // 4. PROFESSIONAL SUMMARY (OPTIONAL)
   const hasOriginalSummary = Boolean(baseResume.summary && baseResume.summary.trim().length > 15);
-  const candName = baseResume.name || 'Candidate';
   const candRole = candidateProfile?.headline || jobTitle;
+  const verifiedCompetenciesSnippet = matchedSkills.length > 0
+    ? `Proven competencies in ${matchedSkills.slice(0, 4).join(', ')}.`
+    : `Strong foundational engineering competencies.`;
+
   const tailoredSummary = hasOriginalSummary
     ? `${baseResume.summary.trim()} Aligned with ${jobTitle} competencies at ${company}.`
-    : `Results-driven ${candRole} with proven hands-on experience building robust software systems. Demonstrated capability in ${[...matchedSkills, ...injectedKeywords].slice(0, 4).join(', ')}. Eager to leverage technical expertise and engineering rigor for the ${jobTitle} role at ${company}.`;
+    : `Results-driven ${candRole} with verified hands-on expertise building scalable systems. ${verifiedCompetenciesSnippet} Eager to leverage technical rigor for the ${jobTitle} role at ${company}.`;
 
-  const originalScore = jobEligibility ? 53 : 50;
-  const tailoredScore = Math.min(95, originalScore + (injectedKeywords.length * 9) + 6);
+  const matchRatio = targetSkills.length > 0 ? (matchedSkills.length / targetSkills.length) : 1;
+  const originalScore = jobEligibility ? Math.round(50 + (matchRatio * 40)) : 50;
+  const tailoredScore = Math.min(98, originalScore + 4);
 
   return {
     tailoredResume: {
@@ -661,14 +600,19 @@ function tailorCandidateResume({ candidateProfile, rawCvText, job, jobEligibilit
       },
       originalScore,
       tailoredScore,
-      scoreBoost: `+${tailoredScore - originalScore}%`,
-      keywordsIntegrated: injectedKeywords,
+      scoreBoost: `+${tailoredScore - originalScore}% (ATS structural optimization)`,
+      truthfulnessVerified: true,
+      fabricatedEntriesInjected: 0,
+      keywordsIntegrated: matchedSkills,
       matchedKeywords: matchedSkills,
+      missingKeywords: missingSkills,
       missingKeywordsCount: missingSkills.length,
       recommendationTips: [
-        `Formatted in the single-column Overleaf / Jake's Resume layout preferred by engineering recruiters.`,
-        `Preserved your authentic experience and projects, strategically infusing required competencies for ${company}.`,
-        `Submit this clean 1-page PDF directly to ${company}'s application portal for 100% ATS score compatibility.`
+        `Formatted in the single-column Overleaf / Jake's Resume layout with guaranteed sequential ATS parsing.`,
+        `Truthfulness Invariant Enforced: Preserved 100% authentic credentials with strategic keyword prioritization.`,
+        missingSkills.length > 0
+          ? `To strengthen your future match for ${company}, consider gaining hands-on exposure to ${missingSkills.slice(0, 3).join(', ')}.`
+          : `Your verified profile covers all target competencies specified for ${company}.`
       ]
     }
   };

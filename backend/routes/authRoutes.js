@@ -8,7 +8,7 @@ const { authLimiter } = require('../utils/rateLimiter');
 router.post('/check-email', authController.checkEmail);
 router.post('/send-otp', authLimiter, authController.sendOtp);
 router.post('/register', authLimiter, authController.register);
-router.post('/login', authController.login);
+router.post('/login', authLimiter, authController.login);
 router.post('/login-otp', authLimiter, authController.loginWithOtp);
 router.post('/logout', authController.logout);
 

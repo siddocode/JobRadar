@@ -1,6 +1,7 @@
 /**
  * Workable Job Board API Adapter
  * Official Widget/Public Endpoint: POST https://apply.workable.com/api/v3/accounts/{slug}/jobs
+ * Fallback: GET https://apply.workable.com/{slug}/jobs.md
  */
 
 const { rateLimitHost } = require('../utils/rateLimiter');
@@ -12,7 +13,7 @@ const HOST = 'apply.workable.com';
 /**
  * Normalizes a raw Workable job item.
  *
- * @param {Object} rawJob - Raw job object from Workable API
+ * @param {Object} rawJob - Raw job object from Workable API or parsed Markdown
  * @param {string} companyName - Display name of the company
  * @param {string} slug - Company account slug
  * @returns {Object} Normalized job object
@@ -27,7 +28,7 @@ function normalizeWorkableJob(rawJob, companyName, slug) {
   const state = locObj.region || '';
   const country = locObj.country || locObj.countryCode || '';
   const rawLocParts = [city, state, country].filter(Boolean);
-  const rawLoc = rawLocParts.length > 0 ? rawLocParts.join(', ') : (rawJob.remote ? 'Remote' : 'Unspecified');
+  const rawLoc = rawJob.locationRaw || (rawLocParts.length > 0 ? rawLocParts.join(', ') : (rawJob.remote ? 'Remote' : 'Unspecified'));
 
   const locNorm = normalizeLocation(rawLoc, {
     title,
@@ -35,7 +36,7 @@ function normalizeWorkableJob(rawJob, companyName, slug) {
   });
 
   const shortcode = rawJob.shortcode || rawJob.id;
-  const applyUrl = `https://apply.workable.com/${encodeURIComponent(slug)}/j/${shortcode}/`;
+  const applyUrl = rawJob.url || `https://apply.workable.com/${encodeURIComponent(slug)}/j/${shortcode}/`;
   const updatedAt = rawJob.published ? new Date(rawJob.published) : new Date();
   const fingerprint = generateFingerprint(companyName, title, locNorm.city);
 
@@ -51,14 +52,58 @@ function normalizeWorkableJob(rawJob, companyName, slug) {
     country: locNorm.country,
     workMode: locNorm.workMode,
     fingerprint,
-    descriptionHtml: '', // Populated on-demand or in detailed fetch
+    descriptionHtml: rawJob.description || '',
     applyUrl,
     updatedAt
   };
 }
 
 /**
- * Fetches and normalizes all public jobs for a given Workable slug.
+ * Fallback parser for Workable public Markdown feed.
+ */
+async function fetchWorkableMarkdown(slug, companyName) {
+  const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
+  const mdUrl = `https://apply.workable.com/${encodeURIComponent(slug)}/jobs.md?workplace=on_site&workplace=hybrid&workplace=remote`;
+
+  try {
+    const mdRes = await fetch(mdUrl, {
+      headers: { 'User-Agent': UA, 'Accept': 'text/markdown, text/plain, */*' },
+      signal: AbortSignal.timeout(8000)
+    });
+    if (!mdRes.ok) return null;
+
+    const mdText = await mdRes.text();
+    const lines = mdText.split('\n');
+    const parsedJobs = [];
+    const rowRegex = /^\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*\[View\]\((https:\/\/apply\.workable\.com\/[^/]+\/jobs\/view\/([^.]+)\.md)\)\s*\|$/;
+
+    for (const line of lines) {
+      const match = line.match(rowRegex);
+      if (match) {
+        const shortcode = match[8];
+        const rawLoc = match[3].trim();
+        parsedJobs.push(normalizeWorkableJob({
+          title: match[1].trim(),
+          department: match[2].trim(),
+          locationRaw: rawLoc,
+          employment_type: match[4].trim(),
+          shortcode,
+          id: shortcode,
+          url: `https://apply.workable.com/${encodeURIComponent(slug)}/j/${shortcode}/`
+        }, companyName, slug));
+      }
+    }
+
+    if (parsedJobs.length > 0) {
+      return { success: true, status: 200, jobs: parsedJobs };
+    }
+  } catch (_) {}
+
+  return null;
+}
+
+/**
+ * Fetches and normalizes all public jobs for a given Workable slug with pagination.
  *
  * @param {string} slug - The Workable company board slug
  * @param {string} companyName - Display name of the company
@@ -96,6 +141,10 @@ async function fetchWorkableJobs(slug, companyName) {
     clearTimeout(timeout);
 
     if (response.status === 404) {
+      // Check markdown fallback before returning 404
+      const mdFallback = await fetchWorkableMarkdown(cleanSlug, companyName);
+      if (mdFallback) return mdFallback;
+
       return {
         success: false,
         status: 404,
@@ -114,6 +163,9 @@ async function fetchWorkableJobs(slug, companyName) {
     }
 
     if (!response.ok) {
+      const mdFallback = await fetchWorkableMarkdown(cleanSlug, companyName);
+      if (mdFallback) return mdFallback;
+
       return {
         success: false,
         status: response.status,
@@ -123,7 +175,41 @@ async function fetchWorkableJobs(slug, companyName) {
     }
 
     const data = await response.json();
-    const rawJobs = Array.isArray(data.results) ? data.results : [];
+    let rawJobs = Array.isArray(data.results) ? [...data.results] : [];
+
+    // Paginate through nextPage token if available (up to 10 pages)
+    let token = data.nextPage;
+    let pageCount = 0;
+    const MAX_PAGES = 10;
+
+    while (token && pageCount < MAX_PAGES) {
+      pageCount++;
+      await rateLimitHost(HOST);
+      try {
+        const nextRes = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'User-Agent': 'JobRadar/2.0'
+          },
+          body: JSON.stringify({ token }),
+          signal: AbortSignal.timeout(8000)
+        });
+
+        if (nextRes.ok) {
+          const nextData = await nextRes.json();
+          if (Array.isArray(nextData.results)) {
+            rawJobs.push(...nextData.results);
+          }
+          token = nextData.nextPage;
+        } else {
+          break;
+        }
+      } catch (_) {
+        break;
+      }
+    }
 
     const jobs = rawJobs
       .filter(j => j && (j.shortcode || j.id))
@@ -135,6 +221,10 @@ async function fetchWorkableJobs(slug, companyName) {
       jobs
     };
   } catch (err) {
+    // Attempt markdown fallback on error / timeout
+    const mdFallback = await fetchWorkableMarkdown(cleanSlug, companyName);
+    if (mdFallback) return mdFallback;
+
     const isTimeout = err.name === 'AbortError';
     return {
       success: false,
@@ -148,6 +238,6 @@ async function fetchWorkableJobs(slug, companyName) {
 
 module.exports = {
   fetchWorkableJobs,
-  normalizeWorkableJob
+  normalizeWorkableJob,
+  fetchWorkableMarkdown
 };
-
