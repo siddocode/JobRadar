@@ -33,6 +33,7 @@
     "mongoose": "^8.9.2",
     "multer": "^2.5.0",
     "node-cron": "^4.6.0",
-    "pdf-parse": "^2.4.5"
+    "pdf-parse": "^2.4.5",
+    "playwright": "^1.65.1"
   }
 }

@@ -13,6 +13,12 @@ const autopilotConfigSchema = new mongoose.Schema(
       type: Boolean,
       default: false
     },
+    status: {
+      type: String,
+      enum: ['active', 'paused', 'stopped'],
+      default: 'paused',
+      index: true
+    },
     mode: {
       type: String,
       enum: ['assisted', 'autonomous'],
@@ -29,6 +35,21 @@ const autopilotConfigSchema = new mongoose.Schema(
     workModes: {
       type: [String],
       default: ['remote', 'hybrid', 'onsite']
+    },
+    salaryPreferences: {
+      minSalary: {
+        type: Number,
+        default: 0
+      },
+      currency: {
+        type: String,
+        default: 'INR'
+      },
+      period: {
+        type: String,
+        enum: ['yearly', 'monthly', 'hourly'],
+        default: 'yearly'
+      }
     },
     minMatchScore: {
       type: Number,

@@ -326,7 +326,7 @@ function classifyRole(title = '', descriptionText = '') {
     titleLower.includes('principal') ||
     titleLower.includes('architect') ||
     titleLower.includes('tech lead') ||
-    titleLower.includes('lead ')
+    /\blead\b/i.test(titleLower)
   ) {
     seniority = 'lead_staff';
   } else if (

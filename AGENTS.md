@@ -37,8 +37,9 @@
 - **Database & ODM:** Mongoose `^8.9.2` connecting to MongoDB Atlas (`mongodb+srv://`).
 - **Authentication & Security:** `jsonwebtoken` (`^9.0.3`), `bcryptjs` (`^3.0.3`), `cookie-parser` (`^1.4.7`), `cors` (`^2.8.5`).
 - **File Upload & Parsing:** `multer` (`^2.5.0`, in-memory buffer storage), `pdf-parse` (`^2.4.5`, PDF text extraction).
+- **Automation & Headless Execution:** `playwright` (`^1.52.0`, isolated Chromium session runner with dual-engine fallback and anti-bot safety halt).
 - **Background Tasks:** `node-cron` (`^4.6.0`).
-- **External Communications:** Native Node `fetch` (`node:dns`, `AbortSignal.timeout`), Brevo REST API v3.
+- **External Communications:** Native Node `fetch` (`node:dns`, `AbortSignal.timeout`), Brevo REST API v3, Google OAuth 2.0 / Gmail REST API.
 
 ### Frontend (`/frontend`)
 - **Framework & Build:** React `^19.2.8`, ReactDOM `^19.2.8`, Vite `^8.3.0` (`@vitejs/plugin-react` `^6.1.1`).
@@ -69,6 +70,8 @@ JobRadar/
 │   │   ├── smartrecruiters.js               # SmartRecruiters Postings API
 │   │   ├── workable.js                      # Workable Public Widget & v3 API adapter
 │   │   ├── recruitee.js                     # Recruitee Public Careers API adapter
+│   │   ├── personio.js                      # Personio XML feed & job board adapter
+│   │   ├── teamtailor.js                    # Teamtailor JSON & schema.org career portal adapter
 │   │   ├── workday.js                       # Workday Candidate Experience (CXS) API
 │   │   ├── amazon.js                        # Amazon Jobs JSON search API
 │   │   ├── google.js                        # Google Careers SSR extractor

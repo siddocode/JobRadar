@@ -2,11 +2,15 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   Bot,
   Play,
+  Pause,
+  Square,
   ShieldCheck,
   Clock,
   CheckCircle2,
   RefreshCw,
-  Plus
+  Plus,
+  MapPin,
+  IndianRupee
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -15,12 +19,14 @@ export default function AutopilotView({ onNavigateApplications }) {
 
   const [config, setConfig] = useState({
     enabled: false,
+    status: 'paused',
     mode: 'assisted',
     minMatchScore: 70,
     dailyLimit: 5,
     targetRoles: ['Software Engineer', 'Full Stack Developer', 'Backend Engineer'],
     preferredLocations: ['All India'],
     workModes: ['remote', 'hybrid', 'onsite'],
+    salaryPreferences: { minSalary: 0, currency: 'INR', period: 'yearly' },
     blacklistedCompanies: []
   });
 
@@ -32,6 +38,7 @@ export default function AutopilotView({ onNavigateApplications }) {
   const [lastRunResult, setLastRunResult] = useState(null);
 
   const [newRole, setNewRole] = useState('');
+  const [newLocation, setNewLocation] = useState('');
   const [newBlacklist, setNewBlacklist] = useState('');
 
   // Fetch Autopilot Config & Recent Runs
@@ -97,9 +104,36 @@ export default function AutopilotView({ onNavigateApplications }) {
     }
   };
 
+  // Explicit pause / resume / stop controls
+  const handleSetState = async (targetState) => {
+    try {
+      setIsSaving(true);
+      const endpoint = targetState === 'active'
+        ? '/api/autopilot/resume'
+        : (targetState === 'paused' ? '/api/autopilot/pause' : '/api/autopilot/stop');
+      const res = await authFetch(endpoint, { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.config) {
+          setConfig(data.config);
+          setSaveSuccess(true);
+          setTimeout(() => setSaveSuccess(false), 2000);
+        }
+      }
+    } catch (err) {
+      console.error(`Failed to set autopilot state to ${targetState}:`, err);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   // Toggle master active state
   const handleToggleEnabled = async () => {
-    const updated = { ...config, enabled: !config.enabled };
+    const updated = {
+      ...config,
+      enabled: !config.enabled,
+      status: !config.enabled ? 'active' : 'paused'
+    };
     setConfig(updated);
     await handleSaveConfig(updated);
   };
@@ -141,6 +175,36 @@ export default function AutopilotView({ onNavigateApplications }) {
     const updated = { ...config, targetRoles: config.targetRoles.filter(r => r !== role) };
     setConfig(updated);
     handleSaveConfig(updated);
+  };
+
+  const handleAddLocation = (e) => {
+    e.preventDefault();
+    if (!newLocation.trim()) return;
+    const trimmed = newLocation.trim();
+    if (!config.preferredLocations.includes(trimmed)) {
+      const updated = { ...config, preferredLocations: [...config.preferredLocations, trimmed] };
+      setConfig(updated);
+      handleSaveConfig(updated);
+    }
+    setNewLocation('');
+  };
+
+  const handleRemoveLocation = (loc) => {
+    const updated = { ...config, preferredLocations: config.preferredLocations.filter(l => l !== loc) };
+    setConfig(updated);
+    handleSaveConfig(updated);
+  };
+
+  const handleSalaryChange = (minSalary) => {
+    const num = Math.max(0, parseInt(minSalary, 10) || 0);
+    const updated = {
+      ...config,
+      salaryPreferences: {
+        ...(config.salaryPreferences || { currency: 'INR', period: 'yearly' }),
+        minSalary: num
+      }
+    };
+    setConfig(updated);
   };
 
   const handleAddBlacklist = (e) => {
@@ -234,13 +298,32 @@ export default function AutopilotView({ onNavigateApplications }) {
               <ShieldCheck size={18} className="text-forest" />
               <h2 className="autopilot-card-title">Automation & Safety Controls</h2>
             </div>
-            <button
-              type="button"
-              className={`toggle-switch-btn ${config.enabled ? 'active' : ''}`}
-              onClick={handleToggleEnabled}
-            >
-              {config.enabled ? 'Autopilot Active' : 'Autopilot Paused'}
-            </button>
+            <div className="flex-inline-gap">
+              <button
+                type="button"
+                className={`btn btn-xs ${config.status === 'active' || (config.enabled && config.status !== 'stopped') ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => handleSetState('active')}
+                title="Resume Autopilot Execution"
+              >
+                <Play size={11} /> Active
+              </button>
+              <button
+                type="button"
+                className={`btn btn-xs ${config.status === 'paused' || (!config.enabled && config.status !== 'stopped') ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => handleSetState('paused')}
+                title="Pause Autopilot Execution"
+              >
+                <Pause size={11} /> Pause
+              </button>
+              <button
+                type="button"
+                className={`btn btn-xs ${config.status === 'stopped' ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => handleSetState('stopped')}
+                title="Stop Autopilot Execution"
+              >
+                <Square size={11} /> Stop
+              </button>
+            </div>
           </div>
 
           <div className="autopilot-card-body">
@@ -327,6 +410,61 @@ export default function AutopilotView({ onNavigateApplications }) {
               <span className="text-muted text-xs">
                 Jobs below this score or with hard residency/work authorization blockers are automatically filtered out.
               </span>
+            </div>
+
+            {/* Salary Preferences */}
+            <div className="form-group mb-4">
+              <div className="flex-between">
+                <label className="form-label flex-inline-gap">
+                  <IndianRupee size={14} /> Expected Minimum Salary
+                </label>
+                <span className="font-semibold text-forest text-sm">
+                  {config.salaryPreferences?.minSalary > 0
+                    ? `₹${(config.salaryPreferences.minSalary / 100000).toFixed(1)} LPA`
+                    : 'Any Salary'}
+                </span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="5000000"
+                step="100000"
+                value={config.salaryPreferences?.minSalary || 0}
+                className="range-slider"
+                onChange={(e) => handleSalaryChange(e.target.value)}
+                onMouseUp={() => handleSaveConfig()}
+                onTouchEnd={() => handleSaveConfig()}
+              />
+              <span className="text-muted text-xs">
+                Opportunities with explicit salary caps below your preference will be filtered out.
+              </span>
+            </div>
+
+            {/* Preferred Location Filters */}
+            <div className="form-group mb-4">
+              <label className="form-label flex-inline-gap">
+                <MapPin size={14} /> Preferred Locations
+              </label>
+              <form onSubmit={handleAddLocation} className="skill-add-form mb-2">
+                <input
+                  type="text"
+                  className="form-input text-xs"
+                  placeholder="e.g. Bengaluru, Hyderabad, Remote..."
+                  value={newLocation}
+                  onChange={(e) => setNewLocation(e.target.value)}
+                />
+                <button type="submit" className="btn btn-secondary btn-xs">
+                  <Plus size={13} /> Add
+                </button>
+              </form>
+              <div className="skills-tags-wrap">
+                {(config.preferredLocations || []).map((loc, idx) => (
+                  <span key={idx} className="skill-pill-tag">
+                    {loc}
+                    <button type="button" className="skill-remove-btn" onClick={() => handleRemoveLocation(loc)}>×</button>
+                  </span>
+                ))}
+              </div>
             </div>
 
             {/* Target Role Filters */}

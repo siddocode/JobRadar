@@ -196,6 +196,20 @@ async function probePublicAts(slug, preferredAts = null) {
 
   const probeAshby = async () => {
     try {
+      const ashbyApiUrl = `https://api.ashbyhq.com/posting-api/job-board/${encodeURIComponent(slug)}`;
+      const res = await fetch(ashbyApiUrl, {
+        headers: { 'Accept': 'application/json' },
+        signal: AbortSignal.timeout(6000)
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && Array.isArray(data.jobs) && data.jobs.length > 0) {
+          return { ats: 'ashby', slug, jobs: data.jobs, rawFormat: 'ashby' };
+        }
+      }
+    } catch (_) {}
+
+    try {
       const ashbyUrl = 'https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams';
       const res = await fetch(ashbyUrl, {
         method: 'POST',
@@ -221,41 +235,58 @@ async function probePublicAts(slug, preferredAts = null) {
     const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
     
     // Method 1: Workable Markdown feed (Cloudflare-resistant, public endpoint)
-    try {
-      const mdUrl = `https://apply.workable.com/${encodeURIComponent(slug)}/jobs.md?workplace=on_site&workplace=hybrid&workplace=remote`;
-      const mdRes = await fetch(mdUrl, {
-        headers: { 'User-Agent': UA, 'Accept': 'text/markdown, text/plain, */*' },
-        signal: AbortSignal.timeout(8000)
-      });
-      if (mdRes.ok) {
-        const mdText = await mdRes.text();
-        const lines = mdText.split('\n');
-        const parsedJobs = [];
-        const rowRegex = /^\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*\[View\]\((https:\/\/apply\.workable\.com\/[^/]+\/jobs\/view\/([^.]+)\.md)\)\s*\|$/;
-        for (const line of lines) {
-          const match = line.match(rowRegex);
-          if (match) {
-            const shortcode = match[8];
+    const urlsToTry = [
+      `https://apply.workable.com/${encodeURIComponent(slug)}/jobs.md?workplace=on_site&workplace=hybrid&workplace=remote`,
+      `https://apply.workable.com/${encodeURIComponent(slug)}/jobs.md`,
+      `https://apply.workable.com/${encodeURIComponent(slug)}/jobs.md?department=Engineering&department=Product+%26+Design&department=Data+%26+Analytics`
+    ];
+
+    for (const mdUrl of urlsToTry) {
+      try {
+        const mdRes = await fetch(mdUrl, {
+          headers: { 'User-Agent': UA, 'Accept': 'text/markdown, text/plain, */*' },
+          signal: AbortSignal.timeout(8000),
+          redirect: 'follow'
+        });
+        if (mdRes.ok) {
+          const mdText = await mdRes.text();
+          const lines = mdText.split('\n');
+          const parsedJobs = [];
+          for (const line of lines) {
+            if (!line.includes('[View](')) continue;
+            const cols = line.split('|').map(c => c.trim()).filter(Boolean);
+            if (cols.length < 3) continue;
+
+            const title = cols[0];
+            const lastCol = cols[cols.length - 1];
+            const match = lastCol.match(/jobs\/view\/([^.]+)\.md/);
+            if (!match) continue;
+
+            const shortcode = match[1];
+            let loc = cols.find((c, i) => i > 0 && i < cols.length - 1 && /india|bengaluru|bangalore|pune|mumbai|hyderabad|delhi|gurgaon|gurugram|noida|chennai|kolkata|remote|hybrid|onsite|united states|uk|germany|singapore/i.test(c));
+            if (!loc && cols.length >= 4) loc = cols[2];
+            if (!loc && cols.length >= 3) loc = cols[1];
+
             parsedJobs.push({
-              title: match[1].trim(),
-              department: match[2].trim(),
+              title,
+              department: cols[1] || 'General',
               location: {
-                city: match[3].split(',')[0].trim(),
-                country: match[3].split(',')[1]?.trim() || '',
-                raw: match[3].trim()
+                city: (loc || '').split(',')[0].trim(),
+                country: (loc || '').split(',')[1]?.trim() || '',
+                raw: (loc || '').trim()
               },
-              employment_type: match[4].trim(),
+              employment_type: cols.find(c => /full-time|part-time|contract|internship/i.test(c)) || '',
               shortcode: shortcode,
               id: shortcode,
               url: `https://apply.workable.com/${slug}/j/${shortcode}/`
             });
           }
+          if (parsedJobs.length > 0) {
+            return { ats: 'workable', slug, jobs: parsedJobs, rawFormat: 'workable' };
+          }
         }
-        if (parsedJobs.length > 0) {
-          return { ats: 'workable', slug, jobs: parsedJobs, rawFormat: 'workable' };
-        }
-      }
-    } catch (_) {}
+      } catch (_) {}
+    }
 
     // Method 2: Workable JSON API fallback
     try {
@@ -485,6 +516,11 @@ function standardizeAtsJob(rawItem, atsType, companyName, companyMeta, targetCit
   if (cityLower === 'bengaluru' || cityLower === 'bangalore') cityAliases.push('bengaluru', 'bangalore');
   if (cityLower === 'delhi' || cityLower === 'delhi-ncr' || cityLower === 'delhi ncr') cityAliases.push('delhi', 'ncr');
   if (cityLower === 'noida') cityAliases.push('noida', 'greater noida');
+  if (cityLower === 'mumbai') cityAliases.push('mumbai', 'navi mumbai', 'thane');
+  if (cityLower === 'hyderabad') cityAliases.push('hyderabad', 'secunderabad', 'cyberabad', 'hitec city');
+  if (cityLower === 'pune') cityAliases.push('pune', 'hinjewadi', 'magarpatta');
+  if (cityLower === 'chennai') cityAliases.push('chennai', 'madras', 'omr');
+  if (cityLower === 'kolkata') cityAliases.push('kolkata', 'calcutta', 'salt lake', 'new town');
 
   // Check if job location explicitly names a DIFFERENT tech city or foreign country
   const otherMajorHubs = ['bengaluru', 'bangalore', 'hyderabad', 'pune', 'mumbai', 'chennai', 'kolkata', 'gurugram', 'gurgaon', 'ahmedabad', 'jaipur', 'kochi', 'chandigarh', 'indore', 'san francisco', 'london', 'toronto', 'new york', 'berlin', 'paris', 'sydney', 'dublin', 'singapore', 'tokyo'];

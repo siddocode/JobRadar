@@ -114,22 +114,52 @@
   - Strictly limited to `https://www.googleapis.com/auth/gmail.readonly`.
   - **Zero-Risk Invariant:** The application has **read-only** visibility into emails. It cannot send emails, cannot delete emails, cannot modify labels, and cannot access Google Drive, Contacts, or Calendar.
 - **Architecture & Processing Pipeline:**
-  1. **OAuth 2.0 Flow:** Candidate clicks "Connect Gmail" in the Application Lifecycle board. JobRadar initiates a standard Google OAuth 2.0 Authorization Code flow with `access_type=offline` and `prompt=consent` to obtain an access token and refresh token.
-  2. **Candidate Search Filter:** The system queries Gmail messages using candidate job keywords:
-     ```text
-     subject:(interview OR offer OR assessment OR application OR "thank you for applying" OR HackerRank OR CodeSignal)
-     ```
-  3. **Message Sanitization & Classification:** `backend/services/emailTrackingService.js` parses the sender, subject, date, and text payload. It executes deterministic regex pattern matching across 5 stages:
+  1. **OAuth 2.0 Flow & Token Lifecycle:**
+     - Candidate clicks "Connect Gmail" in the Application Lifecycle board.
+     - Backend generates authorization URL with `scope=https://www.googleapis.com/auth/gmail.readonly`, `access_type=offline`, and `prompt=consent`.
+     - Code is exchanged for `accessToken`, `refreshToken`, and expiration metadata.
+     - Tokens are securely stored under `user.candidateProfile.gmailIntegration` on the User document.
+     - **Automatic Token Refresh:** When `accessToken` is within 5 minutes of expiration, `getValidAccessToken()` automatically requests a fresh token using `refreshGmailToken()` via Google's token endpoint (`https://oauth2.googleapis.com/token`) without interrupting user actions.
+     - **Clean Revocation & Disconnect:** Disconnecting via `POST /api/applications/gmail/disconnect` revokes the token on Google's servers (`https://oauth2.googleapis.com/revoke`), wipes stored tokens, and resets connection flags.
+  2. **Applied Company Domain Targeting:**
+     - The engine inspects the candidate's active applications (`Application.find({ userId, status: { $nin: ['withdrawn'] } })`).
+     - Extracts distinct company domains (e.g., `swiggy.in`, `phonepe.com`, `razorpay.com`, `cred.club`) from `Company.domain` and clean `applyUrl` hostnames.
+     - Constructs targeted Gmail search queries filtering for applied domains and recruiter keywords:
+       ```text
+       (from:(swiggy.in OR phonepe.com OR razorpay.com) OR subject:(interview OR offer OR assessment OR application OR "thank you for applying" OR HackerRank OR CodeSignal))
+       ```
+     - Supports optional `is:unread` filtering (`unreadOnly: true`) and age filtering (`newer_than:30d`).
+  3. **Message Sanitization & Classification:** `backend/services/emailTrackingService.js` parses the sender, subject, date, and full plain/HTML text payload. It executes deterministic regex pattern matching across stages:
      - **Rejection (checked first with priority):** Detects phrases like `"unfortunately"`, `"moved forward with other candidates"`, `"not able to offer"`.
      - **Offer:** Detects `"formal offer of employment"`, `"pleased to offer you"`, `"welcome to the team"`, `"offer letter"`.
      - **Interview:** Detects `"invitation to interview"`, `"technical interview"`, `"Google Meet"`, `"Zoom"`, `"Calendly"`, `"hiring manager round"`.
      - **Assessment:** Detects `"HackerRank"`, `"CodeSignal"`, `"Codility"`, `"take-home assignment"`, `"online assessment"`.
-     - **Applied:** Detects `"thank you for applying"`, `"application received"`, `"confirming receipt"`.
-  4. **Fuzzy Company Disambiguation:** Extracts root company tokens (removing legal suffixes like *Pvt Ltd*, *Technologies*, *Inc*) and matches against the candidate's active applications in MongoDB Atlas.
+     - **Applied (Confirmations):** Detects `"thank you for applying"`, `"application received"`, `"confirming receipt"`.
+     - **Recruiter Responses:** Detects general recruiter communications (`"reviewed your application"`, `"following up on your candidacy"`).
+  4. **Fuzzy Company Disambiguation & Domain Scoring:**
+     - Matches from-domain with application company domain (high confidence score +25).
+     - Extracts root company tokens (removing legal suffixes like *Pvt Ltd*, *Technologies*, *Inc*) and matches against candidate's active applications in MongoDB Atlas.
+     - Idempotent event logging: Avoids duplicate timeline events if an email ID has already been recorded.
   5. **Stage Progression & Real-Time Timeline:**
      - Advances application status hierarchically (`shortlisted` → `applied` → `assessment` → `interview` → `offer`, or terminal `rejected`).
      - Prevents stage regression (e.g. an interview stage is never demoted back to applied by a late confirmation email).
-     - Appends an audit event to `Application.events` with exact timestamp and subject snippet.
+     - Appends an audit event to `Application.events` with exact timestamp, sender, subject snippet, and metadata.
+  6. **Scheduled Gmail Synchronization:**
+     - Background runner (`runScheduledGmailSyncForAllUsers()`) iterates through all connected candidate accounts.
+     - Automatically refreshes expired tokens, synchronizes recent unread recruiter communications, and advances matching applications.
+     - Provides in-process timer (`startScheduledGmailSync(intervalMs)`) and batch execution endpoint (`POST /api/applications/gmail/sync-all`).
+
+- **Gmail Integration API Endpoints Reference:**
+  | Endpoint | Method | Auth | Description |
+  | :--- | :--- | :--- | :--- |
+  | `/api/applications/gmail/auth-url` | `GET` | Required | Returns Google OAuth authorization URL with encoded state |
+  | `/api/applications/gmail/callback` | `GET` | Public / State | Handles Google browser redirect, exchanges code, and redirects to client UI |
+  | `/api/applications/gmail/exchange` | `POST` | Required | Exchanges authorization code sent from client SPA for tokens |
+  | `/api/applications/gmail/status` | `GET` | Required | Returns connection status, connected email, and last synced timestamp |
+  | `/api/applications/gmail/sync` | `POST` | Required | Triggers on-demand inbox sync for current user with applied domain queries |
+  | `/api/applications/gmail/sync-all` | `POST` | Required | Triggers batch background sync across all connected candidate accounts |
+  | `/api/applications/gmail/disconnect` | `POST` | Required | Revokes Google token, clears stored credentials, and resets connection state |
+
 - **Google Cloud Console Setup Checklist:**
   1. Open [Google Cloud Console](https://console.cloud.google.com/) and create a project named `JobRadar-Recruiter-Tracker`.
   2. In the navigation menu, go to **APIs & Services > Library**, search for **Gmail API**, and click **Enable**.
@@ -206,11 +236,15 @@ Review the following matrix to identify configured versus required external asse
     • Vercel static deployment & path rewrite routing (configured in vercel.json)
     • OpenStreetMap Overpass API integration (100% Free, active without keys)
     • Photon / Nominatim geocoding service (100% Free, active without keys)
-    • Public ATS Adapters: Greenhouse, Lever, Ashby, SmartRecruiters, Workable, Recruitee, Personio, Teamtailor, Workday, Amazon, Google, Eightfold
-    • Inbound Recruiter Response Classifier (100% Free rule-based regex engine in emailTrackingService.js)
-    • Applications Real-time Events Timeline (active in ApplicationsView.jsx)
-    • Company Source Reliability & Telemetry Engine (reliabilityScore, consecutiveFailures, lastSuccessfulSync)
-
+    • Public ATS Adapters: Greenhouse, Lever, Ashby, SmartRecruiters, Workable, Recruitee, Personio, Teamtailor, Workday, Amazon, Google, Eightfold (84 verified companies configured)
+    • Source Telemetry & Health Engine: computeSourceLevelStatistics & reliability scoring (reliabilityScore, consecutiveFailures, lastSuccessfulSync)
+    • Real Playwright Browser Runner: Headless Chromium execution engine with dual-engine fallback (/usr/bin/google-chrome) and automated form pre-filling
+    • Strict Anti-Bot Safety Invariant: Cloudflare Turnstile, reCAPTCHA v2/Enterprise, hCaptcha detection with zero bypass and safe 1-click human verification dispatch
+    • Inbound Recruiter Response Classifier: 100% Free rule-based regex engine across 6 stages (offers, interviews, assessments, rejections, applied, responses)
+    • Google Gmail OAuth 2.0 Subsystem: Read-only scope (gmail.readonly), code exchange, automatic token refresh, targeted recruiter query builder, and domain deconfliction
+    • Applications Real-time Events Timeline: Active in ApplicationsView.jsx with multi-tenant isolation and stage transition logging
+    • Safe 90-Day Stale Job Archival & Retention: Transitions expired listings to status: 'archived' while strictly preserving linked application snapshots and audit events
+    • Autopilot End-to-End Pipeline & Dashboard Controls: Active state engine (pause / resume / stop), salary thresholds, target roles, locations, daily application quotas, and telemetry audit runs
 
 [!] ACTION REQUIRED (NO COST):
     • Brevo API Key: Provide personal BREVO_API_KEY in backend/.env to replace legacy hardcoded constant.
@@ -218,7 +252,7 @@ Review the following matrix to identify configured versus required external asse
     • Render Backend URL: Verify deployment endpoint on Render matches vercel.json rewrite.
 
 [?] OPTIONAL ENHANCEMENTS (FREE TIER / NO UPFRONT COST):
-    • Google Cloud OAuth Client (GOOGLE_CLIENT_ID & GOOGLE_CLIENT_SECRET): Free tier for automated Gmail recruiter tracking.
+    • Google Cloud OAuth Client (GOOGLE_CLIENT_ID & GOOGLE_CLIENT_SECRET): Free tier for automated Gmail recruiter tracking (1B quota units/day free; simulation mode available offline).
     • Google Places API Key: Optional for secondary company office scanning ($200 monthly free credit).
     • Adzuna API ID/Key: Optional for aggregator job ingestion (free developer tier).
 ```

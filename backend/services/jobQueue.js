@@ -27,6 +27,20 @@ registerHandler('autopilot_execution', async () => {
   return await runScheduledAutopilotBatch();
 });
 
+registerHandler('autopilot_user_run', async (payload) => {
+  const { executeAutopilotPipelineForUser } = require('../controllers/autopilotController');
+  return await executeAutopilotPipelineForUser(payload?.userId, payload?.options);
+});
+
+registerHandler('application_dispatch', async (payload) => {
+  const { dispatchApplication } = require('./browserSubmissionService');
+  return await dispatchApplication(payload?.applicationId, payload?.userId, payload?.options);
+});
+
+registerHandler('maintenance_cleanup', async (payload) => {
+  return await runMaintenanceCleanup(payload);
+});
+
 registerHandler('portal_scan', async (payload) => {
   const { detectCompanyAts } = require('./atsDetector');
   return await detectCompanyAts(payload?.name, payload?.url);
@@ -174,11 +188,82 @@ async function getQueueStats() {
   };
 }
 
+/**
+ * Safe 90-day job archival:
+ * - Identifies jobs not refreshed/seen in >90 days.
+ * - Safely marks them with status: 'archived' rather than deleting them,
+ *   so that any existing Application record referencing jobId preserves complete
+ *   application history, snapshots, and audit trails.
+ */
+async function archiveStaleJobs(daysThreshold = 90) {
+  const Job = require('../models/Job');
+  const cutoffDate = new Date(Date.now() - daysThreshold * 24 * 60 * 60 * 1000);
+
+  const result = await Job.updateMany(
+    {
+      status: { $in: ['open', 'closed'] },
+      lastSeenAt: { $lt: cutoffDate }
+    },
+    {
+      $set: { status: 'archived' }
+    }
+  );
+
+  return {
+    cutoffDate,
+    archivedCount: result.modifiedCount || 0
+  };
+}
+
+/**
+ * Safe cleanup of completed and failed background queue tasks:
+ * - Leaves pending and processing tasks completely untouched.
+ * - Deletes completed/failed tasks older than retention days (default: 7).
+ * - Never deletes Application records or AutopilotRun audit events.
+ */
+async function cleanupOldQueueTasks(daysThreshold = 7) {
+  const cutoffDate = new Date(Date.now() - daysThreshold * 24 * 60 * 60 * 1000);
+
+  const result = await QueueTask.deleteMany({
+    status: { $in: ['completed', 'failed'] },
+    finishedAt: { $lt: cutoffDate }
+  });
+
+  return {
+    cutoffDate,
+    deletedCount: result.deletedCount || 0
+  };
+}
+
+/**
+ * End-to-end maintenance runner for scheduled or on-demand cleanup.
+ */
+async function runMaintenanceCleanup(options = {}) {
+  const jobRetentionDays = options.jobRetentionDays || 90;
+  const taskRetentionDays = options.taskRetentionDays || 7;
+
+  const [jobArchival, taskCleanup] = await Promise.all([
+    archiveStaleJobs(jobRetentionDays),
+    cleanupOldQueueTasks(taskRetentionDays)
+  ]);
+
+  return {
+    jobsArchived: jobArchival.archivedCount,
+    jobCutoffDate: jobArchival.cutoffDate,
+    tasksCleaned: taskCleanup.deletedCount,
+    taskCutoffDate: taskCleanup.cutoffDate,
+    executedAt: new Date()
+  };
+}
+
 module.exports = {
   enqueue,
   processNextTask,
   registerHandler,
   startQueueWorker,
   stopQueueWorker,
-  getQueueStats
+  getQueueStats,
+  archiveStaleJobs,
+  cleanupOldQueueTasks,
+  runMaintenanceCleanup
 };

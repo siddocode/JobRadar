@@ -79,10 +79,11 @@ async function verifyAtsSlug(ats, slug) {
     const host = new URL(url).host;
     await rateLimitHost(host);
 
+    const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
     const options = {
       headers: {
         'Accept': config.isXml ? 'application/xml, text/xml, */*' : 'application/json',
-        'User-Agent': 'JobRadar/2.0'
+        'User-Agent': UA
       },
       signal: AbortSignal.timeout(7000)
     };
@@ -105,6 +106,23 @@ async function verifyAtsSlug(ats, slug) {
           return config.validator(comText);
         }
       }
+
+      // For Workable, fallback to public jobs.md feed if API is rate-limited (429) or non-ok
+      if (ats === 'workable') {
+        const mdUrl = `https://apply.workable.com/${encodeURIComponent(slug)}/jobs.md`;
+        const mdRes = await fetch(mdUrl, {
+          headers: { 'User-Agent': UA, 'Accept': 'text/markdown, text/plain, */*' },
+          signal: AbortSignal.timeout(6000),
+          redirect: 'follow'
+        });
+        if (mdRes.ok) {
+          const mdText = await mdRes.text();
+          if (mdText.includes('[View](') || mdText.includes('# ') || mdText.includes('Powered by [Workable]')) {
+            return true;
+          }
+        }
+      }
+
       return false;
     }
 

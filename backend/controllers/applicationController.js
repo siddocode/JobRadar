@@ -369,27 +369,109 @@ exports.getGmailAuthUrl = (req, res) => {
 };
 
 /**
+ * Handles Google OAuth 2.0 browser redirect callback.
+ * GET /api/applications/gmail/callback?code=...&state=...
+ */
+exports.handleGmailCallback = async (req, res) => {
+  const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+  try {
+    const { code, state, error } = req.query;
+
+    if (error) {
+      console.warn('[ApplicationController] Google OAuth callback error query:', error);
+      return res.redirect(`${clientUrl}/?tab=applications&gmail_error=${encodeURIComponent(error)}`);
+    }
+
+    if (!code) {
+      return res.redirect(`${clientUrl}/?tab=applications&gmail_error=missing_code`);
+    }
+
+    // Determine target user from active session or state parameter
+    let targetUserId = req.user?.id || null;
+    if (!targetUserId && state) {
+      try {
+        const decoded = JSON.parse(Buffer.from(state, 'base64').toString('utf8'));
+        if (decoded.userId) {
+          targetUserId = decoded.userId;
+        }
+      } catch (_) {}
+    }
+
+    if (!targetUserId) {
+      return res.redirect(`${clientUrl}/?tab=applications&gmail_error=unauthorized_session`);
+    }
+
+    const { exchangeGmailCode, fetchGmailUserProfile } = require('../services/emailTrackingService');
+    const tokens = await exchangeGmailCode(code);
+
+    let profileEmail = null;
+    if (tokens.accessToken) {
+      const profile = await fetchGmailUserProfile(tokens.accessToken);
+      if (profile?.emailAddress) {
+        profileEmail = profile.emailAddress;
+      }
+    }
+
+    const User = require('../models/User');
+    const user = await User.findById(targetUserId);
+    if (user) {
+      if (!user.candidateProfile) user.candidateProfile = {};
+      const existingRefresh = user.candidateProfile.gmailIntegration?.refreshToken || null;
+      user.candidateProfile.gmailIntegration = {
+        connected: true,
+        email: profileEmail || user.email,
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken || existingRefresh,
+        expiresAt: tokens.expiresAt,
+        scope: tokens.scope,
+        connectedAt: new Date(),
+        lastSyncedAt: new Date()
+      };
+      user.markModified('candidateProfile');
+      await user.save();
+    }
+
+    return res.redirect(`${clientUrl}/?tab=applications&gmail=connected`);
+  } catch (err) {
+    console.error('[ApplicationController] Gmail callback handling error:', err.message);
+    return res.redirect(`${clientUrl}/?tab=applications&gmail_error=${encodeURIComponent(err.message)}`);
+  }
+};
+
+/**
  * Exchanges Google OAuth 2.0 authorization code and associates credentials with user.
  * POST /api/applications/gmail/exchange
  */
 exports.exchangeGmailAuthCode = async (req, res) => {
   try {
-    const { code } = req.body;
+    const { code, redirectUri } = req.body;
     if (!code) {
       return res.status(400).json({ success: false, error: 'Authorization code is required' });
     }
-    const { exchangeGmailCode } = require('../services/emailTrackingService');
-    const tokens = await exchangeGmailCode(code);
+    const { exchangeGmailCode, fetchGmailUserProfile } = require('../services/emailTrackingService');
+    const tokens = await exchangeGmailCode(code, redirectUri);
+
+    let profileEmail = null;
+    if (tokens.accessToken) {
+      const profile = await fetchGmailUserProfile(tokens.accessToken);
+      if (profile?.emailAddress) {
+        profileEmail = profile.emailAddress;
+      }
+    }
 
     const User = require('../models/User');
     const user = await User.findById(req.user.id);
     if (user) {
       if (!user.candidateProfile) user.candidateProfile = {};
+      const existingRefresh = user.candidateProfile.gmailIntegration?.refreshToken || null;
       user.candidateProfile.gmailIntegration = {
         connected: true,
+        email: profileEmail || user.email,
         accessToken: tokens.accessToken,
-        refreshToken: tokens.refreshToken || (user.candidateProfile.gmailIntegration?.refreshToken || null),
-        expiresAt: Date.now() + (tokens.expiresIn * 1000),
+        refreshToken: tokens.refreshToken || existingRefresh,
+        expiresAt: tokens.expiresAt,
+        scope: tokens.scope,
+        connectedAt: new Date(),
         lastSyncedAt: new Date()
       };
       user.markModified('candidateProfile');
@@ -399,6 +481,7 @@ exports.exchangeGmailAuthCode = async (req, res) => {
     return res.status(200).json({
       success: true,
       connected: true,
+      email: profileEmail || user?.email,
       message: 'Gmail successfully connected for recruiter response tracking.'
     });
   } catch (err) {
@@ -415,13 +498,16 @@ exports.getGmailStatus = async (req, res) => {
   try {
     const configured = Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
     const User = require('../models/User');
-    const user = await User.findById(req.user.id).select('candidateProfile');
+    const user = await User.findById(req.user.id).select('email candidateProfile');
     const gmail = user?.candidateProfile?.gmailIntegration;
+
+    const isConnected = Boolean(gmail && gmail.connected && (gmail.accessToken || gmail.refreshToken));
 
     return res.status(200).json({
       success: true,
       configured,
-      connected: Boolean(gmail && gmail.connected && gmail.accessToken),
+      connected: isConnected,
+      email: gmail?.email || (isConnected ? user?.email : null),
       lastSyncedAt: gmail?.lastSyncedAt || null
     });
   } catch (err) {
@@ -440,7 +526,7 @@ exports.syncGmailInbox = async (req, res) => {
     const user = await User.findById(req.user.id);
     const gmail = user?.candidateProfile?.gmailIntegration;
 
-    if (!gmail || !gmail.accessToken) {
+    if (!gmail || !gmail.connected) {
       return res.status(400).json({
         success: false,
         error: 'Gmail is not connected. Please connect your Gmail account first.'
@@ -448,11 +534,7 @@ exports.syncGmailInbox = async (req, res) => {
     }
 
     const { syncUserGmailInbox } = require('../services/emailTrackingService');
-    const result = await syncUserGmailInbox(req.user.id, gmail.accessToken);
-
-    gmail.lastSyncedAt = new Date();
-    user.markModified('candidateProfile');
-    await user.save();
+    const result = await syncUserGmailInbox(req.user.id, req.body || {});
 
     return res.status(200).json(result);
   } catch (err) {
@@ -462,24 +544,54 @@ exports.syncGmailInbox = async (req, res) => {
 };
 
 /**
- * Disconnects Gmail integration and clears stored tokens.
+ * Synchronizes Gmail messages for all connected candidate accounts (Scheduled / Admin batch).
+ * POST /api/applications/gmail/sync-all
+ */
+exports.syncAllConnectedGmailAccounts = async (req, res) => {
+  try {
+    const { runScheduledGmailSyncForAllUsers } = require('../services/emailTrackingService');
+    const result = await runScheduledGmailSyncForAllUsers(req.body || {});
+    return res.status(200).json({ success: true, ...result });
+  } catch (err) {
+    console.error('[ApplicationController] Gmail batch sync error:', err.message);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+};
+
+/**
+ * Disconnects Gmail integration, revokes token with Google, and clears stored credentials.
  * POST /api/applications/gmail/disconnect
  */
 exports.disconnectGmail = async (req, res) => {
   try {
     const User = require('../models/User');
+    const { revokeGmailToken } = require('../services/emailTrackingService');
     const user = await User.findById(req.user.id);
+
     if (user && user.candidateProfile?.gmailIntegration) {
+      const currentToken = user.candidateProfile.gmailIntegration.refreshToken || user.candidateProfile.gmailIntegration.accessToken;
+      if (currentToken) {
+        await revokeGmailToken(currentToken);
+      }
+
       user.candidateProfile.gmailIntegration = {
         connected: false,
+        email: null,
         accessToken: null,
         refreshToken: null,
-        lastSyncedAt: null
+        expiresAt: null,
+        lastSyncedAt: null,
+        disconnectedAt: new Date()
       };
       user.markModified('candidateProfile');
       await user.save();
     }
-    return res.status(200).json({ success: true, connected: false });
+
+    return res.status(200).json({
+      success: true,
+      connected: false,
+      message: 'Gmail account successfully disconnected and access tokens cleared.'
+    });
   } catch (err) {
     console.error('[ApplicationController] Gmail disconnect error:', err.message);
     return res.status(500).json({ success: false, error: err.message });

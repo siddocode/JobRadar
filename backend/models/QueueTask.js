@@ -5,7 +5,16 @@ const queueTaskSchema = new mongoose.Schema(
     taskType: {
       type: String,
       required: true,
-      enum: ['job_ingestion', 'match_evaluation', 'autopilot_execution', 'portal_scan', 'sync_company'],
+      enum: [
+        'job_ingestion',
+        'match_evaluation',
+        'autopilot_execution',
+        'autopilot_user_run',
+        'application_dispatch',
+        'maintenance_cleanup',
+        'portal_scan',
+        'sync_company'
+      ],
       index: true
     },
     payload: {

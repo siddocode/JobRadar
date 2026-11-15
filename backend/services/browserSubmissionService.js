@@ -16,6 +16,7 @@ const {
   generateFormBlueprint,
   executeFormBlueprint,
   detectAntiBotChallenge,
+  executePlaywrightApplication,
   ANTI_BOT_CHALLENGE_TYPES
 } = require('../workers/browserWorker');
 
@@ -163,16 +164,157 @@ async function stageApplication(userId, jobId, options = {}) {
 }
 
 /**
+ * Submits or pre-fills an application using the real Playwright browser engine.
+ * Launches headless Chromium, navigates to application portal, pre-fills fields,
+ * attaches resume PDF, validates required inputs, and captures confirmation/telemetry.
+ *
+ * Strict Compliance:
+ * NEVER bypasses anti-bot challenges. If detected, halts safely and flags for 1-click human dispatch.
+ *
+ * @param {string} applicationId - Application ObjectId
+ * @param {string} userId - User ObjectId
+ * @param {Object} options - { resumePdfBuffer, resumePdfPath, submit, simulateChallenge, htmlContent, timeout }
+ * @returns {Promise<Object>} Execution result
+ */
+async function submitApplicationWithPlaywright(applicationId, userId, options = {}) {
+  const application = await Application.findOne({ _id: applicationId, userId });
+  if (!application) {
+    throw new Error('Application not found or unauthorized');
+  }
+
+  const [job, user] = await Promise.all([
+    Job.findById(application.jobId),
+    User.findById(userId)
+  ]);
+  const profile = user?.candidateProfile || {};
+
+  const atsType = job?.source || application.source || 'greenhouse';
+  const applyUrl = application.applyUrl || job?.applyUrl || '';
+  const executionTime = new Date();
+
+  // Run Real Playwright Application Runner
+  const execution = await executePlaywrightApplication({
+    targetUrl: applyUrl,
+    atsType,
+    candidateData: profile,
+    resumePdfBuffer: options.resumePdfBuffer,
+    resumePdfPath: options.resumePdfPath,
+    submit: options.submit !== false,
+    headless: options.headless !== false,
+    simulateChallenge: options.simulateChallenge,
+    htmlContent: options.htmlContent,
+    timeout: options.timeout || 30000,
+    screenshotDir: options.screenshotDir
+  });
+
+  // Strict Safety Invariant Check
+  if (execution.requiresHumanVerification || execution.halted) {
+    application.submissionResult = {
+      attemptedAt: executionTime,
+      success: false,
+      halted: true,
+      requiresHumanVerification: true,
+      challengeType: execution.challengeType,
+      challengeName: execution.challengeName,
+      matchedSignature: execution.matchedSignature,
+      reason: execution.reason,
+      confirmationUrl: applyUrl,
+      screenshotBase64: execution.screenshotBase64 || null,
+      screenshotPath: execution.screenshotPath || null,
+      executionLog: execution.executionLog,
+      mode: 'assisted_human_verification'
+    };
+
+    // Keep status in awaiting_approval (do not advance to applied)
+    application.events.push({
+      status: application.status,
+      timestamp: executionTime,
+      note: `Playwright dispatch halted safely: Anti-bot challenge (${execution.challengeType || 'CAPTCHA'}) detected in live browser. Flagged for 1-click human verification dispatch.`
+    });
+
+    await application.save();
+
+    return {
+      success: false,
+      halted: true,
+      requiresHumanVerification: true,
+      challengeType: execution.challengeType,
+      challengeName: execution.challengeName,
+      application,
+      execution,
+      applyUrl,
+      message: execution.reason || 'Anti-bot challenge detected. Application safely flagged for 1-click human verification dispatch.'
+    };
+  }
+
+  // Record Playwright submission result
+  application.submissionResult = {
+    attemptedAt: executionTime,
+    success: true,
+    halted: false,
+    requiresHumanVerification: false,
+    confirmationUrl: applyUrl,
+    confirmationNumber: execution.confirmationNumber || null,
+    confirmationText: execution.confirmationText || null,
+    validation: execution.validation || null,
+    screenshotBase64: execution.screenshotBase64 || null,
+    confirmationScreenshotBase64: execution.confirmationScreenshotBase64 || null,
+    screenshotPath: execution.screenshotPath || null,
+    filledFieldsCount: execution.filledFieldsCount || 0,
+    attachedResume: execution.attachedResume || false,
+    executionLog: execution.executionLog,
+    mode: application.submissionMode || 'autonomous_browser'
+  };
+
+  if (execution.confirmationNumber) {
+    application.confirmationNumber = execution.confirmationNumber;
+  }
+
+  if (execution.submitted) {
+    application.status = 'applied';
+    application.appliedAt = executionTime;
+    application.events.push({
+      status: 'applied',
+      timestamp: executionTime,
+      note: `Application submitted via Playwright browser runner to ${application.companyName} (${atsType}). Ref: ${execution.confirmationNumber || 'Confirmed'}`
+    });
+  } else {
+    application.events.push({
+      status: application.status,
+      timestamp: executionTime,
+      note: `Playwright browser runner pre-filled application form for ${application.companyName}. Form ready for final user approval.`
+    });
+  }
+
+  await application.save();
+
+  return {
+    success: true,
+    halted: false,
+    requiresHumanVerification: false,
+    submitted: execution.submitted,
+    application,
+    execution,
+    message: execution.message
+  };
+}
+
+/**
  * Dispatches application submission.
  * Enforces strict anti-bot safety protocol: halts execution immediately
  * if challenge is encountered and safely flags for 1-click human verification dispatch.
  *
  * @param {string} applicationId - Application ObjectId
  * @param {string} userId - User ObjectId
- * @param {Object} options - { simulateChallenge, html, submissionMode }
+ * @param {Object} options - { simulateChallenge, html, submissionMode, usePlaywright }
  * @returns {Promise<Object>} Dispatch result
  */
 async function dispatchApplication(applicationId, userId, options = {}) {
+  // Delegate to Real Playwright Runner if requested
+  if (options.usePlaywright || options.browserAutomation || options.runRealBrowser || options.submissionMode === 'autonomous_browser') {
+    return submitApplicationWithPlaywright(applicationId, userId, options);
+  }
+
   const application = await Application.findOne({ _id: applicationId, userId });
   if (!application) {
     throw new Error('Application not found or unauthorized');
@@ -275,5 +417,6 @@ async function dispatchApplication(applicationId, userId, options = {}) {
 module.exports = {
   stageApplication,
   dispatchApplication,
+  submitApplicationWithPlaywright,
   mapCandidateToAtsFields
 };

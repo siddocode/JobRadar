@@ -411,6 +411,120 @@
     "ats": "teamtailor",
     "slug": "volumental",
     "verifiedAt": "2026-11-15T12:00:00.000Z"
+  },
+  {
+    "name": "Apna",
+    "ats": "workable",
+    "slug": "apna",
+    "verifiedAt": "2026-11-15T12:00:00.000Z"
+  },
+  {
+    "name": "Velsera",
+    "ats": "workable",
+    "slug": "velsera",
+    "verifiedAt": "2026-11-15T12:00:00.000Z"
+  },
+  {
+    "name": "Mindler",
+    "ats": "teamtailor",
+    "slug": "mindler",
+    "verifiedAt": "2026-11-15T12:00:00.000Z"
+  },
+  {
+    "name": "Anyfin",
+    "ats": "teamtailor",
+    "slug": "anyfin",
+    "verifiedAt": "2026-11-15T12:00:00.000Z"
+  },
+  {
+    "name": "Tibber",
+    "ats": "teamtailor",
+    "slug": "tibber",
+    "verifiedAt": "2026-11-15T12:00:00.000Z"
+  },
+  {
+    "name": "Wandelbots",
+    "ats": "personio",
+    "slug": "wandelbots",
+    "verifiedAt": "2026-11-15T12:00:00.000Z"
+  },
+  {
+    "name": "Clark",
+    "ats": "personio",
+    "slug": "clark",
+    "verifiedAt": "2026-11-15T12:00:00.000Z"
+  },
+  {
+    "name": "Adjust",
+    "ats": "recruitee",
+    "slug": "adjust",
+    "verifiedAt": "2026-11-15T12:00:00.000Z"
+  },
+  {
+    "name": "Channable",
+    "ats": "recruitee",
+    "slug": "channable",
+    "verifiedAt": "2026-11-15T12:00:00.000Z"
+  },
+  {
+    "name": "Funda",
+    "ats": "recruitee",
+    "slug": "funda",
+    "verifiedAt": "2026-11-15T12:00:00.000Z"
+  },
+  {
+    "name": "Harvey",
+    "ats": "ashby",
+    "slug": "harvey",
+    "verifiedAt": "2026-11-15T12:00:00.000Z"
+  },
+  {
+    "name": "PostHog",
+    "ats": "ashby",
+    "slug": "posthog",
+    "verifiedAt": "2026-11-15T12:00:00.000Z"
+  },
+  {
+    "name": "Linear",
+    "ats": "ashby",
+    "slug": "linear",
+    "verifiedAt": "2026-11-15T12:00:00.000Z"
+  },
+  {
+    "name": "Netomi",
+    "ats": "lever",
+    "slug": "netomi",
+    "verifiedAt": "2026-11-15T12:00:00.000Z"
+  },
+  {
+    "name": "Druva",
+    "ats": "greenhouse",
+    "slug": "druva",
+    "verifiedAt": "2026-11-15T12:00:00.000Z"
+  },
+  {
+    "name": "PubMatic",
+    "ats": "greenhouse",
+    "slug": "pubmatic",
+    "verifiedAt": "2026-11-15T12:00:00.000Z"
+  },
+  {
+    "name": "Rubrik",
+    "ats": "greenhouse",
+    "slug": "rubrik",
+    "verifiedAt": "2026-11-15T12:00:00.000Z"
+  },
+  {
+    "name": "Okta",
+    "ats": "greenhouse",
+    "slug": "okta",
+    "verifiedAt": "2026-11-15T12:00:00.000Z"
+  },
+  {
+    "name": "Zscaler",
+    "ats": "greenhouse",
+    "slug": "zscaler",
+    "verifiedAt": "2026-11-15T12:00:00.000Z"
   }
 ]
 

@@ -132,6 +132,7 @@ function setupCronScheduler() {
       const { runCollection } = require('./scripts/collect');
       const { harvestAllMajorHubs } = require('./services/autoJobHarvester');
       const { runScheduledAutopilotBatch } = require('./controllers/autopilotController');
+      const { runMaintenanceCleanup } = require('./services/jobQueue');
 
       console.log(`[Scheduler] Autonomous 100% Free Job Harvester active (Schedule: "${cronSchedule}")`);
       cron.schedule(cronSchedule, async () => {
@@ -144,6 +145,9 @@ function setupCronScheduler() {
           console.log(`[Scheduler] Automated sync complete: ${summary.totalUpserted} upserted, ${summary.totalClosed} closed.`);
           // 3. Run scheduled autopilot screening & preparation for active subscribers
           await runScheduledAutopilotBatch();
+          // 4. Safe 90-day job archival and old queue task cleanup without deleting application history
+          const cleanupResult = await runMaintenanceCleanup({ jobRetentionDays: 90, taskRetentionDays: 7 });
+          console.log(`[Scheduler] Maintenance cleanup complete: ${cleanupResult.jobsArchived} jobs archived, ${cleanupResult.tasksCleaned} queue tasks cleaned.`);
         } catch (err) {
           console.error('[Scheduler] Automated sync error:', err.message);
         }

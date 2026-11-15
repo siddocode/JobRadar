@@ -126,6 +126,18 @@ const jobSchema = new mongoose.Schema(
       required: true,
       trim: true
     },
+    salaryMin: {
+      type: Number,
+      default: null
+    },
+    salaryMax: {
+      type: Number,
+      default: null
+    },
+    salaryCurrency: {
+      type: String,
+      default: 'INR'
+    },
     updatedAt: {
       type: Date,
       default: Date.now
@@ -140,7 +152,7 @@ const jobSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['open', 'closed'],
+      enum: ['open', 'closed', 'archived'],
       default: 'open'
     }
   },

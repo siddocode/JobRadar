@@ -63,41 +63,56 @@ function normalizeWorkableJob(rawJob, companyName, slug) {
  */
 async function fetchWorkableMarkdown(slug, companyName) {
   const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
-  const mdUrl = `https://apply.workable.com/${encodeURIComponent(slug)}/jobs.md?workplace=on_site&workplace=hybrid&workplace=remote`;
+  const urlsToTry = [
+    `https://apply.workable.com/${encodeURIComponent(slug)}/jobs.md?workplace=on_site&workplace=hybrid&workplace=remote`,
+    `https://apply.workable.com/${encodeURIComponent(slug)}/jobs.md`,
+    `https://apply.workable.com/${encodeURIComponent(slug)}/jobs.md?department=Engineering&department=Product+%26+Design&department=Data+%26+Analytics`
+  ];
 
-  try {
-    const mdRes = await fetch(mdUrl, {
-      headers: { 'User-Agent': UA, 'Accept': 'text/markdown, text/plain, */*' },
-      signal: AbortSignal.timeout(8000)
-    });
-    if (!mdRes.ok) return null;
+  for (const mdUrl of urlsToTry) {
+    try {
+      const mdRes = await fetch(mdUrl, {
+        headers: { 'User-Agent': UA, 'Accept': 'text/markdown, text/plain, */*' },
+        signal: AbortSignal.timeout(8000),
+        redirect: 'follow'
+      });
+      if (!mdRes.ok) continue;
 
-    const mdText = await mdRes.text();
-    const lines = mdText.split('\n');
-    const parsedJobs = [];
-    const rowRegex = /^\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*\[View\]\((https:\/\/apply\.workable\.com\/[^/]+\/jobs\/view\/([^.]+)\.md)\)\s*\|$/;
+      const mdText = await mdRes.text();
+      const lines = mdText.split('\n');
+      const parsedJobs = [];
 
-    for (const line of lines) {
-      const match = line.match(rowRegex);
-      if (match) {
-        const shortcode = match[8];
-        const rawLoc = match[3].trim();
+      for (const line of lines) {
+        if (!line.includes('[View](')) continue;
+        const cols = line.split('|').map(c => c.trim()).filter(Boolean);
+        if (cols.length < 3) continue;
+
+        const title = cols[0];
+        const lastCol = cols[cols.length - 1];
+        const match = lastCol.match(/jobs\/view\/([^.]+)\.md/);
+        if (!match) continue;
+
+        const shortcode = match[1];
+        let loc = cols.find((c, i) => i > 0 && i < cols.length - 1 && /india|bengaluru|bangalore|pune|mumbai|hyderabad|delhi|gurgaon|gurugram|noida|chennai|kolkata|remote|hybrid|onsite|united states|uk|germany|netherlands|singapore/i.test(c));
+        if (!loc && cols.length >= 4) loc = cols[2];
+        if (!loc && cols.length >= 3) loc = cols[1];
+
         parsedJobs.push(normalizeWorkableJob({
-          title: match[1].trim(),
-          department: match[2].trim(),
-          locationRaw: rawLoc,
-          employment_type: match[4].trim(),
+          title,
+          department: cols[1] || 'General',
+          locationRaw: loc || 'Unspecified',
+          employment_type: cols.find(c => /full-time|part-time|contract|internship/i.test(c)) || '',
           shortcode,
           id: shortcode,
           url: `https://apply.workable.com/${encodeURIComponent(slug)}/j/${shortcode}/`
         }, companyName, slug));
       }
-    }
 
-    if (parsedJobs.length > 0) {
-      return { success: true, status: 200, jobs: parsedJobs };
-    }
-  } catch (_) {}
+      if (parsedJobs.length > 0) {
+        return { success: true, status: 200, jobs: parsedJobs };
+      }
+    } catch (_) {}
+  }
 
   return null;
 }
@@ -121,6 +136,7 @@ async function fetchWorkableJobs(slug, companyName) {
   const cleanSlug = slug.trim().toLowerCase();
   await rateLimitHost(HOST);
 
+  const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
   const url = `${BASE_URL}/${encodeURIComponent(cleanSlug)}/jobs`;
 
   try {
@@ -133,7 +149,7 @@ async function fetchWorkableJobs(slug, companyName) {
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
-        'User-Agent': 'JobRadar/2.0'
+        'User-Agent': UA
       },
       body: JSON.stringify({ query: '', location: [], department: [], worktype: [], remote: [] })
     });
@@ -154,6 +170,10 @@ async function fetchWorkableJobs(slug, companyName) {
     }
 
     if (response.status === 429) {
+      // Check markdown fallback on 429 rate limit
+      const mdFallback = await fetchWorkableMarkdown(cleanSlug, companyName);
+      if (mdFallback) return mdFallback;
+
       return {
         success: false,
         status: 429,

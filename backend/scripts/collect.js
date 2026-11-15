@@ -349,6 +349,11 @@ async function collectForCompany(company) {
           `[Collect] Anomalous 0 jobs returned for "${company.name}" (had ${existingOpenCount} open jobs). ` +
           `Skipping closure to prevent premature expiration.`
         );
+      } else if (existingOpenCount > 10 && jobs.length < Math.floor(existingOpenCount * 0.1)) {
+        console.warn(
+          `[Collect] Suspect sharp job count drop for "${company.name}" (fetched ${jobs.length} vs ${existingOpenCount} open). ` +
+          `Skipping closure to prevent premature expiration from partial fetch.`
+        );
       } else {
         const closeResult = await Job.updateMany(
           {
@@ -527,6 +532,185 @@ async function collectAdzuna() {
 }
 
 /**
+ * Computes actual source-level statistics across all configured ATS platforms and ingest sources.
+ *
+ * @param {Array<Object>} runResults - Individual company results from collection run
+ * @returns {Promise<Object>} Map of source stats, open jobs in DB, last sync times, and reliability distributions
+ */
+async function computeSourceLevelStatistics(runResults = []) {
+  const sourceStatsMap = {};
+
+  // 1. Initialize configured companies by source from companies.json
+  for (const comp of companies) {
+    const s = (comp.ats || 'unknown').toLowerCase();
+    if (!sourceStatsMap[s]) {
+      sourceStatsMap[s] = {
+        source: s,
+        companiesConfigured: 0,
+        successfulFetches: 0,
+        failedFetches: 0,
+        jobsFetched: 0,
+        jobsUpserted: 0,
+        jobsClosed: 0,
+        openJobsInDb: 0,
+        lastSyncTime: null,
+        reliability: { high: 0, medium: 0, low: 0, averageScore: 100 }
+      };
+    }
+    sourceStatsMap[s].companiesConfigured++;
+  }
+
+  // 2. Aggregate current run metrics
+  for (const r of runResults) {
+    const s = (r.ats || 'unknown').toLowerCase();
+    if (!sourceStatsMap[s]) {
+      sourceStatsMap[s] = {
+        source: s,
+        companiesConfigured: 0,
+        successfulFetches: 0,
+        failedFetches: 0,
+        jobsFetched: 0,
+        jobsUpserted: 0,
+        jobsClosed: 0,
+        openJobsInDb: 0,
+        lastSyncTime: null,
+        reliability: { high: 0, medium: 0, low: 0, averageScore: 100 }
+      };
+    }
+    if (r.status === 'success') {
+      sourceStatsMap[s].successfulFetches++;
+    } else {
+      sourceStatsMap[s].failedFetches++;
+    }
+    sourceStatsMap[s].jobsFetched += (r.fetched || 0);
+    sourceStatsMap[s].jobsUpserted += (r.upserted || 0);
+    sourceStatsMap[s].jobsClosed += (r.closed || 0);
+  }
+
+  // 3. Query actual open jobs count in DB grouped by source (if DB connected)
+  if (mongoose.connection && mongoose.connection.readyState === 1) {
+    try {
+      const openJobsAgg = await Job.aggregate([
+        { $match: { status: 'open' } },
+        { $group: { _id: '$source', count: { $sum: 1 } } }
+      ]);
+      for (const item of openJobsAgg) {
+        const s = (item._id || 'unknown').toLowerCase();
+        if (!sourceStatsMap[s]) {
+          sourceStatsMap[s] = {
+            source: s,
+            companiesConfigured: 0,
+            successfulFetches: 0,
+            failedFetches: 0,
+            jobsFetched: 0,
+            jobsUpserted: 0,
+            jobsClosed: 0,
+            openJobsInDb: 0,
+            lastSyncTime: null,
+            reliability: { high: 0, medium: 0, low: 0, averageScore: 100 }
+          };
+        }
+        sourceStatsMap[s].openJobsInDb = item.count;
+      }
+    } catch (err) {
+      console.warn('[Collect] Note: Could not aggregate open jobs by source from DB:', err.message);
+    }
+
+    // 4. Query last sync time per source from SourceRun
+    try {
+      const latestRuns = await SourceRun.aggregate([
+        { $match: { status: 'success' } },
+        { $sort: { createdAt: -1 } },
+        {
+          $group: {
+            _id: '$source',
+            lastSync: { $first: '$createdAt' }
+          }
+        }
+      ]);
+      for (const lr of latestRuns) {
+        const s = (lr._id || 'unknown').toLowerCase();
+        if (sourceStatsMap[s]) {
+          sourceStatsMap[s].lastSyncTime = lr.lastSync;
+        }
+      }
+    } catch (err) {
+      console.warn('[Collect] Note: Could not aggregate last sync times from SourceRun:', err.message);
+    }
+
+    // 5. Query reliability distribution from Company model
+    try {
+      const companyReliability = await Company.find({}, { atsType: 1, reliabilityScore: 1 }).lean();
+      const sourceScores = {};
+      for (const comp of companyReliability) {
+        const s = (comp.atsType || '').toLowerCase();
+        if (!s) continue;
+        if (!sourceScores[s]) sourceScores[s] = [];
+        const score = typeof comp.reliabilityScore === 'number' ? comp.reliabilityScore : 100;
+        sourceScores[s].push(score);
+      }
+
+      for (const [s, scores] of Object.entries(sourceScores)) {
+        if (sourceStatsMap[s]) {
+          const high = scores.filter(score => score >= 80).length;
+          const medium = scores.filter(score => score >= 50 && score < 80).length;
+          const low = scores.filter(score => score < 50).length;
+          const avg = scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 100;
+          sourceStatsMap[s].reliability = { high, medium, low, averageScore: avg };
+        }
+      }
+    } catch (err) {
+      console.warn('[Collect] Note: Could not aggregate company reliability scores:', err.message);
+    }
+  }
+
+  return sourceStatsMap;
+}
+
+/**
+ * Prints formatted source-level statistics report to the console.
+ *
+ * @param {Object} sourceStatsMap
+ */
+function printSourceLevelStatistics(sourceStatsMap) {
+  console.log('\n===================================================================================================================');
+  console.log('                                 JOBRADAR SOURCE-LEVEL INGESTION STATISTICS                                        ');
+  console.log('===================================================================================================================');
+  console.log(
+    'Source'.padEnd(16) +
+    'Configured'.padStart(12) +
+    'Success'.padStart(10) +
+    'Failed'.padStart(9) +
+    'Fetched'.padStart(10) +
+    'Upserted'.padStart(10) +
+    'Closed'.padStart(9) +
+    'Open in DB'.padStart(12) +
+    'Reliability (H/M/L)'.padStart(21) +
+    'Avg Rel'.padStart(10)
+  );
+  console.log('-'.repeat(115));
+
+  const sortedSources = Object.keys(sourceStatsMap).sort();
+  for (const src of sortedSources) {
+    const st = sourceStatsMap[src];
+    const relStr = `${st.reliability.high}/${st.reliability.medium}/${st.reliability.low}`;
+    console.log(
+      src.padEnd(16) +
+      String(st.companiesConfigured).padStart(12) +
+      String(st.successfulFetches).padStart(10) +
+      String(st.failedFetches).padStart(9) +
+      String(st.jobsFetched).padStart(10) +
+      String(st.jobsUpserted).padStart(10) +
+      String(st.jobsClosed).padStart(9) +
+      String(st.openJobsInDb).padStart(12) +
+      relStr.padStart(21) +
+      `${st.reliability.averageScore}%`.padStart(10)
+    );
+  }
+  console.log('===================================================================================================================\n');
+}
+
+/**
  * Main collection orchestrator.
  */
 async function runCollection() {
@@ -561,13 +745,18 @@ async function runCollection() {
   console.log(`Total Fetched: ${totalFetched} | Total Upserted: ${totalUpserted} | Total Closed: ${totalClosed}`);
   console.log('============================================================\n');
 
+  // Compute and display actual source-level statistics
+  const sourceStatistics = await computeSourceLevelStatistics(results);
+  printSourceLevelStatistics(sourceStatistics);
+
   return {
     results,
     totalFetched,
     totalUpserted,
     totalClosed,
     totalErrors,
-    durationSeconds: overallDuration
+    durationSeconds: overallDuration,
+    sourceStatistics
   };
 }
 
@@ -590,5 +779,7 @@ if (require.main === module) {
 module.exports = {
   runCollection,
   collectForCompany,
-  connectDB
+  connectDB,
+  computeSourceLevelStatistics,
+  printSourceLevelStatistics
 };
