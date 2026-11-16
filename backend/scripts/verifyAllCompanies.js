@@ -236,3 +236,4 @@ verifyAll().catch(err => {
   console.error('Fatal verification error:', err);
   process.exit(1);
 });
+

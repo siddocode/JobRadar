@@ -1,4 +1,5 @@
 const { URL } = require('url');
+const { isPublicWebUrl } = require('./ssrfGuard');
 
 // Track last request time per host for polite 1 req/sec rate limiting
 const hostLastRequestMap = new Map();
@@ -22,6 +23,9 @@ async function rateLimitHost(hostname) {
  */
 async function isAllowedByRobots(originUrl, pathToCheck) {
   try {
+    const isSafe = await isPublicWebUrl(originUrl);
+    if (!isSafe) return false;
+
     const parsed = new URL(originUrl);
     const robotsUrl = `${parsed.origin}/robots.txt`;
 
@@ -85,6 +89,11 @@ async function isAllowedByRobots(originUrl, pathToCheck) {
  * Polite fetch with timeout and user-agent
  */
 async function politeFetch(targetUrl) {
+  const isSafe = await isPublicWebUrl(targetUrl);
+  if (!isSafe) {
+    return { error: true, status: 400, message: 'SSRF blocked unsafe target URL', html: null };
+  }
+
   const parsed = new URL(targetUrl);
   await rateLimitHost(parsed.hostname);
 

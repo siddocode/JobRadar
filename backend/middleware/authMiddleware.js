@@ -41,7 +41,7 @@ function requireAuth(req, res, next) {
       });
     }
 
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
     req.user = decoded;
     next();
   } catch (err) {
@@ -56,7 +56,7 @@ function optionalAuth(req, res, next) {
   try {
     const token = getTokenFromReq(req);
     if (token) {
-      const decoded = jwt.verify(token, JWT_SECRET);
+      const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
       req.user = decoded;
     } else {
       req.user = null;

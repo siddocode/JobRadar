@@ -22,17 +22,50 @@ const jobController = require('./controllers/jobController');
 
 const cookieParser = require('cookie-parser');
 const { generalApiLimiter } = require('./utils/rateLimiter');
+const securityHeaders = require('./middleware/securityHeaders');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/jobradar';
 
+// Disable X-Powered-By fingerprint
+app.disable('x-powered-by');
+
 // Trust reverse proxy (Render / Cloudflare) for HTTPS cookie handling
 app.set('trust proxy', 1);
 
+// Mount HTTP Security Headers
+app.use(securityHeaders);
+
+// Allowed origins logic: In production, enforce whitelist (Vercel domains, APP_URL, localhost)
+const isProd = process.env.NODE_ENV === 'production' || process.env.RENDER === 'true';
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://localhost:5000',
+  'http://127.0.0.1:5173',
+  process.env.APP_URL
+].filter(Boolean);
+
+const corsOriginDelegate = (origin, callback) => {
+  // Allow requests with no origin (e.g. mobile apps, curl, server-to-server)
+  if (!origin) return callback(null, true);
+
+  if (!isProd) {
+    return callback(null, true);
+  }
+
+  // Production check: explicit whitelist or *.vercel.app domain
+  const isAllowed = allowedOrigins.includes(origin) || /^https:\/\/.*\.vercel\.app$/.test(origin);
+  if (isAllowed) {
+    callback(null, true);
+  } else {
+    callback(null, false);
+  }
+};
+
 // Middleware & CORS configuration for cross-domain requests (Vercel <-> Render)
 const corsOptions = {
-  origin: true,
+  origin: corsOriginDelegate,
   credentials: true,
   methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin']

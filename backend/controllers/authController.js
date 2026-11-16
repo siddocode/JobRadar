@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
@@ -20,9 +21,20 @@ function setAuthCookie(res, token) {
   });
 }
 
-// Helper to generate a 6-digit numeric OTP
+// Cryptographically secure 6-digit numeric OTP generator
 function generateOtpCode() {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  return crypto.randomInt(100000, 1000000).toString();
+}
+
+// Strips sensitive OAuth tokens (e.g. Gmail refresh & access tokens) before serialization
+function sanitizeCandidateProfile(profile) {
+  if (!profile || typeof profile !== 'object') return profile;
+  const sanitized = { ...profile };
+  if (sanitized.gmailIntegration && typeof sanitized.gmailIntegration === 'object') {
+    const { accessToken, refreshToken, ...safeGmail } = sanitized.gmailIntegration;
+    sanitized.gmailIntegration = safeGmail;
+  }
+  return sanitized;
 }
 
 /**
@@ -80,8 +92,8 @@ exports.sendOtp = async (req, res) => {
     const otpCode = generateOtpCode();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
-    // Store in-memory
-    pendingOtps.set(cleanEmail, { code: otpCode, expiresAt });
+    // Store in-memory with attempt tracking
+    pendingOtps.set(cleanEmail, { code: otpCode, expiresAt, attempts: 0 });
 
     // Also update existing user record if one exists
     await User.findOneAndUpdate(
@@ -145,6 +157,19 @@ exports.register = async (req, res) => {
 
     // Verify OTP against pendingOtps map or DB
     const memoryRecord = pendingOtps.get(cleanEmail);
+    if (memoryRecord) {
+      if ((memoryRecord.attempts || 0) >= 5) {
+        pendingOtps.delete(cleanEmail);
+        return res.status(429).json({
+          success: false,
+          error: 'Too many incorrect verification attempts. This code has been invalidated for security. Please request a new code.'
+        });
+      }
+      if (memoryRecord.code !== cleanOtp) {
+        memoryRecord.attempts = (memoryRecord.attempts || 0) + 1;
+      }
+    }
+
     let isOtpValid = false;
 
     if (memoryRecord && memoryRecord.code === cleanOtp && memoryRecord.expiresAt > new Date()) {
@@ -213,7 +238,7 @@ exports.register = async (req, res) => {
     const token = jwt.sign(
       { id: user._id, email: user.email, name: user.name },
       JWT_SECRET,
-      { expiresIn: '7d' }
+      { expiresIn: '7d', algorithm: 'HS256' }
     );
 
     setAuthCookie(res, token);
@@ -270,7 +295,7 @@ exports.login = async (req, res) => {
     const token = jwt.sign(
       { id: user._id, email: user.email, name: user.name },
       JWT_SECRET,
-      { expiresIn: '7d' }
+      { expiresIn: '7d', algorithm: 'HS256' }
     );
 
     setAuthCookie(res, token);
@@ -306,6 +331,19 @@ exports.loginWithOtp = async (req, res) => {
     const cleanOtp = String(otp).trim();
 
     const memoryRecord = pendingOtps.get(cleanEmail);
+    if (memoryRecord) {
+      if ((memoryRecord.attempts || 0) >= 5) {
+        pendingOtps.delete(cleanEmail);
+        return res.status(429).json({
+          success: false,
+          error: 'Too many incorrect verification attempts. This code has been invalidated for security. Please request a new code.'
+        });
+      }
+      if (memoryRecord.code !== cleanOtp) {
+        memoryRecord.attempts = (memoryRecord.attempts || 0) + 1;
+      }
+    }
+
     let isOtpValid = false;
 
     if (memoryRecord && memoryRecord.code === cleanOtp && memoryRecord.expiresAt > new Date()) {
@@ -329,8 +367,8 @@ exports.loginWithOtp = async (req, res) => {
     let user = await User.findOne({ email: cleanEmail });
     if (!user) {
       isNewUser = true;
-      // Auto-create verified user with temporary random password
-      const randomPassword = Math.random().toString(36).slice(-10);
+      // Auto-create verified user with cryptographically secure random password
+      const randomPassword = crypto.randomBytes(16).toString('hex');
       const hashedPassword = await bcrypt.hash(randomPassword, 10);
       user = await User.create({
         email: cleanEmail,
@@ -357,7 +395,7 @@ exports.loginWithOtp = async (req, res) => {
     const token = jwt.sign(
       { id: user._id, email: user.email, name: user.name },
       JWT_SECRET,
-      { expiresIn: '7d' }
+      { expiresIn: '7d', algorithm: 'HS256' }
     );
 
     setAuthCookie(res, token);
@@ -410,7 +448,7 @@ exports.getMe = async (req, res) => {
         name: user.name,
         isVerified: user.isVerified,
         createdAt: user.createdAt,
-        candidateProfile: user.candidateProfile || null
+        candidateProfile: sanitizeCandidateProfile(user.candidateProfile)
       }
     });
   } catch (err) {
@@ -439,7 +477,7 @@ exports.saveCandidateProfile = async (req, res) => {
     return res.status(200).json({
       success: true,
       message: 'Candidate profile saved successfully',
-      candidateProfile: updatedUser.candidateProfile
+      candidateProfile: sanitizeCandidateProfile(updatedUser.candidateProfile)
     });
   } catch (err) {
     console.error('Save candidate profile error:', err);

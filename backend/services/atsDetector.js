@@ -10,6 +10,7 @@ const dns = require('dns');
 try { dns.setDefaultResultOrder('ipv4first'); } catch (_) {}
 
 const { rateLimitHost } = require('../utils/rateLimiter');
+const { isPublicWebUrl } = require('../utils/ssrfGuard');
 
 // Known ATS URL Regex Patterns
 const ATS_PATTERNS = [
@@ -172,6 +173,12 @@ async function detectFromUrl(urlStr) {
  */
 async function sniffPageForAts(targetUrl) {
   try {
+    const isSafe = await isPublicWebUrl(targetUrl);
+    if (!isSafe) {
+      console.warn(`[AtsDetector] SSRF guard blocked unsafe target URL: ${targetUrl}`);
+      return null;
+    }
+
     const res = await fetch(targetUrl, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
