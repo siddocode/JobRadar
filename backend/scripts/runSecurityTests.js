@@ -249,3 +249,4 @@ runSecuritySuite().catch(err => {
   console.error('Fatal security suite execution error:', err);
   process.exit(1);
 });
+

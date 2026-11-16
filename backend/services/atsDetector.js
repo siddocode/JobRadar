@@ -75,68 +75,79 @@ async function verifyAtsSlug(ats, slug) {
   const config = ATS_PATTERNS.find(p => p.ats === ats);
   if (!config) return false;
 
-  try {
-    const url = config.testUrl(slug);
-    const host = new URL(url).host;
-    await rateLimitHost(host);
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const url = config.testUrl(slug);
+      const host = new URL(url).host;
+      await rateLimitHost(host);
 
-    const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
-    const options = {
-      headers: {
-        'Accept': config.isXml ? 'application/xml, text/xml, */*' : 'application/json',
-        'User-Agent': UA
-      },
-      signal: AbortSignal.timeout(7000)
-    };
+      const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
+      const options = {
+        headers: {
+          'Accept': config.isXml ? 'application/xml, text/xml, */*' : 'application/json',
+          'User-Agent': UA
+        },
+        signal: AbortSignal.timeout(8000)
+      };
 
-    if (config.postBody) {
-      options.method = 'POST';
-      options.headers['Content-Type'] = 'application/json';
-      options.body = JSON.stringify(config.postBody(slug));
-    }
-
-    const res = await fetch(url, options);
-    if (!res.ok) {
-      // For Personio, if .de returned 404, fallback to .com
-      if (ats === 'personio' && res.status === 404) {
-        const comUrl = `https://${encodeURIComponent(slug)}.jobs.personio.com/xml?language=en`;
-        await rateLimitHost(new URL(comUrl).host);
-        const comRes = await fetch(comUrl, options);
-        if (comRes.ok) {
-          const comText = await comRes.text();
-          return config.validator(comText);
-        }
+      if (config.postBody) {
+        options.method = 'POST';
+        options.headers['Content-Type'] = 'application/json';
+        options.body = JSON.stringify(config.postBody(slug));
       }
 
-      // For Workable, fallback to public jobs.md feed if API is rate-limited (429) or non-ok
-      if (ats === 'workable') {
-        const mdUrl = `https://apply.workable.com/${encodeURIComponent(slug)}/jobs.md`;
-        const mdRes = await fetch(mdUrl, {
-          headers: { 'User-Agent': UA, 'Accept': 'text/markdown, text/plain, */*' },
-          signal: AbortSignal.timeout(6000),
-          redirect: 'follow'
-        });
-        if (mdRes.ok) {
-          const mdText = await mdRes.text();
-          if (mdText.includes('[View](') || mdText.includes('# ') || mdText.includes('Powered by [Workable]')) {
-            return true;
+      const res = await fetch(url, options);
+      if (!res.ok) {
+        // For Personio, if .de returned 404, fallback to .com
+        if (ats === 'personio' && res.status === 404) {
+          const comUrl = `https://${encodeURIComponent(slug)}.jobs.personio.com/xml?language=en`;
+          await rateLimitHost(new URL(comUrl).host);
+          const comRes = await fetch(comUrl, options);
+          if (comRes.ok) {
+            const comText = await comRes.text();
+            return config.validator(comText);
           }
         }
+
+        // For Workable, fallback to public jobs.md feed if API is rate-limited (429) or non-ok
+        if (ats === 'workable') {
+          const mdUrl = `https://apply.workable.com/${encodeURIComponent(slug)}/jobs.md`;
+          const mdRes = await fetch(mdUrl, {
+            headers: { 'User-Agent': UA, 'Accept': 'text/markdown, text/plain, */*' },
+            signal: AbortSignal.timeout(6000),
+            redirect: 'follow'
+          });
+          if (mdRes.ok) {
+            const mdText = await mdRes.text();
+            if (mdText.includes('[View](') || mdText.includes('# ') || mdText.includes('Powered by [Workable]')) {
+              return true;
+            }
+          }
+        }
+
+        if (attempt === 1 && (res.status === 429 || res.status >= 500)) {
+          await new Promise(r => setTimeout(r, 600));
+          continue;
+        }
+
+        return false;
       }
 
-      return false;
-    }
+      if (config.isXml) {
+        const text = await res.text();
+        return config.validator(text);
+      }
 
-    if (config.isXml) {
-      const text = await res.text();
-      return config.validator(text);
+      const data = await res.json();
+      return config.validator(data);
+    } catch (_) {
+      if (attempt === 1) {
+        await new Promise(r => setTimeout(r, 600));
+      }
     }
-
-    const data = await res.json();
-    return config.validator(data);
-  } catch (_) {
-    return false;
   }
+
+  return false;
 }
 
 /**

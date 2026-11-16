@@ -226,8 +226,6 @@ function extractExplicitSkillNames(text) {
     });
 }
 
-}
-
 function serializePortfolioApiData(value, depth = 0) {
   if (depth > 7 || value == null) return '';
   if (typeof value === 'string' || typeof value === 'number') return String(value);
