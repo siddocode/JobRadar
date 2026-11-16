@@ -179,7 +179,7 @@ export default function DiscoveredPlacesMap({
         zIndexOffset: 2000
       }).bindPopup(`
         <div class="user-loc-popup">
-          <strong>📍 Your Location</strong>
+          <strong>Your Location</strong>
           <span>${userLocation.label || 'Active reference point'}</span>
         </div>
       `).addTo(layer);
@@ -232,7 +232,7 @@ export default function DiscoveredPlacesMap({
           <div class="discovered-popup-header">
             <span class="discovered-popup-badge">${place.category || 'Tech Office'}</span>
             ${place.rating ? `<span class="discovered-popup-rating">★ ${place.rating}</span>` : ''}
-            ${distText ? `<span class="discovered-popup-dist">📍 ${distText}</span>` : ''}
+            ${distText ? `<span class="discovered-popup-dist">${distText}</span>` : ''}
           </div>
           <h4 class="discovered-popup-name">${place.name}</h4>
           <p class="discovered-popup-address">
@@ -275,7 +275,7 @@ export default function DiscoveredPlacesMap({
     if (bounds.length > 0 && !selectedPlace) {
       try {
         map.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 });
-      } catch (_) {}
+      } catch {}
     }
   }, [places, userLocation]);
 
@@ -387,7 +387,6 @@ export default function DiscoveredPlacesMap({
         <div className="discovered-selected-place-card">
           <div className="selected-place-main">
             <div className="selected-place-title-row">
-              <span className="selected-pin-dot">📍</span>
               <strong className="selected-place-name" title={selectedPlace.name}>
                 {selectedPlace.name}
               </strong>

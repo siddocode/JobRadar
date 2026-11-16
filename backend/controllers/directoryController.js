@@ -134,7 +134,12 @@ exports.getCompanies = async (req, res) => {
       if (cityRecord) {
         const officesInCity = await Office.find({ cityId: cityRecord._id }, 'companyId');
         const companyIdsInCity = officesInCity.map(o => o.companyId);
-        companyQuery._id = { $in: companyIdsInCity };
+        if (companyQuery._id && companyQuery._id.$in) {
+          const idSet = new Set(companyIdsInCity.map(id => id.toString()));
+          companyQuery._id = { $in: companyQuery._id.$in.filter(id => idSet.has(id.toString())) };
+        } else {
+          companyQuery._id = { $in: companyIdsInCity };
+        }
       } else {
         return res.status(200).json({
           success: true,
@@ -188,16 +193,21 @@ exports.getCompanies = async (req, res) => {
     // Check if user location is provided
     const numUserLat = userLat != null && userLat !== '' ? parseFloat(userLat) : null;
     const numUserLng = userLng != null && userLng !== '' ? parseFloat(userLng) : null;
-    const hasUserLocation = numUserLat != null && numUserLng != null && !isNaN(numUserLat) && !isNaN(numUserLng);
-    const maxDist = maxDistanceKm ? parseFloat(maxDistanceKm) : null;
-    const isSortByDistance = hasUserLocation && (sortBy === 'distance' || maxDist != null);
+    const validLat = numUserLat != null && numUserLat >= -90 && numUserLat <= 90;
+    const validLng = numUserLng != null && numUserLng >= -180 && numUserLng <= 180;
+    const hasUserLocation = validLat && validLng;
+    const maxDist = maxDistanceKm != null && maxDistanceKm !== '' && !isNaN(parseFloat(maxDistanceKm))
+      ? parseFloat(maxDistanceKm)
+      : null;
+    const useProximity = hasUserLocation && (sortBy === 'distance' || maxDist != null);
+    const isSortByDistance = hasUserLocation && sortBy === 'distance';
 
     const startIndex = (pageNum - 1) * limitNum;
     let total = 0;
     let paginatedCompanies = [];
     const companyDistMap = new Map();
 
-    if (isSortByDistance) {
+    if (useProximity) {
       // 1. Fetch offices with coordinates to determine proximity across all companies
       const allOffices = await Office.find({ lat: { $ne: null }, lng: { $ne: null } })
         .select('companyId lat lng')
@@ -351,8 +361,10 @@ exports.getCompanies = async (req, res) => {
     });
 
     // Proximity sorting & filtering
-    if (hasUserLocation && maxDist && !isNaN(maxDist)) {
-      processed = processed.filter(c => c.distanceKm == null || c.distanceKm <= maxDist);
+    if (hasUserLocation && maxDist != null && maxDist > 0) {
+      // Only companies with a known, in-radius distance may pass. Keeping
+      // nulls here used to leak unrelated companies into nearby results.
+      processed = processed.filter(c => c.distanceKm != null && c.distanceKm <= maxDist);
     }
 
     if (hasUserLocation && sortBy === 'distance') {
@@ -949,6 +961,47 @@ exports.createCompany = async (req, res) => {
 };
 
 /**
+ * Pull the first matching long_name out of a Google `address_components` array.
+ */
+function pickAddressComponent(components, types) {
+  if (!Array.isArray(components)) return '';
+  for (const type of types) {
+    const match = components.find((c) => Array.isArray(c?.types) && c.types.includes(type));
+    if (match?.long_name) return match.long_name;
+  }
+  return '';
+}
+
+/**
+ * Normalize a populated Office document into a place suggestion. `off.address`
+ * can be missing in harvested records, so never assume it is a string.
+ */
+function buildOfficePlace(off) {
+  const compName = off.companyId?.name || '';
+  const cityName = off.cityId?.name || '';
+  const address = typeof off.address === 'string' ? off.address : '';
+  const locality = off.locality || '';
+  const fallbackLocality = address ? address.split(',')[0].trim() : '';
+
+  return {
+    label: compName
+      ? `${compName}${locality || cityName ? ` (${locality || cityName})` : ''}`
+      : (locality || fallbackLocality || cityName),
+    name: compName || locality || fallbackLocality,
+    locality: locality || fallbackLocality,
+    city: cityName,
+    state: '',
+    fullAddress: address || [locality, cityName].filter(Boolean).join(', '),
+    lat: off.lat,
+    lng: off.lng,
+    category: 'office',
+    // A recorded office is an exact address, not a generic city hint.
+    specificity: 85,
+    source: 'local_db'
+  };
+}
+
+/**
  * GET /api/directory/places/search
  * Place & office search biased to user GPS coordinates
  * Query params: q, lat, lng, limit
@@ -956,7 +1009,7 @@ exports.createCompany = async (req, res) => {
 exports.searchPlaces = async (req, res) => {
   try {
     const { q = '', lat, lng, limit = 12 } = req.query;
-    const query = q.trim();
+    const query = q.trim().slice(0, 120);
     if (!query || query.length < 2) {
       return res.status(200).json({ success: true, places: [] });
     }
@@ -981,7 +1034,7 @@ exports.searchPlaces = async (req, res) => {
           const gData = await gRes.json();
           if (gData.status === 'OK' && Array.isArray(gData.predictions)) {
             for (const pred of gData.predictions.slice(0, 5)) {
-              const detailsUrl = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${pred.place_id}&fields=name,geometry,formatted_address,types&key=${apiKey}`;
+              const detailsUrl = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${pred.place_id}&fields=name,geometry,formatted_address,types,address_components&key=${apiKey}`;
               const dRes = await fetch(detailsUrl);
               if (dRes.ok) {
                 const dData = await dRes.json();
@@ -992,14 +1045,35 @@ exports.searchPlaces = async (req, res) => {
                   const key = `${pLat.toFixed(3)},${pLng.toFixed(3)}`;
                   if (!seenKeys.has(key)) {
                     seenKeys.add(key);
-                    const isFood = (place.types || []).some(t => ['restaurant', 'cafe', 'food', 'bar', 'meal_takeaway'].includes(t));
-                    const isOffice = (place.types || []).some(t => ['point_of_interest', 'establishment', 'office'].includes(t));
+                    const types = place.types || [];
+                    const isFood = types.some(t => ['restaurant', 'cafe', 'food', 'bar', 'meal_takeaway'].includes(t));
+                    const isOffice = types.some(t => ['point_of_interest', 'establishment', 'office'].includes(t));
+                    const components = place.address_components;
+                    const locality = pickAddressComponent(components, [
+                      'sublocality_level_1',
+                      'sublocality',
+                      'neighborhood'
+                    ]);
+                    const city = pickAddressComponent(components, ['locality', 'administrative_area_level_2']);
+                    const state = pickAddressComponent(components, ['administrative_area_level_1']);
+                    const name = place.name || pred.structured_formatting?.main_text || '';
+                    // Google establishment results are building/POI level; keep
+                    // their exact coordinates so the client never swaps them
+                    // for a coarse centroid.
+                    const isPrecise = types.some(t =>
+                      ['establishment', 'point_of_interest', 'premise', 'street_address', 'subpremise'].includes(t)
+                    );
                     results.push({
-                      label: place.name || pred.structured_formatting?.main_text || pred.description,
+                      label: name || pred.description,
+                      name,
+                      locality,
+                      city,
+                      state,
                       fullAddress: place.formatted_address || pred.description,
                       lat: pLat,
                       lng: pLng,
                       category: isFood ? 'food' : (isOffice ? 'office' : 'landmark'),
+                      specificity: isPrecise ? 95 : 55,
                       source: 'google_places'
                     });
                   }
@@ -1033,24 +1107,13 @@ exports.searchPlaces = async (req, res) => {
       .lean();
 
       for (const off of matchingOffices) {
-        const compName = off.companyId?.name || '';
-        const cityName = off.cityId?.name || '';
         const pLat = off.lat;
         const pLng = off.lng;
         const key = `${pLat.toFixed(3)},${pLng.toFixed(3)}`;
         if (seenKeys.has(key)) continue;
         seenKeys.add(key);
 
-        const label = compName ? `${compName} (${off.locality || cityName})` : (off.locality || off.address.split(',')[0]);
-        results.push({
-          label,
-          fullAddress: off.address || `${label}, ${cityName}`,
-          city: cityName,
-          lat: pLat,
-          lng: pLng,
-          category: 'office',
-          source: 'local_db'
-        });
+        results.push(buildOfficePlace(off));
       }
 
       // Also search Company by name
@@ -1074,41 +1137,35 @@ exports.searchPlaces = async (req, res) => {
         .lean();
 
         for (const off of compOffices) {
-          const compName = off.companyId?.name || '';
-          const cityName = off.cityId?.name || '';
           const pLat = off.lat;
           const pLng = off.lng;
           const key = `${pLat.toFixed(3)},${pLng.toFixed(3)}`;
           if (seenKeys.has(key)) continue;
           seenKeys.add(key);
 
-          const label = compName ? `${compName} (${off.locality || cityName})` : (off.locality || off.address.split(',')[0]);
-          results.push({
-            label,
-            fullAddress: off.address || `${label}, ${cityName}`,
-            city: cityName,
-            lat: pLat,
-            lng: pLng,
-            category: 'office',
-            source: 'local_db'
-          });
+          results.push(buildOfficePlace(off));
         }
       }
     } catch (dbErr) {
       console.warn('[PlacesSearch] DB search error:', dbErr.message);
     }
 
-    // Distance calculation & proximity sorting if userLat and userLng provided
+    // Distance calculation & precision-first ordering. A precise office/building
+    // must never be truncated in favour of a generic city centroid just because
+    // the centroid happens to be closer to the anchor.
     if (userLat != null && userLng != null) {
       results.forEach(r => {
         r.distanceKm = calculateDistanceKm(userLat, userLng, r.lat, r.lng);
       });
-      results.sort((a, b) => {
-        if (a.distanceKm == null) return 1;
-        if (b.distanceKm == null) return -1;
-        return a.distanceKm - b.distanceKm;
-      });
     }
+    results.sort((a, b) => {
+      const specA = Number.isFinite(a.specificity) ? a.specificity : 50;
+      const specB = Number.isFinite(b.specificity) ? b.specificity : 50;
+      if (specB !== specA) return specB - specA;
+      if (a.distanceKm == null) return 1;
+      if (b.distanceKm == null) return -1;
+      return a.distanceKm - b.distanceKm;
+    });
 
     return res.status(200).json({
       success: true,
@@ -1121,13 +1178,46 @@ exports.searchPlaces = async (req, res) => {
 };
 
 /**
+ * Compose a reverse-geocoded label without losing building-level detail.
+ * Deduplicates overlapping parts (e.g. "Sector V" vs "Salt Lake Sector V")
+ * and keeps the most specific entries first.
+ */
+function composeReverseLabel(parts, maxParts = 4) {
+  const out = [];
+  for (const raw of parts) {
+    const value = String(raw || '').trim();
+    if (value.length < 2) continue;
+
+    const lower = value.toLowerCase();
+    let handled = false;
+    for (let i = 0; i < out.length; i += 1) {
+      const existing = out[i].toLowerCase();
+      if (existing === lower || existing.includes(lower)) {
+        handled = true;
+        break;
+      }
+      if (lower.includes(existing)) {
+        // A longer, more specific part supersedes the shorter one.
+        out[i] = value;
+        handled = true;
+        break;
+      }
+    }
+
+    if (!handled) out.push(value);
+    if (out.length >= maxParts) break;
+  }
+  return out.join(', ');
+}
+
+/**
  * GET /api/directory/places/reverse?lat=...&lng=...
  * Highly accurate reverse geocoding to human-readable neighborhood/locality/city
  */
 exports.reverseGeocode = async (req, res) => {
   try {
     const { lat, lng } = req.query;
-    if (!lat || !lng) {
+    if (lat == null || lng == null || lat === '' || lng === '') {
       return res.status(400).json({ success: false, error: 'lat and lng parameters are required' });
     }
     const numLat = parseFloat(lat);
@@ -1168,10 +1258,17 @@ exports.reverseGeocode = async (req, res) => {
               if (comp.types.includes('administrative_area_level_1')) state = comp.long_name;
               if (comp.types.includes('country')) country = comp.long_name;
             }
-            if (detectedHub) {
-              label = `${detectedHub}, ${city || state || ''}`.replace(/,\s*$/, '');
+            // Keep Google's precise formatted address (building/street level)
+            // and only fall back to a hub name when it is missing.
+            const googleAddress = first.formatted_address
+              ? first.formatted_address.split(',').slice(0, 4).join(',').trim()
+              : '';
+            if (googleAddress) {
+              label = googleAddress;
+            } else if (detectedHub) {
+              label = composeReverseLabel([locality, detectedHub, city || state]);
             } else if (locality && city) {
-              label = `${locality}, ${city}`;
+              label = composeReverseLabel([locality, city]);
             }
             return res.status(200).json({
               success: true,
@@ -1182,6 +1279,7 @@ exports.reverseGeocode = async (req, res) => {
               country,
               lat: numLat,
               lng: numLng,
+              approximate: false,
               source: 'google_geocoding'
             });
           }
@@ -1206,8 +1304,9 @@ exports.reverseGeocode = async (req, res) => {
       if (osmRes.ok) {
         const osmData = await osmRes.json();
         const addr = osmData.address || {};
-        const poi = addr.building || addr.amenity || addr.office || addr.shop || '';
-        const neighborhood = addr.neighbourhood || addr.suburb || addr.quarter || addr.residential || addr.road || '';
+        const poi = addr.building || addr.amenity || addr.office || addr.shop || addr.tourism || addr.leisure || '';
+        const neighborhood = addr.neighbourhood || addr.suburb || addr.quarter || addr.residential || '';
+        const road = addr.road || '';
         city = addr.city || addr.town || addr.municipality || addr.state_district || '';
         state = addr.state || '';
         country = addr.country || 'India';
@@ -1218,27 +1317,29 @@ exports.reverseGeocode = async (req, res) => {
           displayCity = 'Kolkata';
         }
 
-        if (detectedHub) {
-          label = `${detectedHub}, ${displayCity || state}`.replace(/,\s*$/, '');
-        } else if (poi && neighborhood) {
-          label = `${poi}, ${neighborhood}`;
-        } else if (neighborhood && displayCity) {
-          label = `${neighborhood}, ${displayCity}`;
-        } else if (displayCity) {
-          label = `${displayCity}, ${state || country}`;
-        } else if (osmData.display_name) {
+        // Building/POI detail beats a generic hub name, and the hub name beats
+        // a bare city. composeReverseLabel dedupes overlapping entries.
+        label = composeReverseLabel([
+          poi,
+          neighborhood || road,
+          detectedHub,
+          displayCity || state
+        ]);
+
+        if (!label && osmData.display_name) {
           label = osmData.display_name.split(',').slice(0, 3).join(', ').trim();
         }
 
         return res.status(200).json({
           success: true,
-          label: label || `${numLat.toFixed(4)}, ${numLng.toFixed(4)}`,
+          label: label || (displayCity ? `${displayCity}, ${state || country}` : 'India'),
           city: displayCity || (detectedHub ? detectedHub : ''),
-          locality: neighborhood || detectedHub || '',
+          locality: neighborhood || road || detectedHub || '',
           state,
           country,
           lat: numLat,
           lng: numLng,
+          approximate: false,
           source: 'osm_nominatim'
         });
       }
@@ -1258,45 +1359,112 @@ exports.reverseGeocode = async (req, res) => {
         if (feat) {
           const name = feat.name || '';
           const street = feat.street || '';
+          const locality = feat.locality || '';
+          const district = feat.district || '';
           city = feat.city || feat.district || '';
           state = feat.state || '';
           country = feat.country || 'India';
-          if (detectedHub) {
-            label = `${detectedHub}, ${city || state}`.replace(/,\s*$/, '');
-          } else if (name && city) {
-            label = `${name}, ${city}`;
-          } else if (street && city) {
-            label = `${street}, ${city}`;
-          } else if (city) {
-            label = `${city}, ${state}`;
-          }
+
+          // Preserve POI + block/locality detail from Photon instead of
+          // flattening everything to "Name, City".
+          label = composeReverseLabel([
+            name || street,
+            locality,
+            district,
+            city
+          ]);
+
           return res.status(200).json({
             success: true,
-            label: label || `${numLat.toFixed(4)}, ${numLng.toFixed(4)}`,
+            label: label || (city ? `${city}, ${state || country}` : 'India'),
             city,
+            locality: locality || district || '',
             state,
             country,
             lat: numLat,
             lng: numLng,
+            approximate: false,
             source: 'photon'
           });
         }
       }
     } catch (_) {}
 
-    // Final fallback
+    // 5. Deterministic Offline Indian Metro & Tech Corridor Centroid Resolver
+    const INDIAN_METROS = [
+      { name: 'Central Kolkata', city: 'Kolkata', state: 'West Bengal', lat: 22.5643, lng: 88.3693, maxKm: 8 },
+      { name: 'Salt Lake Sector V', city: 'Kolkata', state: 'West Bengal', lat: 22.5804, lng: 88.4378, maxKm: 5 },
+      { name: 'New Town Action Area', city: 'Kolkata', state: 'West Bengal', lat: 22.5867, lng: 88.4734, maxKm: 6 },
+      { name: 'Kolkata', city: 'Kolkata', state: 'West Bengal', lat: 22.5726, lng: 88.3639, maxKm: 35 },
+      { name: 'Koramangala', city: 'Bengaluru', state: 'Karnataka', lat: 12.9352, lng: 77.6245, maxKm: 5 },
+      { name: 'HSR Layout', city: 'Bengaluru', state: 'Karnataka', lat: 12.9121, lng: 77.6446, maxKm: 5 },
+      { name: 'Whitefield / ITPL', city: 'Bengaluru', state: 'Karnataka', lat: 12.9856, lng: 77.7489, maxKm: 6 },
+      { name: 'Outer Ring Road (Bellandur)', city: 'Bengaluru', state: 'Karnataka', lat: 12.9304, lng: 77.6850, maxKm: 6 },
+      { name: 'Electronic City', city: 'Bengaluru', state: 'Karnataka', lat: 12.8457, lng: 77.6679, maxKm: 6 },
+      { name: 'Indiranagar', city: 'Bengaluru', state: 'Karnataka', lat: 12.9784, lng: 77.6408, maxKm: 5 },
+      { name: 'Bengaluru', city: 'Bengaluru', state: 'Karnataka', lat: 12.9716, lng: 77.5946, maxKm: 40 },
+      { name: 'HITEC City', city: 'Hyderabad', state: 'Telangana', lat: 17.4483, lng: 78.3915, maxKm: 5 },
+      { name: 'Gachibowli', city: 'Hyderabad', state: 'Telangana', lat: 17.4401, lng: 78.3489, maxKm: 6 },
+      { name: 'Hyderabad', city: 'Hyderabad', state: 'Telangana', lat: 17.3850, lng: 78.4867, maxKm: 40 },
+      { name: 'DLF Cyber City', city: 'Gurugram', state: 'Haryana', lat: 28.4950, lng: 77.0890, maxKm: 5 },
+      { name: 'Golf Course Road', city: 'Gurugram', state: 'Haryana', lat: 28.4595, lng: 77.0988, maxKm: 5 },
+      { name: 'Gurugram', city: 'Gurugram', state: 'Haryana', lat: 28.4595, lng: 77.0266, maxKm: 30 },
+      { name: 'Sector 62', city: 'Noida', state: 'Uttar Pradesh', lat: 28.6279, lng: 77.3649, maxKm: 5 },
+      { name: 'Noida Expressway', city: 'Noida', state: 'Uttar Pradesh', lat: 28.5100, lng: 77.3800, maxKm: 6 },
+      { name: 'Noida', city: 'Noida', state: 'Uttar Pradesh', lat: 28.5355, lng: 77.3910, maxKm: 30 },
+      { name: 'Central Delhi', city: 'Delhi NCR', state: 'Delhi', lat: 28.6139, lng: 77.2090, maxKm: 35 },
+      { name: 'BKC', city: 'Mumbai', state: 'Maharashtra', lat: 19.0660, lng: 72.8680, maxKm: 5 },
+      { name: 'Lower Parel', city: 'Mumbai', state: 'Maharashtra', lat: 18.9950, lng: 72.8300, maxKm: 5 },
+      { name: 'Andheri East', city: 'Mumbai', state: 'Maharashtra', lat: 19.1150, lng: 72.8650, maxKm: 6 },
+      { name: 'Mumbai', city: 'Mumbai', state: 'Maharashtra', lat: 19.0760, lng: 72.8777, maxKm: 40 },
+      { name: 'Hinjawadi IT Park', city: 'Pune', state: 'Maharashtra', lat: 18.5913, lng: 73.7389, maxKm: 6 },
+      { name: 'Magarpatta / Kharadi', city: 'Pune', state: 'Maharashtra', lat: 18.5350, lng: 73.9400, maxKm: 6 },
+      { name: 'Pune', city: 'Pune', state: 'Maharashtra', lat: 18.5204, lng: 73.8567, maxKm: 35 },
+      { name: 'OMR Tech Corridor', city: 'Chennai', state: 'Tamil Nadu', lat: 12.9150, lng: 80.2280, maxKm: 7 },
+      { name: 'Chennai', city: 'Chennai', state: 'Tamil Nadu', lat: 13.0827, lng: 80.2707, maxKm: 35 },
+      { name: 'Ahmedabad', city: 'Ahmedabad', state: 'Gujarat', lat: 23.0225, lng: 72.5714, maxKm: 35 },
+      { name: 'Jaipur', city: 'Jaipur', state: 'Rajasthan', lat: 26.9124, lng: 75.7873, maxKm: 35 },
+      { name: 'Kochi', city: 'Kochi', state: 'Kerala', lat: 9.9312, lng: 76.2673, maxKm: 30 },
+      { name: 'Chandigarh', city: 'Chandigarh', state: 'Chandigarh', lat: 30.7333, lng: 76.7794, maxKm: 30 }
+    ];
+
+    let closest = null;
+    let minD = Infinity;
+    for (const metro of INDIAN_METROS) {
+      const d = calculateDistanceKm(numLat, numLng, metro.lat, metro.lng);
+      if (d != null && d < minD) {
+        minD = d;
+        closest = metro;
+      }
+    }
+
     if (detectedHub) {
-      label = detectedHub;
+      city = closest?.city || detectedHub;
+      state = closest?.state || state;
+      label = `${detectedHub}, ${city}`.replace(/,\s*$/, '');
+    } else if (closest && minD <= (closest.maxKm || 30)) {
+      label = closest.name === closest.city ? `${closest.city}, ${closest.state}` : `${closest.name}, ${closest.city}`;
+      city = closest.city;
+      state = closest.state;
+    } else if (closest) {
+      label = `${closest.city} Region, India`;
+      city = closest.city;
+      state = closest.state;
     } else {
-      label = `Location (${numLat.toFixed(4)}, ${numLng.toFixed(4)})`;
+      label = 'India';
+      city = 'India';
     }
 
     return res.status(200).json({
       success: true,
       label,
-      city: city || '',
+      city: city || 'India',
+      state: state || '',
+      country: 'India',
       lat: numLat,
       lng: numLng,
+      // This label came from the curated centroid table, not a geocoder.
+      approximate: true,
       source: 'coords'
     });
   } catch (error) {

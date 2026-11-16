@@ -83,18 +83,25 @@ export default function CompanyCard({ company, onUpdate, onPersonalize }) {
     return (words[0][0] + words[1][0]).toUpperCase();
   };
 
-  const getAvatarGradient = (name = '') => {
-    const gradients = [
-      'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
-      'linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%)',
-      'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-      'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)',
-      'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-      'linear-gradient(135deg, #6366f1 0%, #4338ca 100%)'
-    ];
+  const getCompanyBrandStyle = (name = '') => {
+    const lower = name.toLowerCase();
+    if (lower.includes('awfis')) return { bg: '#173D35', color: '#FFFFFF' };
+    if (lower.includes('einetec')) return { bg: '#0C66E4', color: '#FFFFFF' };
+    if (lower.includes('asyst')) return { bg: '#00875A', color: '#FFFFFF' };
+    if (lower.includes('cognizant')) return { bg: '#403294', color: '#FFFFFF' };
+    if (lower.includes('beas')) return { bg: '#0052CC', color: '#FFFFFF' };
+    if (lower.includes('bluweb')) return { bg: '#216E4E', color: '#FFFFFF' };
+    if (lower.includes('swiggy')) return { bg: '#FC8019', color: '#FFFFFF' };
+    if (lower.includes('razorpay')) return { bg: '#0C66E4', color: '#FFFFFF' };
+
     let sum = 0;
     for (let i = 0; i < name.length; i++) sum += name.charCodeAt(i);
-    return gradients[sum % gradients.length];
+    const hues = [168, 205, 32, 280, 195, 150];
+    const hue = hues[Math.abs(sum) % hues.length];
+    return {
+      bg: `hsl(${hue}, 55%, 32%)`,
+      color: '#FFFFFF'
+    };
   };
 
   const { userLocation, getDistanceTo } = useLocation();
@@ -231,7 +238,13 @@ export default function CompanyCard({ company, onUpdate, onPersonalize }) {
         {/* Card Header: Monogram Avatar, Company Name, Category & Hiring Pill */}
         <div className="card-top-row">
           <div className="avatar-and-info">
-            <div className="company-monogram" style={{ background: getAvatarGradient(company.name) }}>
+            <div
+              className="company-monogram"
+              style={{
+                backgroundColor: getCompanyBrandStyle(company.name).bg,
+                color: getCompanyBrandStyle(company.name).color
+              }}
+            >
               <span>{getInitials(company.name)}</span>
             </div>
 
@@ -335,7 +348,7 @@ export default function CompanyCard({ company, onUpdate, onPersonalize }) {
                     className="company-distance-badge"
                     title={`Approximately ${effectiveDistanceKm} km from ${userLocation?.label || 'your set location'}`}
                   >
-                    📍 {formatDistance(effectiveDistanceKm)}
+                    {formatDistance(effectiveDistanceKm)}
                   </span>
                 )}
                 {primaryOffice?.verified && (

@@ -1,0 +1,336 @@
+/* ==========================================================================
+   JOBRADAR — MASTER CAREER PROFILE REDESIGN STYLES
+   Design System: Forest Ink (#173D35) | Warm Sand (#F3EFE5) | Muted Copper (#B47A49)
+   Inspiration: Linear, Vercel, Stripe SaaS
+   ========================================================================== */
+
+.profile-page-wrap {
+  width: 100%;
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 24px 32px 64px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  box-sizing: border-box;
+}
+
+@media (max-width: 768px) {
+  .profile-page-wrap {
+    padding: 16px 16px 48px 16px;
+    gap: 16px;
+  }
+}
+
+/* ==========================================================================
+   1. 2-COLUMN LAYOUT (Left Nav Panel + Right Form Surface)
+   ========================================================================== */
+.profile-content-layout {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  gap: 24px;
+  align-items: flex-start;
+}
+
+@media (max-width: 900px) {
+  .profile-content-layout {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+}
+
+/* Left Navigation Sidebar Panel */
+.profile-side-nav {
+  position: sticky;
+  top: 84px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+}
+
+@media (max-width: 900px) {
+  .profile-side-nav {
+    position: static;
+    flex-direction: row;
+    overflow-x: auto;
+    scrollbar-width: none;
+    border-radius: 10px;
+  }
+  .profile-side-nav::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+.profile-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.profile-nav-item:hover {
+  background: var(--bg-card-subtle);
+  color: var(--text-primary);
+}
+
+.profile-nav-item.is-active {
+  background: var(--primary, #173D35);
+  color: #FFFFFF;
+}
+
+[data-theme="dark"] .profile-nav-item.is-active {
+  background: var(--primary, #529E88);
+  color: #0C1E1A;
+}
+
+/* Right Form Surface */
+.profile-form-surface {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.profile-section-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  padding: 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.profile-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.profile-card-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Form Grid */
+.profile-form-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+@media (max-width: 640px) {
+  .profile-form-grid-2 {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+}
+
+.profile-field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.profile-field-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.profile-field-input {
+  height: 38px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-card-subtle);
+  color: var(--text-primary);
+  font-size: 13px;
+  outline: none;
+  transition: all 0.15s ease;
+  box-sizing: border-box;
+}
+
+.profile-field-input:focus {
+  border-color: var(--primary);
+  background: var(--bg-card);
+  box-shadow: 0 0 0 2px var(--primary-light);
+}
+
+/* Checkbox Card for Residency & Right to Work */
+.residency-checkbox-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-card-subtle);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.residency-checkbox-card:hover {
+  border-color: var(--primary);
+}
+
+.residency-checkbox-card input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--primary, #173D35);
+  margin-top: 2px;
+  cursor: pointer;
+}
+
+.residency-text-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.residency-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.residency-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* Skills Chips */
+.profile-skills-cluster {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.profile-skill-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 9999px;
+  background: var(--bg-card-subtle);
+  border: 1px solid var(--border-color);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.profile-skill-remove-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+}
+
+.profile-skill-remove-btn:hover {
+  color: var(--danger);
+}
+
+.profile-add-skill-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+/* Experience & Project Cards */
+.experience-entry-box {
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 16px;
+  background: var(--bg-card-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  position: relative;
+}
+
+.experience-entry-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.experience-entry-role {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.experience-entry-company {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--primary);
+}
+
+.experience-entry-duration {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.experience-bullets-list {
+  padding-left: 18px;
+  margin: 4px 0 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+}
+
+/* Resume Preview Modal */
+.resume-preview-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(12, 30, 26, 0.5);
+  backdrop-filter: blur(4px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.resume-preview-sheet {
+  background: var(--bg-card);
+  border-radius: 14px;
+  width: 100%;
+  max-width: 720px;
+  max-height: 85vh;
+  overflow-y: auto;
+  padding: 24px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.2);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+

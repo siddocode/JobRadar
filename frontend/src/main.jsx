@@ -1,6 +1,11 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
+import './components/DiscoverJobsSection.css'
+import './components/CompanyDirectory.css'
+import './components/ApplicationsView.css'
+import './components/CareerProfileView.css'
+import './components/AutopilotView.css'
 import App from './App.jsx'
 import { AuthProvider } from './context/AuthContext'
 import { LocationProvider } from './context/LocationContext'
@@ -32,7 +37,7 @@ if (API_BASE) {
           const proxiedUrl = `${API_BASE}${parsed.pathname}${parsed.search}`;
           return originalFetch.call(this, new Request(proxiedUrl, input), init);
         }
-      } catch (_) {}
+      } catch {}
     }
     return originalFetch.call(this, input, init);
   };

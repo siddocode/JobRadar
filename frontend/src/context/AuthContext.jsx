@@ -17,7 +17,7 @@ function setAuthCookie(token, days = 7) {
   document.cookie = `${AUTH_COOKIE_NAME}=${encodeURIComponent(token)}; expires=${expires}; path=/; SameSite=Lax${secure}`;
   try {
     localStorage.setItem(AUTH_COOKIE_NAME, token);
-  } catch (_) {}
+  } catch {}
 }
 
 function removeAuthCookie() {
@@ -25,7 +25,7 @@ function removeAuthCookie() {
   document.cookie = `${AUTH_COOKIE_NAME}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; SameSite=Lax`;
   try {
     localStorage.removeItem(AUTH_COOKIE_NAME);
-  } catch (_) {}
+  } catch {}
 }
 
 export function AuthProvider({ children }) {
@@ -38,7 +38,7 @@ export function AuthProvider({ children }) {
     try {
       const stored = localStorage.getItem(AUTH_COOKIE_NAME);
       if (stored) return stored;
-    } catch (_) {}
+    } catch {}
     return null;
   });
 
@@ -89,7 +89,7 @@ export function AuthProvider({ children }) {
         localStorage.setItem('jobradar_candidate_profile', JSON.stringify(parsed));
       }
       return parsed;
-    } catch (_) {
+    } catch {
       return null;
     }
   });
@@ -102,7 +102,7 @@ export function AuthProvider({ children }) {
       } else {
         localStorage.removeItem('jobradar_candidate_profile');
       }
-    } catch (_) {}
+    } catch {}
 
     const currentToken = token || getAuthCookie();
     if (currentToken && newProfile) {
@@ -126,7 +126,7 @@ export function AuthProvider({ children }) {
     setCandidateProfile(null);
     try {
       localStorage.removeItem('jobradar_candidate_profile');
-    } catch (_) {}
+    } catch {}
   }, []);
 
   // Fetch current user if token exists on load
@@ -134,7 +134,7 @@ export function AuthProvider({ children }) {
     if (!authToken) {
       setUser(null);
       setCandidateProfile(null);
-      try { localStorage.removeItem('jobradar_candidate_profile'); } catch (_) {}
+      try { localStorage.removeItem('jobradar_candidate_profile'); } catch {}
       setLoading(false);
       return;
     }
@@ -153,12 +153,12 @@ export function AuthProvider({ children }) {
             setCandidateProfile(data.user.candidateProfile);
             try {
               localStorage.setItem('jobradar_candidate_profile', JSON.stringify(data.user.candidateProfile));
-            } catch (_) {}
+            } catch {}
           } else {
             setCandidateProfile(null);
             try {
               localStorage.removeItem('jobradar_candidate_profile');
-            } catch (_) {}
+            } catch {}
           }
         } else {
           // Token invalid
@@ -166,7 +166,7 @@ export function AuthProvider({ children }) {
           try {
             localStorage.removeItem(AUTH_COOKIE_NAME);
             localStorage.removeItem('jobradar_candidate_profile');
-          } catch (_) {}
+          } catch {}
           setToken(null);
           setUser(null);
           setCandidateProfile(null);
@@ -176,7 +176,7 @@ export function AuthProvider({ children }) {
         try {
           localStorage.removeItem(AUTH_COOKIE_NAME);
           localStorage.removeItem('jobradar_candidate_profile');
-        } catch (_) {}
+        } catch {}
         setToken(null);
         setUser(null);
         setCandidateProfile(null);
@@ -187,7 +187,7 @@ export function AuthProvider({ children }) {
       try {
         localStorage.removeItem(AUTH_COOKIE_NAME);
         localStorage.removeItem('jobradar_candidate_profile');
-      } catch (_) {}
+      } catch {}
       setToken(null);
       setUser(null);
       setCandidateProfile(null);
@@ -204,7 +204,7 @@ export function AuthProvider({ children }) {
       setCandidateProfile(null);
       try {
         localStorage.removeItem('jobradar_candidate_profile');
-      } catch (_) {}
+      } catch {}
       setLoading(false);
     }
   }, [token, loadCurrentUser]);
@@ -259,11 +259,11 @@ export function AuthProvider({ children }) {
 
     // Store in cookie and clean up legacy localStorage
     setAuthCookie(data.token);
-    try { localStorage.removeItem(AUTH_COOKIE_NAME); } catch (_) {}
+    try { localStorage.removeItem(AUTH_COOKIE_NAME); } catch {}
     setToken(data.token);
     setUser(data.user);
     setCandidateProfile(null);
-    try { localStorage.removeItem('jobradar_candidate_profile'); } catch (_) {}
+    try { localStorage.removeItem('jobradar_candidate_profile'); } catch {}
     closeAuthModal();
     return data;
   };
@@ -283,19 +283,19 @@ export function AuthProvider({ children }) {
 
     // Store in cookie and clean up legacy localStorage
     setAuthCookie(data.token);
-    try { localStorage.removeItem(AUTH_COOKIE_NAME); } catch (_) {}
+    try { localStorage.removeItem(AUTH_COOKIE_NAME); } catch {}
     setToken(data.token);
     setUser(data.user);
     if (data.user?.candidateProfile) {
       setCandidateProfile(data.user.candidateProfile);
       try {
         localStorage.setItem('jobradar_candidate_profile', JSON.stringify(data.user.candidateProfile));
-      } catch (_) {}
+      } catch {}
     } else {
       setCandidateProfile(null);
       try {
         localStorage.removeItem('jobradar_candidate_profile');
-      } catch (_) {}
+      } catch {}
     }
     closeAuthModal();
     return data;
@@ -316,19 +316,19 @@ export function AuthProvider({ children }) {
 
     // Store in cookie and clean up legacy localStorage
     setAuthCookie(data.token);
-    try { localStorage.removeItem(AUTH_COOKIE_NAME); } catch (_) {}
+    try { localStorage.removeItem(AUTH_COOKIE_NAME); } catch {}
     setToken(data.token);
     setUser(data.user);
     if (data.user?.candidateProfile) {
       setCandidateProfile(data.user.candidateProfile);
       try {
         localStorage.setItem('jobradar_candidate_profile', JSON.stringify(data.user.candidateProfile));
-      } catch (_) {}
+      } catch {}
     } else {
       setCandidateProfile(null);
       try {
         localStorage.removeItem('jobradar_candidate_profile');
-      } catch (_) {}
+      } catch {}
     }
     closeAuthModal();
     return data;
@@ -340,13 +340,13 @@ export function AuthProvider({ children }) {
     try {
       localStorage.removeItem(AUTH_COOKIE_NAME);
       localStorage.removeItem('jobradar_candidate_profile');
-    } catch (_) {}
+    } catch {}
     setToken(null);
     setUser(null);
     setCandidateProfile(null);
     try {
       await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
-    } catch (_) {}
+    } catch {}
   };
 
   // Authenticated fetch wrapper

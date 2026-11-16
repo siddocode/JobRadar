@@ -1,0 +1,474 @@
+/* ==========================================================================
+   JOBRADAR — APPLICATIONS LIFECYCLE REDESIGN STYLES
+   Design System: Forest Ink (#173D35) | Warm Sand (#F3EFE5) | Muted Copper (#B47A49)
+   Inspiration: Linear, Vercel, Stripe SaaS
+   ========================================================================== */
+
+.apps-page {
+  width: 100%;
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 24px 32px 64px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  box-sizing: border-box;
+}
+
+@media (max-width: 768px) {
+  .apps-page {
+    padding: 16px 16px 48px 16px;
+    gap: 16px;
+  }
+}
+
+/* ==========================================================================
+   1. STAGE FILTER PILLS STRIP
+   ========================================================================== */
+.apps-stage-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scrollbar-width: none;
+}
+
+.apps-stage-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.apps-stage-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 9999px;
+  font-size: 13px;
+  font-weight: 600;
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.apps-stage-pill:hover {
+  background: var(--bg-card-subtle);
+  color: var(--text-primary);
+  border-color: var(--text-muted);
+}
+
+.apps-stage-pill.is-active {
+  background: var(--primary, #173D35);
+  color: #FFFFFF;
+  border-color: var(--primary, #173D35);
+  box-shadow: 0 2px 8px rgba(23, 61, 53, 0.18);
+}
+
+[data-theme="dark"] .apps-stage-pill.is-active {
+  background: var(--primary, #529E88);
+  color: #0C1E1A;
+  border-color: var(--primary, #529E88);
+}
+
+.apps-stage-count {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 9999px;
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.apps-stage-pill.is-active .apps-stage-count {
+  background: rgba(255, 255, 255, 0.22);
+  color: inherit;
+}
+
+/* ==========================================================================
+   2. SEARCH & CONTROLS TOOLBAR
+   ========================================================================== */
+.apps-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.apps-search-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 240px;
+  max-width: 480px;
+}
+
+.apps-search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.apps-search-input {
+  width: 100%;
+  height: 38px;
+  padding: 0 14px 0 36px;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-size: 13px;
+  outline: none;
+  transition: all 0.15s ease;
+  box-sizing: border-box;
+}
+
+.apps-search-input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--primary-light);
+}
+
+.apps-actions-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.apps-sort-select {
+  height: 38px;
+  padding: 0 28px 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  outline: none;
+}
+
+/* View Mode Segmented Switch */
+.apps-view-toggle {
+  display: inline-flex;
+  align-items: center;
+  background: var(--bg-card-subtle);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 2px;
+}
+
+.apps-view-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 11px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.apps-view-btn.is-active {
+  background: var(--bg-card);
+  color: var(--text-primary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+/* ==========================================================================
+   3. PIPELINE LIST VIEW & 4-STEP RECRUITMENT PROGRESS BAR
+   ========================================================================== */
+.apps-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.apps-card-row {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  padding: 16px 20px;
+  box-shadow: var(--shadow-card);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  cursor: pointer;
+}
+
+.apps-card-row:hover {
+  border-color: var(--border-focus);
+  box-shadow: var(--shadow-hover);
+  transform: translateY(-1px);
+}
+
+.apps-row-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 260px;
+  max-width: 320px;
+  flex-shrink: 0;
+}
+
+.apps-monogram {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--bg-card-subtle);
+  border: 1px solid var(--border-color);
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  letter-spacing: -0.02em;
+}
+
+.apps-title-col {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  overflow: hidden;
+}
+
+.apps-title-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.apps-company-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.apps-role-title {
+  font-size: 13px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 4-Step Recruitment Progress Bar */
+.apps-progress-track-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 480px;
+  padding: 0 16px;
+}
+
+.apps-progress-bar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.apps-progress-line-bg {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  height: 3px;
+  background: var(--border-color);
+  z-index: 1;
+}
+
+.apps-progress-line-fill {
+  position: absolute;
+  left: 12px;
+  height: 3px;
+  background: var(--success, #206E4E);
+  z-index: 2;
+  transition: width 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.apps-step-node {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.apps-step-circle {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--bg-card);
+  border: 2.5px solid var(--border-color);
+  transition: all 0.2s ease;
+}
+
+.apps-step-node.completed .apps-step-circle {
+  background: var(--success, #206E4E);
+  border-color: var(--success, #206E4E);
+}
+
+.apps-step-node.active .apps-step-circle {
+  background: #FFFFFF;
+  border-color: var(--success, #206E4E);
+  box-shadow: 0 0 0 3px rgba(32, 110, 78, 0.2);
+}
+
+.apps-step-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+.apps-step-node.completed .apps-step-label,
+.apps-step-node.active .apps-step-label {
+  color: var(--text-primary);
+}
+
+/* Actions & Stage Pill on Right */
+.apps-row-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.apps-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.apps-status-badge.applied {
+  background: rgba(180, 122, 73, 0.12);
+  color: var(--accent, #B47A49);
+  border: 1px solid var(--accent-border, #DFBF9F);
+}
+
+.apps-status-badge.reviewing,
+.apps-status-badge.assessment {
+  background: var(--warning-light);
+  color: var(--warning);
+  border: 1px solid var(--warning-border);
+}
+
+.apps-status-badge.interview {
+  background: var(--primary-light);
+  color: var(--primary);
+  border: 1px solid var(--primary-border);
+}
+
+.apps-status-badge.offer {
+  background: var(--success-light);
+  color: var(--success);
+  border: 1px solid var(--success-border);
+}
+
+.apps-status-badge.rejected {
+  background: var(--danger-light);
+  color: var(--danger);
+  border: 1px solid var(--danger-border);
+}
+
+@media (max-width: 860px) {
+  .apps-card-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 14px;
+    padding: 14px 16px;
+  }
+  .apps-row-left {
+    max-width: 100%;
+    width: 100%;
+  }
+  .apps-progress-track-wrap {
+    width: 100%;
+    max-width: 100%;
+    padding: 0;
+  }
+  .apps-row-right {
+    width: 100%;
+    justify-content: space-between;
+  }
+}
+
+/* ==========================================================================
+   4. KANBAN BOARD VIEW
+   ========================================================================== */
+.apps-kanban-board {
+  display: flex;
+  gap: 16px;
+  overflow-x: auto;
+  padding-bottom: 16px;
+  align-items: flex-start;
+}
+
+.apps-kanban-col {
+  min-width: 270px;
+  max-width: 300px;
+  background: var(--bg-card-subtle);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.apps-kanban-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.apps-kanban-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.apps-kanban-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.apps-kanban-card:hover {
+  border-color: var(--primary);
+  transform: translateY(-1px);
+}
+

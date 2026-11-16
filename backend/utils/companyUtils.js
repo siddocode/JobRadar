@@ -279,6 +279,26 @@ function detectLocalityFromCoords(lat, lng, citySlug = '') {
   if (lat == null || lng == null) return null;
   const slug = (citySlug || '').toLowerCase().trim();
 
+  if (slug === 'kolkata') {
+    if (lat >= 22.565 && lat <= 22.585 && lng >= 88.420 && lng <= 88.445) return 'Salt Lake Sector V';
+    if (lat >= 22.575 && lat <= 22.600 && lng >= 88.455 && lng <= 88.485) return 'New Town Action Area II';
+    if (lat >= 22.550 && lat <= 22.575 && lng >= 88.345 && lng <= 88.385) return 'Central Kolkata';
+    if (lat >= 22.400 && lat <= 22.700 && lng >= 88.250 && lng <= 88.550) return 'Kolkata IT Corridor';
+    return null;
+  }
+
+  if (slug === 'bengaluru' || slug === 'bangalore') {
+    if (lat >= 12.830 && lat <= 12.870 && lng >= 77.650 && lng <= 77.690) return 'Electronic City';
+    if (lat >= 12.960 && lat <= 13.000 && lng >= 77.720 && lng <= 77.765) return 'Whitefield / ITPL';
+    if (lat >= 12.915 && lat <= 12.950 && lng >= 77.670 && lng <= 77.710) return 'Outer Ring Road (Bellandur)';
+    if (lat >= 12.920 && lat <= 12.945 && lng >= 77.610 && lng <= 77.645) return 'Koramangala';
+    if (lat >= 12.965 && lat <= 12.985 && lng >= 77.635 && lng <= 77.655) return 'Indiranagar / Domlur';
+    if (lat >= 12.985 && lat <= 13.005 && lng >= 77.650 && lng <= 77.675) return 'Bagmane Tech Park';
+    if (lat >= 13.040 && lat <= 13.075 && lng >= 77.605 && lng <= 77.635) return 'Manyata Tech Park (Hebbal)';
+    if (lat >= 12.750 && lat <= 13.200 && lng >= 77.400 && lng <= 77.850) return 'Bengaluru IT Zone';
+    return null;
+  }
+
   if (slug === 'gurgaon' || slug === 'gurugram') {
     if (lat >= 28.488 && lat <= 28.502 && lng >= 77.082 && lng <= 77.098) return 'DLF Cyber City / Cyber Hub';
     if (lat >= 28.485 && lat <= 28.515 && lng >= 77.065 && lng <= 77.085) return 'Udyog Vihar';
@@ -290,18 +310,8 @@ function detectLocalityFromCoords(lat, lng, citySlug = '') {
     if (lat >= 28.395 && lat <= 28.418 && lng >= 76.990 && lng <= 77.015) return 'DLF Corporate Greens (Sector 74A)';
     if (lat >= 28.450 && lat <= 28.472 && lng >= 77.055 && lng <= 77.072) return 'South City 1 (Sector 30)';
     if (lat >= 28.410 && lat <= 28.435 && lng >= 77.090 && lng <= 77.115) return 'Golf Course Ext. Road (Sector 58-65)';
-    return 'Gurugram Tech Corridor';
-  }
-
-  if (slug === 'bengaluru' || slug === 'bangalore') {
-    if (lat >= 12.830 && lat <= 12.870 && lng >= 77.650 && lng <= 77.690) return 'Electronic City';
-    if (lat >= 12.960 && lat <= 13.000 && lng >= 77.720 && lng <= 77.765) return 'Whitefield / ITPL';
-    if (lat >= 12.915 && lat <= 12.950 && lng >= 77.670 && lng <= 77.710) return 'Outer Ring Road (Bellandur)';
-    if (lat >= 12.920 && lat <= 12.945 && lng >= 77.610 && lng <= 77.645) return 'Koramangala';
-    if (lat >= 12.965 && lat <= 12.985 && lng >= 77.635 && lng <= 77.655) return 'Indiranagar / Domlur';
-    if (lat >= 12.985 && lat <= 13.005 && lng >= 77.650 && lng <= 77.675) return 'Bagmane Tech Park';
-    if (lat >= 13.040 && lat <= 13.075 && lng >= 77.605 && lng <= 77.635) return 'Manyata Tech Park (Hebbal)';
-    return 'Bengaluru IT Zone';
+    if (lat >= 28.350 && lat <= 28.550 && lng >= 76.900 && lng <= 77.150) return 'Gurugram Tech Corridor';
+    return null;
   }
 
   if (slug === 'noida') {
@@ -309,7 +319,8 @@ function detectLocalityFromCoords(lat, lng, citySlug = '') {
     if (lat >= 28.495 && lat <= 28.530 && lng >= 77.360 && lng <= 77.395) return 'Sector 132-135 (Expressway)';
     if (lat >= 28.535 && lat <= 28.560 && lng >= 77.335 && lng <= 77.360) return 'Sector 126-127 (HCL Corridor)';
     if (lat >= 28.575 && lat <= 28.605 && lng >= 77.300 && lng <= 77.330) return 'Sector 2-5 Tech Zone';
-    return 'Noida Tech Corridor';
+    if (lat >= 28.450 && lat <= 28.650 && lng >= 77.250 && lng <= 77.450) return 'Noida Tech Corridor';
+    return null;
   }
 
   if (slug === 'hyderabad') {
@@ -317,7 +328,8 @@ function detectLocalityFromCoords(lat, lng, citySlug = '') {
     if (lat >= 17.410 && lat <= 17.450 && lng >= 78.330 && lng <= 78.360) return 'Financial District / Gachibowli';
     if (lat >= 17.425 && lat <= 17.442 && lng >= 78.375 && lng <= 78.388) return 'Knowledge City / Raidurg';
     if (lat >= 17.450 && lat <= 17.470 && lng >= 78.350 && lng <= 78.375) return 'Kondapur';
-    return 'Cyberabad IT Corridor';
+    if (lat >= 17.200 && lat <= 17.600 && lng >= 78.200 && lng <= 78.600) return 'Cyberabad IT Corridor';
+    return null;
   }
 
   if (slug === 'pune') {
@@ -325,13 +337,8 @@ function detectLocalityFromCoords(lat, lng, citySlug = '') {
     if (lat >= 18.540 && lat <= 18.565 && lng >= 73.940 && lng <= 73.970) return 'Kharadi / EON Free Zone';
     if (lat >= 18.505 && lat <= 18.530 && lng >= 73.920 && lng <= 73.945) return 'Magarpatta Cybercity';
     if (lat >= 18.550 && lat <= 18.580 && lng >= 73.775 && lng <= 73.810) return 'Baner / Balewadi High Street';
-    return 'Pune IT Corridor';
-  }
-
-  if (slug === 'kolkata') {
-    if (lat >= 22.565 && lat <= 22.585 && lng >= 88.420 && lng <= 88.445) return 'Salt Lake Sector V';
-    if (lat >= 22.575 && lat <= 22.600 && lng >= 88.455 && lng <= 88.485) return 'New Town Action Area II';
-    return 'Kolkata IT Corridor';
+    if (lat >= 18.400 && lat <= 18.700 && lng >= 73.650 && lng <= 74.050) return 'Pune IT Corridor';
+    return null;
   }
 
   if (slug === 'mumbai') {
@@ -339,14 +346,16 @@ function detectLocalityFromCoords(lat, lng, citySlug = '') {
     if (lat >= 19.055 && lat <= 19.075 && lng >= 72.855 && lng <= 72.880) return 'Bandra Kurla Complex (BKC)';
     if (lat >= 19.105 && lat <= 19.135 && lng >= 72.850 && lng <= 72.880) return 'Andheri East / MIDC';
     if (lat >= 19.110 && lat <= 19.140 && lng >= 73.000 && lng <= 73.030) return 'Navi Mumbai / Ghansoli';
-    return 'Mumbai Business District';
+    if (lat >= 18.850 && lat <= 19.350 && lng >= 72.750 && lng <= 73.150) return 'Mumbai Business District';
+    return null;
   }
 
   if (slug === 'chennai') {
     if (lat >= 12.950 && lat <= 12.980 && lng >= 80.235 && lng <= 80.260) return 'OMR / Perungudi';
     if (lat >= 12.920 && lat <= 12.950 && lng >= 80.220 && lng <= 80.245) return 'OMR / Thoraipakkam';
     if (lat >= 12.815 && lat <= 12.840 && lng >= 80.025 && lng <= 80.050) return 'GST Road / Estancia IT Park';
-    return 'Chennai IT Corridor';
+    if (lat >= 12.800 && lat <= 13.250 && lng >= 80.100 && lng <= 80.350) return 'Chennai IT Corridor';
+    return null;
   }
 
   return null;

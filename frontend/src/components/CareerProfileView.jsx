@@ -1,29 +1,35 @@
 import React, { useState, useEffect } from 'react';
 import {
   User,
-  FileText,
-  Mail,
-  Phone,
-  Globe,
-  MapPin,
   Briefcase,
   GraduationCap,
   Plus,
   Trash2,
-  Check,
   Save,
   Upload,
   RefreshCw,
   Sparkles,
-  ShieldCheck,
-  FolderGit2,
-  ExternalLink,
-  Code2
+  Download,
+  Eye,
+  Sliders,
+  CheckCircle2,
+  X
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { downloadResumePdf, downloadLatexFile } from '../utils/pdfGenerator';
+import './CareerProfileView.css';
+
+const NAV_SECTIONS = [
+  { id: 'basic', label: 'Basic Information', icon: User },
+  { id: 'experience', label: 'Work & Experience', icon: Briefcase },
+  { id: 'skills', label: 'Skills & Tech Stack', icon: Sparkles },
+  { id: 'education', label: 'Education', icon: GraduationCap },
+  { id: 'preferences', label: 'Preferences', icon: Sliders }
+];
 
 export default function CareerProfileView({ onOpenUploadModal }) {
   const { user, candidateProfile, updateCandidateProfile, isAuthenticated, openAuthModal } = useAuth();
+  const [activeSection, setActiveSection] = useState('basic');
 
   const [formData, setFormData] = useState({
     name: '',
@@ -38,24 +44,25 @@ export default function CareerProfileView({ onOpenUploadModal }) {
     isIndiaResident: true,
     hasUSWorkAuth: false,
     totalYearsExperience: 0,
-    seniorityLevel: 'Junior',
+    seniorityLevel: 'Mid-Level',
     education: '',
     skills: [],
     experience: [],
     projects: [],
-    educationEntries: []
+    educationEntries: [],
+    targetRoles: ['Backend Engineer', 'Full-Stack Engineer'],
+    preferredLocations: ['Bengaluru', 'Remote', 'Hyderabad'],
+    minLpa: 15
   });
 
   const [newSkill, setNewSkill] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
 
-  // Quick-add states for Experience & Projects
+  // Quick-add states for Experience & Education
   const [showAddExp, setShowAddExp] = useState(false);
   const [newExp, setNewExp] = useState({ role: '', company: '', location: '', duration: '', bulletsText: '' });
-
-  const [showAddProj, setShowAddProj] = useState(false);
-  const [newProj, setNewProj] = useState({ name: '', tagline: '', techStack: '', bulletsText: '' });
 
   const [showAddEdu, setShowAddEdu] = useState(false);
   const [newEdu, setNewEdu] = useState({ institution: '', degree: '', year: '', details: '' });
@@ -71,16 +78,23 @@ export default function CareerProfileView({ onOpenUploadModal }) {
         github: candidateProfile.github || '',
         linkedin: candidateProfile.linkedin || '',
         country: candidateProfile.country || 'India',
-        city: candidateProfile.city || '',
+        city: candidateProfile.city || 'Bengaluru',
         isIndiaResident: candidateProfile.isIndiaResident !== undefined ? candidateProfile.isIndiaResident : true,
         hasUSWorkAuth: Boolean(candidateProfile.hasUSWorkAuth),
         totalYearsExperience: candidateProfile.totalYearsExperience || 0,
-        seniorityLevel: candidateProfile.seniorityLevel || 'Early Career',
+        seniorityLevel: candidateProfile.seniorityLevel || 'Mid-Level',
         education: candidateProfile.education || '',
         skills: Array.isArray(candidateProfile.skills) ? [...candidateProfile.skills] : [],
         experience: Array.isArray(candidateProfile.experience) ? [...candidateProfile.experience] : [],
         projects: Array.isArray(candidateProfile.projects) ? [...candidateProfile.projects] : [],
-        educationEntries: Array.isArray(candidateProfile.educationEntries) ? [...candidateProfile.educationEntries] : []
+        educationEntries: Array.isArray(candidateProfile.educationEntries) ? [...candidateProfile.educationEntries] : [],
+        targetRoles: Array.isArray(candidateProfile.targetRoles) && candidateProfile.targetRoles.length > 0
+          ? candidateProfile.targetRoles
+          : ['Backend Engineer', 'Full-Stack Engineer'],
+        preferredLocations: Array.isArray(candidateProfile.preferredLocations) && candidateProfile.preferredLocations.length > 0
+          ? candidateProfile.preferredLocations
+          : ['Bengaluru', 'Remote', 'Hyderabad'],
+        minLpa: candidateProfile.minLpa || 15
       });
     } else if (user) {
       setFormData(prev => ({
@@ -136,36 +150,6 @@ export default function CareerProfileView({ onOpenUploadModal }) {
     setFormData(prev => ({
       ...prev,
       experience: prev.experience.filter((_, idx) => idx !== index)
-    }));
-  };
-
-  const handleAddProject = (e) => {
-    e.preventDefault();
-    if (!newProj.name.trim()) return;
-    const bullets = newProj.bulletsText
-      .split(/\r?\n/)
-      .map(b => b.replace(/^[•\-\*]\s*/, '').trim())
-      .filter(Boolean);
-
-    const project = {
-      name: newProj.name.trim(),
-      tagline: newProj.tagline.trim(),
-      techStack: newProj.techStack.trim(),
-      bullets
-    };
-
-    setFormData(prev => ({
-      ...prev,
-      projects: [project, ...prev.projects]
-    }));
-    setNewProj({ name: '', tagline: '', techStack: '', bulletsText: '' });
-    setShowAddProj(false);
-  };
-
-  const handleRemoveProject = (index) => {
-    setFormData(prev => ({
-      ...prev,
-      projects: prev.projects.filter((_, idx) => idx !== index)
     }));
   };
 
@@ -235,14 +219,29 @@ export default function CareerProfileView({ onOpenUploadModal }) {
     );
   }
 
+  // Generate resume object for PDF export / LaTeX download
+  const resumeObject = {
+    name: formData.name || 'Candidate',
+    email: formData.email,
+    phone: formData.phone,
+    headline: formData.headline,
+    linkedin: formData.linkedin,
+    github: formData.github,
+    portfolio: formData.portfolio,
+    skills: formData.skills,
+    experience: formData.experience,
+    educationEntries: formData.educationEntries,
+    projects: formData.projects
+  };
+
   return (
-    <div className="profile-container">
-      {/* View Header */}
+    <div className="profile-page-wrap">
+      {/* Top Header matching reference: "Master Career Profile" */}
       <div className="view-header">
         <div>
           <h1 className="view-title">Master Career Profile</h1>
           <p className="view-subtitle">
-            Your single source of truth for technical competencies, residency, and job eligibility criteria.
+            Maintain your career credentials and preferences for smart matching.
           </p>
         </div>
         <div className="view-header-actions">
@@ -251,7 +250,14 @@ export default function CareerProfileView({ onOpenUploadModal }) {
             className="btn btn-secondary btn-sm"
             onClick={onOpenUploadModal}
           >
-            <Upload size={14} /> Re-Upload CV / Resync URL
+            <Upload size={14} /> Re-upload CV
+          </button>
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={() => setShowPreviewModal(true)}
+          >
+            <Eye size={14} /> Preview Resume
           </button>
           <button
             type="button"
@@ -260,579 +266,522 @@ export default function CareerProfileView({ onOpenUploadModal }) {
             disabled={isSaving}
           >
             {isSaving ? <RefreshCw size={14} className="spin" /> : <Save size={14} />}
-            {saveSuccess ? 'Saved!' : 'Save Master Profile'}
+            {saveSuccess ? 'Saved!' : 'Save Profile'}
           </button>
         </div>
       </div>
 
-      {/* Profile Form Card */}
-      <div className="profile-card">
-        {/* Section 1: Core Identity & Links */}
-        <div className="profile-section">
-          <h2 className="profile-section-title">
-            <User size={18} className="text-forest" /> Personal Details & Links
-          </h2>
-          <div className="form-grid-2">
-            <div className="form-group">
-              <label className="form-label">Full Name</label>
-              <input
-                type="text"
-                className="form-input"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="e.g. Siddharth Sharma"
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label">Email Address</label>
-              <input
-                type="email"
-                className="form-input"
-                value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                placeholder="name@domain.com"
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label">Phone Number</label>
-              <input
-                type="text"
-                className="form-input"
-                value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                placeholder="+91 98765 43210"
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label">Professional Headline</label>
-              <input
-                type="text"
-                className="form-input"
-                value={formData.headline}
-                onChange={(e) => setFormData({ ...formData, headline: e.target.value })}
-                placeholder="Senior Backend Engineer | Distributed Systems & Node.js"
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label">Portfolio / Personal Website</label>
-              <input
-                type="text"
-                className="form-input"
-                value={formData.portfolio}
-                onChange={(e) => setFormData({ ...formData, portfolio: e.target.value })}
-                placeholder="https://myportfolio.dev"
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label">GitHub Profile URL</label>
-              <input
-                type="text"
-                className="form-input"
-                value={formData.github}
-                onChange={(e) => setFormData({ ...formData, github: e.target.value })}
-                placeholder="https://github.com/username"
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label">LinkedIn Profile URL</label>
-              <input
-                type="text"
-                className="form-input"
-                value={formData.linkedin}
-                onChange={(e) => setFormData({ ...formData, linkedin: e.target.value })}
-                placeholder="https://linkedin.com/in/username"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Section 2: Residency & Work Authorization */}
-        <div className="profile-section">
-          <h2 className="profile-section-title">
-            <ShieldCheck size={18} className="text-copper" /> Residency & Work Authorization
-          </h2>
-          <div className="form-grid-2">
-            <div className="form-group">
-              <label className="form-label">Country of Residence</label>
-              <input
-                type="text"
-                className="form-input"
-                value={formData.country}
-                onChange={(e) => setFormData({ ...formData, country: e.target.value })}
-                placeholder="India"
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label">Current City</label>
-              <input
-                type="text"
-                className="form-input"
-                value={formData.city}
-                onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                placeholder="Bengaluru, Karnataka"
-              />
-            </div>
-          </div>
-
-          <div className="checkbox-options-grid mt-4">
-            <label className="checkbox-card">
-              <input
-                type="checkbox"
-                checked={formData.isIndiaResident}
-                onChange={(e) => setFormData({ ...formData, isIndiaResident: e.target.checked })}
-              />
-              <div>
-                <span className="font-semibold block text-forest">Indian Resident & Right to Work</span>
-                <span className="text-muted text-xs">Eligible for Indian payroll, EPF, and statutory benefits without visa requirements.</span>
-              </div>
-            </label>
-
-            <label className="checkbox-card">
-              <input
-                type="checkbox"
-                checked={formData.hasUSWorkAuth}
-                onChange={(e) => setFormData({ ...formData, hasUSWorkAuth: e.target.checked })}
-              />
-              <div>
-                <span className="font-semibold block text-forest">US Work Authorization (Citizen, Green Card, or EAD)</span>
-                <span className="text-muted text-xs">Enables matching for US-only domestic positions.</span>
-              </div>
-            </label>
-          </div>
-        </div>
-
-        {/* Section 3: Experience & Seniority */}
-        <div className="profile-section">
-          <div className="flex-between mb-3">
-            <h2 className="profile-section-title" style={{ margin: 0 }}>
-              <Briefcase size={18} className="text-forest" /> Work Experience & Seniority
-            </h2>
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm"
-              onClick={() => setShowAddExp(!showAddExp)}
-            >
-              <Plus size={14} /> {showAddExp ? 'Cancel' : 'Add Experience Entry'}
-            </button>
-          </div>
-
-          <div className="form-grid-2 mb-4">
-            <div className="form-group">
-              <label className="form-label">Total Years of Experience</label>
-              <input
-                type="number"
-                step="0.5"
-                min="0"
-                max="30"
-                className="form-input"
-                value={formData.totalYearsExperience}
-                onChange={(e) => setFormData({ ...formData, totalYearsExperience: parseFloat(e.target.value) || 0 })}
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label">Seniority Tier</label>
-              <select
-                className="form-select"
-                value={formData.seniorityLevel}
-                onChange={(e) => setFormData({ ...formData, seniorityLevel: e.target.value })}
+      {/* 2-Column Layout */}
+      <div className="profile-content-layout">
+        {/* Left Navigation Panel matching reference */}
+        <div className="profile-side-nav">
+          {NAV_SECTIONS.map(sec => {
+            const Icon = sec.icon;
+            const isActive = activeSection === sec.id;
+            return (
+              <button
+                key={sec.id}
+                type="button"
+                className={`profile-nav-item ${isActive ? 'is-active' : ''}`}
+                onClick={() => {
+                  setActiveSection(sec.id);
+                  const el = document.getElementById(`profile-sec-${sec.id}`);
+                  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }}
               >
-                <option value="Fresher / College Graduate">Fresher / College Graduate (0 - 1 Year)</option>
-                <option value="Junior Developer">Junior Developer (1 - 2 Years)</option>
-                <option value="Mid-Level Professional">Mid-Level Professional (2 - 5 Years)</option>
-                <option value="Senior Professional">Senior Professional (5 - 8 Years)</option>
-                <option value="Lead / Principal Engineer">Lead / Principal Engineer (8+ Years)</option>
-              </select>
-            </div>
-          </div>
-
-          {/* New Experience Entry Form */}
-          {showAddExp && (
-            <div className="p-3 mb-4 rounded border bg-surface" style={{ borderColor: 'var(--border-subtle, #e2e8f0)' }}>
-              <h3 className="text-sm font-semibold mb-2">New Experience Entry</h3>
-              <div className="form-grid-2">
-                <div className="form-group">
-                  <label className="form-label">Job Title / Role</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    value={newExp.role}
-                    onChange={(e) => setNewExp({ ...newExp, role: e.target.value })}
-                    placeholder="Senior Software Engineer"
-                  />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Company Name</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    value={newExp.company}
-                    onChange={(e) => setNewExp({ ...newExp, company: e.target.value })}
-                    placeholder="Acme Technologies"
-                  />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Duration</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    value={newExp.duration}
-                    onChange={(e) => setNewExp({ ...newExp, duration: e.target.value })}
-                    placeholder="Jan 2023 – Present"
-                  />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Location</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    value={newExp.location}
-                    onChange={(e) => setNewExp({ ...newExp, location: e.target.value })}
-                    placeholder="Bengaluru, India"
-                  />
-                </div>
-              </div>
-              <div className="form-group mt-2">
-                <label className="form-label">Key Highlights / Bullets (One per line)</label>
-                <textarea
-                  className="form-input"
-                  rows={3}
-                  value={newExp.bulletsText}
-                  onChange={(e) => setNewExp({ ...newExp, bulletsText: e.target.value })}
-                  placeholder="• Architected microservices with Node.js and Redis&#10;• Reduced p95 latency by 35%"
-                />
-              </div>
-              <div className="flex-inline-gap mt-2">
-                <button type="button" className="btn btn-primary btn-sm" onClick={handleAddExperience}>
-                  <Check size={14} /> Add to Profile
-                </button>
-                <button type="button" className="btn btn-secondary btn-sm" onClick={() => setShowAddExp(false)}>
-                  Cancel
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Existing Experience Entries */}
-          <div className="experience-list-container">
-            {formData.experience.map((exp, idx) => (
-              <div key={idx} className="p-3 mb-2 rounded border" style={{ borderColor: 'var(--border-subtle, #e2e8f0)', background: 'var(--bg-surface-elevated, #fafafa)' }}>
-                <div className="flex-between">
-                  <div>
-                    <strong className="text-forest text-sm">{exp.role || 'Role'}</strong>
-                    {exp.company && <span className="text-muted text-sm"> at {exp.company}</span>}
-                    {exp.location && <span className="text-muted text-xs"> — {exp.location}</span>}
-                  </div>
-                  <div className="flex-inline-gap">
-                    {exp.duration && <span className="text-xs text-muted font-mono">{exp.duration}</span>}
-                    <button
-                      type="button"
-                      className="btn-icon text-danger"
-                      onClick={() => handleRemoveExperience(idx)}
-                      title="Remove experience entry"
-                      style={{ padding: '2px 6px', background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626' }}
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                </div>
-                {exp.bullets && exp.bullets.length > 0 && (
-                  <ul className="text-xs text-muted mt-2 pl-4" style={{ listStyleType: 'disc', paddingLeft: '1.25rem' }}>
-                    {exp.bullets.map((b, bIdx) => (
-                      <li key={bIdx} className="mb-1">{b}</li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            ))}
-            {formData.experience.length === 0 && (
-              <p className="text-muted text-xs italic">
-                No work history entries detected yet. Upload your CV or click "Add Experience Entry" above.
-              </p>
-            )}
-          </div>
+                <Icon size={15} />
+                <span>{sec.label}</span>
+              </button>
+            );
+          })}
         </div>
 
-        {/* Section 4: Projects & Portfolio Work */}
-        <div className="profile-section">
-          <div className="flex-between mb-3">
-            <h2 className="profile-section-title" style={{ margin: 0 }}>
-              <FolderGit2 size={18} className="text-forest" /> Featured Projects & Works
-            </h2>
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm"
-              onClick={() => setShowAddProj(!showAddProj)}
-            >
-              <Plus size={14} /> {showAddProj ? 'Cancel' : 'Add Project'}
-            </button>
-          </div>
+        {/* Right Form Surface */}
+        <div className="profile-form-surface">
+          {/* Section 1: Personal Details & Links */}
+          <div className="profile-section-card" id="profile-sec-basic">
+            <div className="profile-card-header">
+              <span className="profile-card-title">
+                <User size={16} className="text-forest" /> Personal Details & Links
+              </span>
+            </div>
 
-          {showAddProj && (
-            <div className="p-3 mb-4 rounded border bg-surface" style={{ borderColor: 'var(--border-subtle, #e2e8f0)' }}>
-              <h3 className="text-sm font-semibold mb-2">New Project</h3>
-              <div className="form-grid-2">
-                <div className="form-group">
-                  <label className="form-label">Project Name</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    value={newProj.name}
-                    onChange={(e) => setNewProj({ ...newProj, name: e.target.value })}
-                    placeholder="TaskFlow"
-                  />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Tagline / Short Description</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    value={newProj.tagline}
-                    onChange={(e) => setNewProj({ ...newProj, tagline: e.target.value })}
-                    placeholder="Real-time Task Manager"
-                  />
-                </div>
-              </div>
-              <div className="form-group mt-2">
-                <label className="form-label">Tech Stack (comma-separated)</label>
+            <div className="profile-form-grid-2">
+              <div className="profile-field-group">
+                <label className="profile-field-label">Full Name</label>
                 <input
                   type="text"
-                  className="form-input"
-                  value={newProj.techStack}
-                  onChange={(e) => setNewProj({ ...newProj, techStack: e.target.value })}
-                  placeholder="React, Node.js, Socket.io, AWS"
+                  className="profile-field-input"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  placeholder="e.g. Siddharth Sharma"
                 />
               </div>
-              <div className="form-group mt-2">
-                <label className="form-label">Key Highlights / Bullets (One per line)</label>
-                <textarea
-                  className="form-input"
-                  rows={2}
-                  value={newProj.bulletsText}
-                  onChange={(e) => setNewProj({ ...newProj, bulletsText: e.target.value })}
-                  placeholder="• Built collaborative task board with live updates&#10;• Containerized via Docker"
+
+              <div className="profile-field-group">
+                <label className="profile-field-label">Email Address</label>
+                <input
+                  type="email"
+                  className="profile-field-input"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  placeholder="name@domain.com"
                 />
               </div>
-              <div className="flex-inline-gap mt-2">
-                <button type="button" className="btn btn-primary btn-sm" onClick={handleAddProject}>
-                  <Check size={14} /> Add Project
-                </button>
-                <button type="button" className="btn btn-secondary btn-sm" onClick={() => setShowAddProj(false)}>
-                  Cancel
-                </button>
+
+              <div className="profile-field-group">
+                <label className="profile-field-label">Phone Number</label>
+                <input
+                  type="text"
+                  className="profile-field-input"
+                  value={formData.phone}
+                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  placeholder="+91 98765 43210"
+                />
+              </div>
+
+              <div className="profile-field-group">
+                <label className="profile-field-label">Professional Headline</label>
+                <input
+                  type="text"
+                  className="profile-field-input"
+                  value={formData.headline}
+                  onChange={(e) => setFormData({ ...formData, headline: e.target.value })}
+                  placeholder="e.g. Senior Backend Engineer | Distributed Systems"
+                />
+              </div>
+
+              <div className="profile-field-group">
+                <label className="profile-field-label">Portfolio Website</label>
+                <input
+                  type="text"
+                  className="profile-field-input"
+                  value={formData.portfolio}
+                  onChange={(e) => setFormData({ ...formData, portfolio: e.target.value })}
+                  placeholder="https://yourportfolio.dev"
+                />
+              </div>
+
+              <div className="profile-field-group">
+                <label className="profile-field-label">GitHub Profile URL</label>
+                <input
+                  type="text"
+                  className="profile-field-input"
+                  value={formData.github}
+                  onChange={(e) => setFormData({ ...formData, github: e.target.value })}
+                  placeholder="https://github.com/username"
+                />
+              </div>
+
+              <div className="profile-field-group" style={{ gridColumn: '1 / -1' }}>
+                <label className="profile-field-label">LinkedIn Profile URL</label>
+                <input
+                  type="text"
+                  className="profile-field-input"
+                  value={formData.linkedin}
+                  onChange={(e) => setFormData({ ...formData, linkedin: e.target.value })}
+                  placeholder="https://linkedin.com/in/username"
+                />
               </div>
             </div>
-          )}
 
-          <div className="projects-list-container">
-            {formData.projects.map((proj, idx) => (
-              <div key={idx} className="p-3 mb-2 rounded border" style={{ borderColor: 'var(--border-subtle, #e2e8f0)', background: 'var(--bg-surface-elevated, #fafafa)' }}>
-                <div className="flex-between">
-                  <div>
-                    <strong className="text-forest text-sm">{proj.name}</strong>
-                    {proj.tagline && <span className="text-muted text-sm"> — {proj.tagline}</span>}
-                  </div>
-                  <button
-                    type="button"
-                    className="btn-icon text-danger"
-                    onClick={() => handleRemoveProject(idx)}
-                    title="Remove project"
-                    style={{ padding: '2px 6px', background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626' }}
+            {/* Residency & Work Authorization matching reference */}
+            <div style={{ marginTop: '12px', borderTop: '1px solid var(--border-subtle)', paddingTop: '16px' }}>
+              <span className="profile-card-title" style={{ marginBottom: '14px' }}>
+                Residency & Work Authorization
+              </span>
+
+              <div className="profile-form-grid-2" style={{ marginBottom: '14px' }}>
+                <div className="profile-field-group">
+                  <label className="profile-field-label">Country of Residence</label>
+                  <select
+                    className="profile-field-input"
+                    value={formData.country}
+                    onChange={(e) => setFormData({ ...formData, country: e.target.value })}
                   >
-                    <Trash2 size={14} />
-                  </button>
+                    <option value="India">India</option>
+                    <option value="United States">United States</option>
+                    <option value="United Kingdom">United Kingdom</option>
+                    <option value="Singapore">Singapore</option>
+                    <option value="Other">Other</option>
+                  </select>
                 </div>
-                {proj.techStack && (
-                  <div className="text-xs font-mono text-muted mt-1">
-                    Tech Stack: {proj.techStack}
-                  </div>
-                )}
-                {proj.bullets && proj.bullets.length > 0 && (
-                  <ul className="text-xs text-muted mt-2 pl-4" style={{ listStyleType: 'disc', paddingLeft: '1.25rem' }}>
-                    {proj.bullets.map((b, bIdx) => (
-                      <li key={bIdx} className="mb-1">{b}</li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            ))}
-            {formData.projects.length === 0 && (
-              <p className="text-muted text-xs italic">
-                No projects added yet. Upload your CV or click "Add Project" to add your notable works.
-              </p>
-            )}
-          </div>
-        </div>
 
-        {/* Section 5: Education & Credentials */}
-        <div className="profile-section">
-          <div className="flex-between mb-3">
-            <h2 className="profile-section-title" style={{ margin: 0 }}>
-              <GraduationCap size={18} className="text-forest" /> Education & Credentials
-            </h2>
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm"
-              onClick={() => setShowAddEdu(!showAddEdu)}
-            >
-              <Plus size={14} /> {showAddEdu ? 'Cancel' : 'Add Degree'}
-            </button>
-          </div>
-
-          <div className="form-group mb-3">
-            <label className="form-label">Highest Degree / Summary</label>
-            <input
-              type="text"
-              className="form-input"
-              value={formData.education}
-              onChange={(e) => setFormData({ ...formData, education: e.target.value })}
-              placeholder="B.Tech in Computer Science and Engineering"
-            />
-          </div>
-
-          {showAddEdu && (
-            <div className="p-3 mb-4 rounded border bg-surface" style={{ borderColor: 'var(--border-subtle, #e2e8f0)' }}>
-              <h3 className="text-sm font-semibold mb-2">New Education Credential</h3>
-              <div className="form-grid-2">
-                <div className="form-group">
-                  <label className="form-label">Degree / Certificate</label>
+                <div className="profile-field-group">
+                  <label className="profile-field-label">Current City</label>
                   <input
                     type="text"
-                    className="form-input"
-                    value={newEdu.degree}
-                    onChange={(e) => setNewEdu({ ...newEdu, degree: e.target.value })}
-                    placeholder="B.Tech in Computer Science"
-                  />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Institution / College</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    value={newEdu.institution}
-                    onChange={(e) => setNewEdu({ ...newEdu, institution: e.target.value })}
-                    placeholder="National Institute of Technology"
-                  />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Year / Duration</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    value={newEdu.year}
-                    onChange={(e) => setNewEdu({ ...newEdu, year: e.target.value })}
-                    placeholder="2018 – 2022"
-                  />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Details / GPA</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    value={newEdu.details}
-                    onChange={(e) => setNewEdu({ ...newEdu, details: e.target.value })}
-                    placeholder="CGPA: 8.9/10"
+                    className="profile-field-input"
+                    value={formData.city}
+                    onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                    placeholder="e.g. Bengaluru, Kolkata, Pune"
                   />
                 </div>
               </div>
-              <div className="flex-inline-gap mt-2">
-                <button type="button" className="btn btn-primary btn-sm" onClick={handleAddEducationEntry}>
-                  <Check size={14} /> Add Degree
-                </button>
-                <button type="button" className="btn btn-secondary btn-sm" onClick={() => setShowAddEdu(false)}>
-                  Cancel
-                </button>
-              </div>
+
+              {/* Exact reference checkbox card */}
+              <label className="residency-checkbox-card">
+                <input
+                  type="checkbox"
+                  checked={formData.isIndiaResident}
+                  onChange={(e) => setFormData({ ...formData, isIndiaResident: e.target.checked })}
+                />
+                <div className="residency-text-group">
+                  <span className="residency-title">Indian Resident & Right to Work</span>
+                  <span className="residency-desc">Eligible for Indian payroll, EPF, and statutory benefits.</span>
+                </div>
+              </label>
             </div>
-          )}
+          </div>
 
-          <div className="education-list-container">
-            {formData.educationEntries.map((edu, idx) => (
-              <div key={idx} className="p-3 mb-2 rounded border" style={{ borderColor: 'var(--border-subtle, #e2e8f0)', background: 'var(--bg-surface-elevated, #fafafa)' }}>
-                <div className="flex-between">
-                  <div>
-                    <strong className="text-forest text-sm">{edu.degree || 'Degree'}</strong>
-                    {edu.institution && <span className="text-muted text-sm"> — {edu.institution}</span>}
-                  </div>
-                  <div className="flex-inline-gap">
-                    {edu.year && <span className="text-xs text-muted font-mono">{edu.year}</span>}
+          {/* Section 2: Work & Experience */}
+          <div className="profile-section-card" id="profile-sec-experience">
+            <div className="profile-card-header">
+              <span className="profile-card-title">
+                <Briefcase size={16} className="text-forest" /> Work & Experience ({formData.experience.length})
+              </span>
+              <button
+                type="button"
+                className="btn btn-secondary btn-xs"
+                onClick={() => setShowAddExp(prev => !prev)}
+              >
+                <Plus size={12} /> {showAddExp ? 'Cancel' : 'Add Experience'}
+              </button>
+            </div>
+
+            {showAddExp && (
+              <form onSubmit={handleAddExperience} style={{ display: 'flex', flexDirection: 'column', gap: '10px', background: 'var(--bg-card-subtle)', padding: '14px', borderRadius: '10px' }}>
+                <div className="profile-form-grid-2">
+                  <input
+                    type="text"
+                    className="profile-field-input"
+                    placeholder="Role Title (e.g. Senior Backend Engineer)"
+                    value={newExp.role}
+                    onChange={(e) => setNewExp({ ...newExp, role: e.target.value })}
+                    required
+                  />
+                  <input
+                    type="text"
+                    className="profile-field-input"
+                    placeholder="Company Name (e.g. Swiggy)"
+                    value={newExp.company}
+                    onChange={(e) => setNewExp({ ...newExp, company: e.target.value })}
+                    required
+                  />
+                  <input
+                    type="text"
+                    className="profile-field-input"
+                    placeholder="Location (e.g. Bengaluru / Hybrid)"
+                    value={newExp.location}
+                    onChange={(e) => setNewExp({ ...newExp, location: e.target.value })}
+                  />
+                  <input
+                    type="text"
+                    className="profile-field-input"
+                    placeholder="Duration (e.g. 2022 - Present)"
+                    value={newExp.duration}
+                    onChange={(e) => setNewExp({ ...newExp, duration: e.target.value })}
+                  />
+                </div>
+                <textarea
+                  className="notes-textarea"
+                  rows={3}
+                  placeholder="Key accomplishments or responsibilities (one per line)..."
+                  value={newExp.bulletsText}
+                  onChange={(e) => setNewExp({ ...newExp, bulletsText: e.target.value })}
+                />
+                <button type="submit" className="btn btn-primary btn-xs" style={{ alignSelf: 'flex-start' }}>
+                  Save Experience Entry
+                </button>
+              </form>
+            )}
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {formData.experience.map((exp, idx) => (
+                <div key={idx} className="experience-entry-box">
+                  <div className="experience-entry-header">
+                    <div>
+                      <div className="experience-entry-role">{exp.role}</div>
+                      <div className="experience-entry-company">{exp.company} {exp.location && `• ${exp.location}`}</div>
+                      <div className="experience-entry-duration">{exp.duration}</div>
+                    </div>
                     <button
                       type="button"
-                      className="btn-icon text-danger"
-                      onClick={() => handleRemoveEducationEntry(idx)}
-                      title="Remove education"
-                      style={{ padding: '2px 6px', background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626' }}
+                      className="icon-btn-subtle"
+                      onClick={() => handleRemoveExperience(idx)}
+                      title="Remove entry"
                     >
-                      <Trash2 size={14} />
+                      <Trash2 size={14} className="text-danger" />
+                    </button>
+                  </div>
+                  {exp.bullets && exp.bullets.length > 0 && (
+                    <ul className="experience-bullets-list">
+                      {exp.bullets.map((b, bIdx) => (
+                        <li key={bIdx}>{b}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              ))}
+              {formData.experience.length === 0 && !showAddExp && (
+                <p className="text-muted text-xs" style={{ margin: 0 }}>No work experience added yet.</p>
+              )}
+            </div>
+          </div>
+
+          {/* Section 3: Skills & Tech Stack */}
+          <div className="profile-section-card" id="profile-sec-skills">
+            <div className="profile-card-header">
+              <span className="profile-card-title">
+                <Sparkles size={16} className="text-forest" /> Skills & Tech Stack ({formData.skills.length})
+              </span>
+            </div>
+
+            <div className="profile-skills-cluster">
+              {formData.skills.map((skill, idx) => (
+                <span key={idx} className="profile-skill-chip">
+                  {skill}
+                  <button
+                    type="button"
+                    className="profile-skill-remove-btn"
+                    onClick={() => handleRemoveSkill(skill)}
+                    title={`Remove ${skill}`}
+                  >
+                    <X size={12} />
+                  </button>
+                </span>
+              ))}
+            </div>
+
+            <form onSubmit={handleAddSkill} className="profile-add-skill-form">
+              <input
+                type="text"
+                className="profile-field-input"
+                style={{ maxWidth: '280px' }}
+                placeholder="Add skill (e.g. Go, Kubernetes, Kafka)"
+                value={newSkill}
+                onChange={(e) => setNewSkill(e.target.value)}
+              />
+              <button type="submit" className="btn btn-secondary btn-sm">
+                <Plus size={13} /> Add Skill
+              </button>
+            </form>
+          </div>
+
+          {/* Section 4: Education */}
+          <div className="profile-section-card" id="profile-sec-education">
+            <div className="profile-card-header">
+              <span className="profile-card-title">
+                <GraduationCap size={16} className="text-forest" /> Education ({formData.educationEntries.length})
+              </span>
+              <button
+                type="button"
+                className="btn btn-secondary btn-xs"
+                onClick={() => setShowAddEdu(prev => !prev)}
+              >
+                <Plus size={12} /> {showAddEdu ? 'Cancel' : 'Add Education'}
+              </button>
+            </div>
+
+            {showAddEdu && (
+              <form onSubmit={handleAddEducationEntry} style={{ display: 'flex', flexDirection: 'column', gap: '10px', background: 'var(--bg-card-subtle)', padding: '14px', borderRadius: '10px' }}>
+                <div className="profile-form-grid-2">
+                  <input
+                    type="text"
+                    className="profile-field-input"
+                    placeholder="Institution (e.g. IIT Kharagpur, BITS Pilani)"
+                    value={newEdu.institution}
+                    onChange={(e) => setNewEdu({ ...newEdu, institution: e.target.value })}
+                    required
+                  />
+                  <input
+                    type="text"
+                    className="profile-field-input"
+                    placeholder="Degree / Major (e.g. B.Tech Computer Science)"
+                    value={newEdu.degree}
+                    onChange={(e) => setNewEdu({ ...newEdu, degree: e.target.value })}
+                    required
+                  />
+                  <input
+                    type="text"
+                    className="profile-field-input"
+                    placeholder="Graduation Year (e.g. 2021)"
+                    value={newEdu.year}
+                    onChange={(e) => setNewEdu({ ...newEdu, year: e.target.value })}
+                  />
+                  <input
+                    type="text"
+                    className="profile-field-input"
+                    placeholder="Honors / GPA / Notes (optional)"
+                    value={newEdu.details}
+                    onChange={(e) => setNewEdu({ ...newEdu, details: e.target.value })}
+                  />
+                </div>
+                <button type="submit" className="btn btn-primary btn-xs" style={{ alignSelf: 'flex-start' }}>
+                  Save Education
+                </button>
+              </form>
+            )}
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {formData.educationEntries.map((edu, idx) => (
+                <div key={idx} className="experience-entry-box">
+                  <div className="experience-entry-header">
+                    <div>
+                      <div className="experience-entry-role">{edu.degree}</div>
+                      <div className="experience-entry-company">{edu.institution} {edu.year && `• ${edu.year}`}</div>
+                      {edu.details && <div className="experience-entry-duration">{edu.details}</div>}
+                    </div>
+                    <button
+                      type="button"
+                      className="icon-btn-subtle"
+                      onClick={() => handleRemoveEducationEntry(idx)}
+                      title="Remove entry"
+                    >
+                      <Trash2 size={14} className="text-danger" />
                     </button>
                   </div>
                 </div>
-                {edu.details && (
-                  <div className="text-xs text-muted mt-1">{edu.details}</div>
-                )}
-              </div>
-            ))}
+              ))}
+              {formData.educationEntries.length === 0 && !showAddEdu && (
+                <p className="text-muted text-xs" style={{ margin: 0 }}>No formal degrees added yet.</p>
+              )}
+            </div>
           </div>
-        </div>
 
-        {/* Section 6: Verified Skills & Tech Stack */}
-        <div className="profile-section">
-          <h2 className="profile-section-title">
-            <Sparkles size={18} className="text-copper" /> Technical Skills & Competencies
-          </h2>
-          <p className="text-muted text-xs mb-3">
-            Skills are used by the smart matching engine to calculate compatibility without hallucinating unverified claims.
-          </p>
+          {/* Section 5: Preferences */}
+          <div className="profile-section-card" id="profile-sec-preferences">
+            <div className="profile-card-header">
+              <span className="profile-card-title">
+                <Sliders size={16} className="text-forest" /> Career Preferences
+              </span>
+            </div>
 
-          <form onSubmit={handleAddSkill} className="skill-add-form">
-            <input
-              type="text"
-              className="form-input skill-input"
-              placeholder="Add skill (e.g. Docker, TypeScript, Kafka, Next.js)..."
-              value={newSkill}
-              onChange={(e) => setNewSkill(e.target.value)}
-            />
-            <button type="submit" className="btn btn-secondary btn-sm">
-              <Plus size={14} /> Add Skill
-            </button>
-          </form>
-
-          <div className="skills-tags-wrap">
-            {formData.skills.map((skill, index) => (
-              <span key={index} className="skill-pill-tag">
-                {skill}
-                <button
-                  type="button"
-                  className="skill-remove-btn"
-                  onClick={() => handleRemoveSkill(skill)}
-                  title={`Remove ${skill}`}
+            <div className="profile-form-grid-2">
+              <div className="profile-field-group">
+                <label className="profile-field-label">Seniority Level</label>
+                <select
+                  className="profile-field-input"
+                  value={formData.seniorityLevel}
+                  onChange={(e) => setFormData({ ...formData, seniorityLevel: e.target.value })}
                 >
-                  ×
-                </button>
-              </span>
-            ))}
-            {formData.skills.length === 0 && (
-              <span className="text-muted text-sm italic">
-                No technical skills added yet. Add competencies above or upload your CV to auto-extract.
-              </span>
-            )}
-          </div>
-        </div>
+                  <option value="Early Career">Early Career (0–2 yrs)</option>
+                  <option value="Mid-Level">Mid-Level (2–5 yrs)</option>
+                  <option value="Senior">Senior (5–8 yrs)</option>
+                  <option value="Staff / Lead">Staff / Lead (8+ yrs)</option>
+                </select>
+              </div>
 
-        {/* Save Footer Bar */}
-        <div className="profile-footer-bar">
-          <button
-            type="button"
-            className="btn btn-primary btn-md"
-            onClick={handleSaveProfile}
-            disabled={isSaving}
-          >
-            {isSaving ? <RefreshCw size={15} className="spin" /> : <Save size={15} />}
-            {saveSuccess ? 'Profile Saved Successfully!' : 'Save Master Profile'}
-          </button>
+              <div className="profile-field-group">
+                <label className="profile-field-label">Total Professional Experience</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="40"
+                  step="0.5"
+                  className="profile-field-input"
+                  value={formData.totalYearsExperience}
+                  onChange={(e) => setFormData({ ...formData, totalYearsExperience: Number(e.target.value) })}
+                />
+              </div>
+            </div>
+          </div>
         </div>
       </div>
+
+      {/* Resume Preview & LaTeX Modal */}
+      {showPreviewModal && (
+        <div className="resume-preview-overlay" onClick={() => setShowPreviewModal(false)}>
+          <div className="resume-preview-sheet" onClick={(e) => e.stopPropagation()}>
+            <div className="flex-between">
+              <div>
+                <h3 style={{ margin: '0 0 4px 0', fontSize: '18px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                  ATS Single-Column Resume Preview
+                </h3>
+                <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                  Standard Jake's Resume / Overleaf LaTeX rendering engine
+                </span>
+              </div>
+              <button
+                type="button"
+                className="modal-close-btn"
+                onClick={() => setShowPreviewModal(false)}
+              >
+                ×
+              </button>
+            </div>
+
+            <div style={{ background: '#FFFFFF', color: '#111827', padding: '24px', borderRadius: '8px', border: '1px solid #E5E7EB', fontFamily: 'serif', lineHeight: 1.4 }}>
+              <div style={{ textAlign: 'center', marginBottom: '16px' }}>
+                <h2 style={{ margin: '0 0 4px 0', fontSize: '20px', letterSpacing: '0.04em' }}>{resumeObject.name}</h2>
+                <div style={{ fontSize: '11px', color: '#4B5563' }}>
+                  {[resumeObject.email, resumeObject.phone, resumeObject.portfolio, resumeObject.github].filter(Boolean).join(' | ')}
+                </div>
+              </div>
+
+              {resumeObject.skills.length > 0 && (
+                <div style={{ marginBottom: '14px' }}>
+                  <div style={{ fontSize: '13px', fontWeight: 'bold', borderBottom: '1px solid #111827', textTransform: 'uppercase', marginBottom: '6px' }}>
+                    Technical Skills
+                  </div>
+                  <div style={{ fontSize: '11.5px' }}>
+                    {resumeObject.skills.join(', ')}
+                  </div>
+                </div>
+              )}
+
+              {resumeObject.experience.length > 0 && (
+                <div style={{ marginBottom: '14px' }}>
+                  <div style={{ fontSize: '13px', fontWeight: 'bold', borderBottom: '1px solid #111827', textTransform: 'uppercase', marginBottom: '6px' }}>
+                    Experience
+                  </div>
+                  {resumeObject.experience.map((exp, i) => (
+                    <div key={i} style={{ marginBottom: '8px', fontSize: '11.5px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold' }}>
+                        <span>{exp.role} — {exp.company}</span>
+                        <span>{exp.duration}</span>
+                      </div>
+                      {exp.bullets && (
+                        <ul style={{ margin: '2px 0 0 0', paddingLeft: '16px' }}>
+                          {exp.bullets.map((b, bi) => (
+                            <li key={bi}>{b}</li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="flex-between">
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => setShowPreviewModal(false)}
+              >
+                Close
+              </button>
+              <div className="flex-inline-gap">
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => downloadLatexFile(resumeObject, `${resumeObject.name.replace(/\s+/g, '_')}_Resume`)}
+                >
+                  <Download size={13} /> Overleaf (.tex)
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  onClick={() => downloadResumePdf(resumeObject, `${resumeObject.name.replace(/\s+/g, '_')}_Resume`)}
+                >
+                  <Download size={13} /> Download PDF
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
-
-

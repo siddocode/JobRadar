@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   LayoutDashboard,
   Briefcase,
@@ -8,13 +8,11 @@ import {
   Bot,
   Sparkles,
   MapPin,
-  Search,
-  SlidersHorizontal,
-  RefreshCw,
-  Sun,
-  Moon,
-  ExternalLink,
-  Plus
+  CheckCircle2,
+  Bookmark,
+  Check,
+  Globe,
+  Navigation
 } from 'lucide-react';
 import OverviewView from './components/OverviewView';
 import ApplicationsView from './components/ApplicationsView';
@@ -29,8 +27,11 @@ import TechCorridorMapView from './components/TechCorridorMapView';
 import UserLocationModal from './components/UserLocationModal';
 import ClassyDropdown from './components/ClassyDropdown';
 import { useAuth } from './context/AuthContext';
-import { useLocation, formatDistance, calculateDistanceKm } from './context/LocationContext';
+import { useLocation, formatDistance } from './context/LocationContext';
 import { getJobMatchQuick } from './utils/candidateMatcher';
+import { getCompanyBranding } from './utils/companyBranding';
+import { getShortLocationLabel } from './utils/resolveLocationName';
+import './components/DiscoverJobsSection.css';
 
 const PRIMARY_TECH_HUBS = [
   { key: 'all', name: 'All India' },
@@ -52,20 +53,78 @@ export default function App() {
     openLocationModal,
     sortByDistance,
     setSortByDistance,
-    maxDistanceKm
+    maxDistanceKm,
+    setMaxDistanceKm
   } = useLocation();
   const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'jobs' | 'applications' | 'companies' | 'profile' | 'autopilot'
   const [theme, setTheme] = useState(() => localStorage.getItem('jobradar_theme') || 'light');
+  const [syncToast, setSyncToast] = useState(null);
 
   const [directoryCities, setDirectoryCities] = useState([]);
   const [companyCount, setCompanyCount] = useState(0);
-  const [reachOutCount, setReachOutCount] = useState(0);
   const [eligibilityJob, setEligibilityJob] = useState(null);
+  const [focusApplicationId, setFocusApplicationId] = useState(null);
+  const [trackedCompanyIds, setTrackedCompanyIds] = useState(() => new Set());
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [savedJobs, setSavedJobs] = useState(() => {
+    try {
+      const raw = localStorage.getItem('jobradar_saved_jobs');
+      return raw ? new Set(JSON.parse(raw)) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
+
+  // Persist an outreach record instead of just switching tabs.
+  const handleAddToPipeline = useCallback(async (job) => {
+    if (!isAuthenticated) {
+      openAuthModal('Sign in to track companies in your outreach pipeline.', 'login');
+      return;
+    }
+    const companyId = job?.companyId || job?.company?._id;
+    if (!companyId) {
+      setSyncToast({ type: 'error', message: 'This job is not linked to a company record yet.' });
+      return;
+    }
+    try {
+      const res = await authFetch(`/api/directory/companies/${companyId}/follow-up`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ followUpStatus: 'to_contact' })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setTrackedCompanyIds((prev) => new Set(prev).add(String(companyId)));
+        setSyncToast({ type: 'success', message: `${job.company || 'Company'} added to your outreach pipeline.` });
+        window.dispatchEvent(new Event('jobradar:applications-changed'));
+        setEligibilityJob(null);
+        setActiveTab('reachout');
+      } else {
+        setSyncToast({ type: 'error', message: data.error || 'Could not add this company to your pipeline.' });
+      }
+    } catch {
+      setSyncToast({ type: 'error', message: 'Network error. Please try again.' });
+    }
+  }, [isAuthenticated, authFetch, openAuthModal]);
+
+  const handleToggleSaveJob = (jobId) => {
+    setSavedJobs(prev => {
+      const next = new Set(prev);
+      if (next.has(jobId)) {
+        next.delete(jobId);
+      } else {
+        next.add(jobId);
+      }
+      try {
+        localStorage.setItem('jobradar_saved_jobs', JSON.stringify([...next]));
+      } catch {}
+      return next;
+    });
+  };
 
   const [jobs, setJobs] = useState([]);
   const [cities, setCities] = useState([]);
-  const [meta, setMeta] = useState({ total: 0, openTotal: 0, totalInDb: 0, page: 1, limit: 25, totalPages: 1 });
+  const [meta, setMeta] = useState({ total: 0, openTotal: 0, totalInDb: 0, page: 1, limit: 24, totalPages: 1 });
   const [stats, setStats] = useState(null);
 
   // Filters & Pan-India Tech Hub Controls
@@ -83,14 +142,13 @@ export default function App() {
   const [companyFilter, setCompanyFilter] = useState('all');
   const [techOnlyJobs, setTechOnlyJobs] = useState(false);
   const [page, setPage] = useState(1);
-  const [limit, setLimit] = useState(25);
+  const [limit, setLimit] = useState(24);
   const [mobileFiltersExpanded, setMobileFiltersExpanded] = useState(false);
 
   // Status
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [syncToast, setSyncToast] = useState(null);
 
   // Sync theme attribute on document root
   useEffect(() => {
@@ -106,7 +164,7 @@ export default function App() {
   }, [isAuthenticated, onlyEligibleJobs]);
 
   // Fetch aggregate stats
-  const fetchStats = async () => {
+  const fetchStats = useCallback(async () => {
     try {
       const res = await fetch('/api/jobs/stats');
       if (res.ok) {
@@ -118,10 +176,10 @@ export default function App() {
     } catch (err) {
       console.error('Failed to load stats:', err);
     }
-  };
+  }, []);
 
   // Fetch countries list with job counts
-  const fetchCountries = async () => {
+  const fetchCountries = useCallback(async () => {
     try {
       const res = await fetch('/api/countries');
       if (res.ok) {
@@ -133,7 +191,7 @@ export default function App() {
     } catch (err) {
       console.error('Failed to load countries:', err);
     }
-  };
+  }, []);
 
   // Fetch cities list with job counts (cascades by selectedCountry)
   const fetchCities = useCallback(async () => {
@@ -149,6 +207,7 @@ export default function App() {
         const data = await res.json();
         if (data.success) {
           setCities(data.cities || []);
+          citiesCountryRef.current = selectedCountry;
         }
       }
     } catch (err) {
@@ -177,6 +236,11 @@ export default function App() {
 
   // Fetch jobs with comprehensive filters including corridors & experience
   const fetchJobs = useCallback(async () => {
+    // Cancel any in-flight request so a slow older filter response cannot
+    // overwrite the results of a newer one.
+    if (jobsAbortRef.current) jobsAbortRef.current.abort();
+    const controller = new AbortController();
+    jobsAbortRef.current = controller;
     setLoading(true);
     setError(null);
     try {
@@ -211,12 +275,14 @@ export default function App() {
       params.append('page', String(page));
       params.append('limit', String(viewMode === 'map' ? 100 : limit));
 
-      const res = await fetch(`/api/jobs?${params.toString()}`);
+      const res = await fetch(`/api/jobs?${params.toString()}`, { signal: controller.signal });
+      if (controller.signal.aborted) return;
       if (!res.ok) {
         throw new Error(`API error: ${res.status} ${res.statusText}`);
       }
 
       const data = await res.json();
+      if (controller.signal.aborted) return;
       if (data.success) {
         setJobs(data.jobs || []);
         if (data.meta) {
@@ -226,19 +292,19 @@ export default function App() {
         throw new Error(data.message || 'Failed to fetch jobs');
       }
     } catch (err) {
+      if (err.name === 'AbortError' || controller.signal.aborted) return;
       setError(err.message);
       setJobs([]);
     } finally {
-      setLoading(false);
+      if (!controller.signal.aborted) setLoading(false);
     }
   }, [searchQuery, selectedCountry, selectedCity, selectedCorridor, experienceLevel, workModeFilter, statusFilter, companyFilter, techOnlyJobs, page, limit, viewMode, userLocation, sortByDistance, maxDistanceKm]);
 
   const fetchDirectoryMeta = useCallback(async () => {
     try {
-      const [citiesRes, compRes, reachRes] = await Promise.all([
+      const [citiesRes, compRes] = await Promise.all([
         fetch('/api/directory/cities'),
-        fetch('/api/directory/companies?limit=1'),
-        authFetch('/api/directory/reach-out')
+        fetch('/api/directory/companies?limit=1')
       ]);
       if (citiesRes.ok) {
         const data = await citiesRes.json();
@@ -248,23 +314,31 @@ export default function App() {
         const data = await compRes.json();
         if (data.success) setCompanyCount(data.total || 0);
       }
-      if (reachRes.ok) {
-        const data = await reachRes.json();
-        if (data.success) setReachOutCount(data.total || 0);
-      }
     } catch (err) {
       console.error('Failed to load directory metadata:', err);
     }
-  }, [authFetch]);
+  }, []);
+
+  const syncPollRef = useRef(null);
+  const toastTimeoutRef = useRef(null);
+  const pollSyncRef = useRef(null);
+  const jobsAbortRef = useRef(null);
+  const citiesCountryRef = useRef(null);
 
   const pollSyncStatus = useCallback(() => {
+    // Never allow two pollers to run at once (StrictMode + filter changes).
+    if (syncPollRef.current) clearInterval(syncPollRef.current);
+    const stop = () => {
+      if (syncPollRef.current) clearInterval(syncPollRef.current);
+      syncPollRef.current = null;
+    };
     const interval = setInterval(async () => {
       try {
         const res = await fetch('/api/jobs/sync/status');
         if (!res.ok) return;
         const data = await res.json();
         if (!data.syncState?.isRunning) {
-          clearInterval(interval);
+          stop();
           setIsSyncing(false);
           const summary = data.syncState?.lastSummary;
           if (summary) {
@@ -288,21 +362,29 @@ export default function App() {
           fetchCities();
           fetchCountries();
           fetchDirectoryMeta();
-          setTimeout(() => setSyncToast(null), 6000);
+          if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+          toastTimeoutRef.current = setTimeout(() => setSyncToast(null), 6000);
         }
-      } catch (_) {
-        clearInterval(interval);
+      } catch {
+        stop();
         setIsSyncing(false);
       }
     }, 2500);
-  }, [fetchCities, fetchJobs]);
+    syncPollRef.current = interval;
+  }, [fetchCities, fetchJobs, fetchStats, fetchCountries, fetchDirectoryMeta]);
+
+  // Keep a stable reference so the mount-only status check always calls the
+  // latest poller without re-running on every filter change.
+  useEffect(() => {
+    pollSyncRef.current = pollSyncStatus;
+  }, [pollSyncStatus]);
 
   const handleTriggerSync = async () => {
     if (isSyncing) return;
     try {
       setIsSyncing(true);
       setSyncToast({ message: 'Starting job collection across ATS boards...', type: 'info' });
-      const res = await fetch('/api/jobs/sync', { method: 'POST' });
+      const res = await authFetch('/api/jobs/sync', { method: 'POST' });
       const data = await res.json();
       if (res.ok && data.success) {
         setSyncToast({ message: 'Syncing live ATS boards in background...', type: 'info' });
@@ -317,7 +399,7 @@ export default function App() {
     }
   };
 
-  // Check sync status on initial load
+  // Check sync status once on initial load; clean up polling on unmount.
   useEffect(() => {
     async function checkInitialSyncStatus() {
       try {
@@ -327,18 +409,23 @@ export default function App() {
           if (data.syncState?.isRunning) {
             setIsSyncing(true);
             setSyncToast({ message: 'A sync run is actively running in background...', type: 'info' });
-            pollSyncStatus();
+            pollSyncRef.current?.();
           }
         }
-      } catch (_) { }
+      } catch { }
     }
     checkInitialSyncStatus();
-  }, [pollSyncStatus]);
+    return () => {
+      if (syncPollRef.current) clearInterval(syncPollRef.current);
+      if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+      if (jobsAbortRef.current) jobsAbortRef.current.abort();
+    };
+  }, []);
 
   useEffect(() => {
     fetchStats();
     fetchCountries();
-  }, []);
+  }, [fetchStats, fetchCountries]);
 
   useEffect(() => {
     fetchDirectoryMeta();
@@ -358,11 +445,14 @@ export default function App() {
     return () => clearTimeout(handler);
   }, [fetchJobs]);
 
-  // Synchronize country filter with candidate's location when candidate profile is loaded or changed
+  // Apply the candidate's country once per distinct value. Re-applying on
+  // every profile object change used to silently undo manual filter edits.
+  const profileCountryAppliedRef = useRef(null);
   useEffect(() => {
-    if (candidateProfile?.country) {
-      setSelectedCountry(candidateProfile.country);
-    }
+    const country = candidateProfile?.country;
+    if (!country || profileCountryAppliedRef.current === country) return;
+    profileCountryAppliedRef.current = country;
+    setSelectedCountry(country);
   }, [candidateProfile]);
 
   const handleResetFilters = () => {
@@ -376,6 +466,7 @@ export default function App() {
     setCompanyFilter('all');
     setTechOnlyJobs(false);
     setOnlyEligibleJobs(false);
+    setMaxDistanceKm(null);
     setPage(1);
   };
 
@@ -452,8 +543,11 @@ export default function App() {
     return { major, remote, other };
   }, [filteredCities, selectedCountry]);
 
-  // Auto-reset city & corridor if current city doesn't exist in the selected country
+  // Auto-reset city & corridor only once the city list for the *current*
+  // country has actually loaded, otherwise a hub pill click (which changes
+  // country + city together) is immediately undone by the previous list.
   useEffect(() => {
+    if (citiesCountryRef.current !== selectedCountry) return;
     if (selectedCity && selectedCity !== 'all' && filteredCities.length > 0) {
       const cityExists = filteredCities.some(
         c => c.city.toLowerCase() === selectedCity.toLowerCase()
@@ -463,7 +557,7 @@ export default function App() {
         setSelectedCorridor('all');
       }
     }
-  }, [filteredCities, selectedCity]);
+  }, [filteredCities, selectedCity, selectedCountry]);
 
   const companyGroups = useMemo(() => {
     if (!stats || !stats.companies) return { tier1: [], other: [] };
@@ -890,6 +984,42 @@ export default function App() {
             <span className="nav-item-badge tag-copper">Auto</span>
           </button>
         </nav>
+
+        {/* Sidebar Status / Promo Card */}
+        <div
+          className={`sidebar-autopilot-widget ${activeTab === 'autopilot' ? 'is-current' : ''}`}
+          onClick={() => { setActiveTab('autopilot'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              setActiveTab('autopilot');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+          }}
+          role="button"
+          tabIndex={0}
+          title="Open Application Autopilot"
+        >
+          <div className="sidebar-ap-icon-wrap">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" />
+              <circle cx="12" cy="12" r="6" />
+              <circle cx="12" cy="12" r="2" />
+            </svg>
+          </div>
+          <div className="sidebar-ap-text-wrap">
+            <span className="sidebar-ap-title">Autopilot Engine</span>
+            <p className="sidebar-ap-desc">
+              Let JobRadar find, prepare and apply to the right jobs for you.
+            </p>
+          </div>
+          <div className="sidebar-ap-terrain" aria-hidden="true">
+            <svg viewBox="0 0 200 48" preserveAspectRatio="none">
+              <path d="M0 32 C50 18 90 38 140 24 C175 14 190 26 200 18 L200 48 L0 48 Z" fill="rgba(23,61,53,0.06)" />
+              <path d="M0 38 C60 26 110 40 160 30 C185 24 195 32 200 28 L200 48 L0 48 Z" fill="rgba(23,61,53,0.12)" />
+            </svg>
+          </div>
+        </div>
       </aside>
 
       {/* Main Content Area */}
@@ -918,7 +1048,7 @@ export default function App() {
             </div>
           </div>
 
-          <div className="topbar-title-block">
+          <div className={`topbar-title-block ${['applications', 'companies', 'directory', 'profile', 'autopilot'].includes(activeTab) ? 'is-duplicated' : ''}`}>
             <h1 className="page-heading">
               {activeTab === 'overview' && 'Mission Control & Overview'}
               {activeTab === 'jobs' && 'Discover Engineering Jobs'}
@@ -935,7 +1065,7 @@ export default function App() {
               {(activeTab === 'companies' || activeTab === 'directory') && 'Verified employers, detected ATS portals, and physical office corridors.'}
               {activeTab === 'reachout' && 'Proactive outreach to companies before jobs are posted publicly.'}
               {activeTab === 'profile' && 'Maintain your master credentials and verified competencies for smart matching.'}
-              {activeTab === 'autopilot' && 'Continuous screening, tailored preparation, and assisted dispatch.'}
+              {activeTab === 'autopilot' && 'Continuous job screening, tailored preparation, and automated applications.'}
             </p>
           </div>
 
@@ -954,7 +1084,7 @@ export default function App() {
                   }}
                   title="Filter jobs located in India"
                 >
-                  <span className="scope-flag">🇮🇳</span>
+                  <span className="scope-flag"><Globe size={13} /></span>
                   <span className="scope-label">India</span>
                 </button>
                 <button
@@ -1004,7 +1134,14 @@ export default function App() {
               className={`user-location-nav-btn ${userLocation ? 'has-location' : ''}`}
               onClick={openLocationModal}
               title={userLocation
-                ? `Location: ${userLocation.label} (${userLocation.lat.toFixed(3)}, ${userLocation.lng.toFixed(3)}). Click to update or clear.`
+                ? `${
+                    {
+                      gps: 'Live GPS',
+                      search: 'Searched location',
+                      map_click: 'Adjusted on map',
+                      curated: 'Curated tech hub'
+                    }[userLocation.source] || 'Selected location'
+                  }: ${userLocation.label} (${Number(userLocation.lat).toFixed(3)}, ${Number(userLocation.lng).toFixed(3)}). Click to update or clear.`
                 : 'Set your location to see nearest jobs and companies'}
               id="topbar-location-btn"
             >
@@ -1013,7 +1150,7 @@ export default function App() {
                 <circle cx="12" cy="10" r="3" />
               </svg>
               <span className="location-nav-text">
-                {userLocation ? (userLocation.label?.split(',')[0] || userLocation.city || 'My Location') : 'Set Location'}
+                {getShortLocationLabel(userLocation)}
               </span>
               {userLocation && <span className="location-active-dot" />}
             </button>
@@ -1079,7 +1216,7 @@ export default function App() {
               <button
                 type="button"
                 className="auth-topbar-btn"
-                onClick={() => openAuthModal()}
+                onClick={() => openAuthModal('', 'login')}
                 title="Sign in or create free account"
                 id="header-signin-btn"
               >
@@ -1116,12 +1253,20 @@ export default function App() {
                 setActiveTab('profile');
                 window.scrollTo({ top: 0, behavior: 'smooth' });
               }}
+              onReviewApplication={(app) => {
+                setFocusApplicationId(app?._id || null);
+                setActiveTab('applications');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
             />
           )}
 
           {/* View 2: Applications Lifecycle */}
           {activeTab === 'applications' && (
             <ApplicationsView
+              initialStage={focusApplicationId ? 'awaiting_approval' : 'all'}
+              focusApplicationId={focusApplicationId}
+              onFocusHandled={() => setFocusApplicationId(null)}
               onNavigateJobs={() => {
                 setActiveTab('jobs');
                 window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1151,6 +1296,10 @@ export default function App() {
                 setActiveTab('applications');
                 window.scrollTo({ top: 0, behavior: 'smooth' });
               }}
+              onNavigateProfile={() => {
+                setActiveTab('profile');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
             />
           )}
 
@@ -1165,49 +1314,65 @@ export default function App() {
 
           {/* View 7: Discover Jobs View */}
           {activeTab === 'jobs' && (
-            <div className="live-jobs-container">
-              {/* Aggregate Stats Ribbon */}
-              <section className="stats-ribbon" aria-label="Job Statistics">
-                <div className="stat-card">
-                  <span className="stat-label">Total Tracked Jobs</span>
-                  <span className="stat-value">{stats ? stats.total.toLocaleString() : meta.totalInDb.toLocaleString()}</span>
-                  <span className="stat-subtext">Across {stats ? stats.companiesCount : 0} companies</span>
+            <div className="live-jobs-container discover-page-wrap">
+              {/* Aggregate Stats Ribbon matching visual reference (4 refined cards) */}
+              <section className="discover-stats-ribbon" aria-label="Job Statistics">
+                <div className="discover-stat-card">
+                  <div className="discover-stat-icon-wrap">
+                    <Briefcase size={20} />
+                  </div>
+                  <div className="discover-stat-info">
+                    <span className="discover-stat-val">{stats ? stats.total.toLocaleString() : meta.totalInDb.toLocaleString()}</span>
+                    <span className="discover-stat-lbl">Total Jobs</span>
+                  </div>
                 </div>
-                <div className="stat-card">
-                  <span className="stat-label">Currently Open</span>
-                  <span className="stat-value text-green">
-                    {stats ? stats.open.toLocaleString() : meta.openTotal.toLocaleString()}
-                  </span>
-                  <span className="stat-subtext">Verified active postings</span>
+
+                <div className="discover-stat-card is-open">
+                  <div className="discover-stat-icon-wrap">
+                    <CheckCircle2 size={20} />
+                  </div>
+                  <div className="discover-stat-info">
+                    <span className="discover-stat-val text-green">
+                      {stats ? stats.open.toLocaleString() : meta.openTotal.toLocaleString()}
+                    </span>
+                    <span className="discover-stat-lbl">Currently Open</span>
+                  </div>
                 </div>
-                <div className="stat-card">
-                  <span className="stat-label">Cities With Openings</span>
-                  <span className="stat-value text-purple">
-                    {cities.length}
-                  </span>
-                  <span className="stat-subtext">
-                    {selectedCountry === 'India' ? 'Across India' : (selectedCountry !== 'all' ? `In ${selectedCountry}` : 'Worldwide')}
-                  </span>
+
+                <div className="discover-stat-card is-today">
+                  <div className="discover-stat-icon-wrap">
+                    <Sparkles size={20} />
+                  </div>
+                  <div className="discover-stat-info">
+                    <span className="discover-stat-val text-copper">
+                      {stats?.companiesCount ? `${stats.companiesCount} Co.` : `${cities.length} Cities`}
+                    </span>
+                    <span className="discover-stat-lbl">Active Companies</span>
+                  </div>
                 </div>
-                <div className="stat-card">
-                  <span className="stat-label">Matching Current View</span>
-                  <span className="stat-value text-blue">{meta.total.toLocaleString()}</span>
-                  <span className="stat-subtext">Filtered results</span>
+
+                <div className="discover-stat-card is-match">
+                  <div className="discover-stat-icon-wrap">
+                    <Bot size={20} />
+                  </div>
+                  <div className="discover-stat-info">
+                    <span className="discover-stat-val">{meta.total.toLocaleString()}</span>
+                    <span className="discover-stat-lbl">Matching Filters</span>
+                  </div>
                 </div>
               </section>
 
-              {/* Pan-India Tech Hub & Corridors Selector */}
+              {/* Pan-India Tech Hub & Corridors Selector with Clean Pills */}
               <div className="tech-hubs-container">
-                <div className="tech-hubs-bar">
+                <div className="discover-location-strip">
                   {PRIMARY_TECH_HUBS.map((hub) => {
                     const isSelected = (hub.key === 'all' && selectedCity === 'all') || selectedCity.toLowerCase() === hub.key.toLowerCase();
                     const count = hubCityCounts[hub.key] || 0;
-                    const hubClass = `hub-pill-${hub.key.toLowerCase().replace(/[^a-z0-9]/g, '-')}`;
                     return (
                       <button
                         key={hub.key}
                         type="button"
-                        className={`tech-hub-pill ${isSelected ? 'active' : ''} ${hubClass}`}
+                        className={`discover-location-pill ${isSelected ? 'is-active' : ''}`}
                         onClick={() => {
                           if (hub.key === 'all') {
                             setSelectedCity('all');
@@ -1220,9 +1385,9 @@ export default function App() {
                           setPage(1);
                         }}
                       >
-                        <span className="tech-hub-name">{hub.name}</span>
+                        <span>{hub.name}</span>
                         {count > 0 && (
-                          <span className="tech-hub-count">
+                          <span className="discover-location-count">
                             {count > 999 ? `${(count / 1000).toFixed(1)}k` : count}
                           </span>
                         )}
@@ -1234,7 +1399,7 @@ export default function App() {
                   <button
                     type="button"
                     id="tech-hubs-map-btn"
-                    className={`tech-hub-pill map-quick-toggle ${viewMode === 'map' ? 'active' : ''}`}
+                    className={`discover-location-pill ${viewMode === 'map' ? 'is-active' : ''}`}
                     onClick={() => {
                       setViewMode(viewMode === 'map' ? 'grid' : 'map');
                       const anchor = document.getElementById('results-header-anchor');
@@ -1242,12 +1407,7 @@ export default function App() {
                     }}
                     title="Toggle Interactive GIS Tech Corridor Map"
                   >
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ marginRight: '5px' }}>
-                      <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6" />
-                      <line x1="8" y1="2" x2="8" y2="18" />
-                      <line x1="16" y1="6" x2="16" y2="22" />
-                    </svg>
-                    <span>{viewMode === 'map' ? 'Exit Map View' : 'Corridor Map View'}</span>
+                    <span>{viewMode === 'map' ? 'Exit Map' : 'Corridor Map'}</span>
                   </button>
                 </div>
 
@@ -1473,7 +1633,6 @@ export default function App() {
                       >
                         <span className="exp-sig-dot dot-freshers" />
                         <span>Freshers (0–1y)</span>
-                        <span className="exp-badge-pill badge-freshers">Entry</span>
                       </button>
                       <button
                         type="button"
@@ -1492,7 +1651,6 @@ export default function App() {
                       >
                         <span className="exp-sig-dot dot-senior" />
                         <span>Senior (5y+)</span>
-                        <span className="exp-badge-pill badge-senior">Lead</span>
                       </button>
                     </div>
 
@@ -1691,43 +1849,46 @@ export default function App() {
 
                   <div className="results-controls-cluster">
                     {/* Nearest to Me Proximity Toggle */}
-                    <button
-                      type="button"
-                      id="sort-nearest-toggle-btn"
+                    <div
+                      id="sort-nearest-pill-btn"
                       className={`sort-nearest-pill-btn ${sortByDistance && userLocation ? 'is-active' : ''}`}
-                      onClick={() => {
-                        if (!userLocation) {
-                          openLocationModal();
-                        } else {
-                          setSortByDistance(!sortByDistance);
-                        }
-                      }}
-                      title={userLocation
-                        ? (sortByDistance ? `Currently sorting jobs nearest to ${userLocation.label}` : `Click to sort nearest to ${userLocation.label}`)
-                        : 'Set your location to see nearest jobs first'}
                     >
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3">
-                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
-                        <circle cx="12" cy="10" r="3" />
-                      </svg>
-                      <span className="sort-nearest-label">
-                        {userLocation
-                          ? (sortByDistance ? `Nearest: ${userLocation.label?.split(',')[0]}` : 'Sort: Distance')
-                          : '📍 Nearest to Me'}
-                      </span>
-                      {userLocation && (
-                        <span
-                          className="sort-nearest-edit-tag"
-                          onClick={(e) => {
-                            e.stopPropagation();
+                      <button
+                        type="button"
+                        id="sort-nearest-toggle-btn"
+                        className="sort-nearest-toggle"
+                        onClick={() => {
+                          if (!userLocation) {
                             openLocationModal();
-                          }}
+                          } else {
+                            setSortByDistance(!sortByDistance);
+                          }
+                        }}
+                        title={userLocation
+                          ? (sortByDistance ? `Currently sorting jobs nearest to ${userLocation.label}` : `Click to sort nearest to ${userLocation.label}`)
+                          : 'Set your location to see nearest jobs first'}
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3">
+                          <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+                          <circle cx="12" cy="10" r="3" />
+                        </svg>
+                        <span className="sort-nearest-label">
+                          {userLocation
+                            ? (sortByDistance ? `Nearest: ${getShortLocationLabel(userLocation)}` : 'Sort: Distance')
+                            : 'Nearest to Me'}
+                        </span>
+                      </button>
+                      {userLocation && (
+                        <button
+                          type="button"
+                          className="sort-nearest-edit-tag"
+                          onClick={openLocationModal}
                           title="Change your location"
                         >
                           Change
-                        </span>
+                        </button>
                       )}
-                    </button>
+                    </div>
 
                     <div className="results-sub-cluster">
                       {/* View Mode Switcher */}
@@ -1735,7 +1896,7 @@ export default function App() {
                         <button
                           type="button"
                           className={`segmented-option view-btn-grid ${viewMode === 'grid' ? 'active' : ''}`}
-                          onClick={() => setViewMode('grid')}
+                          onClick={() => { setViewMode('grid'); setPage(1); }}
                           title="Switch to Radar Grid View"
                         >
                           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" style={{ marginRight: '5px', verticalAlign: '-1px' }}>
@@ -1750,7 +1911,7 @@ export default function App() {
                         <button
                           type="button"
                           className={`segmented-option view-btn-table ${viewMode === 'table' ? 'active' : ''}`}
-                          onClick={() => setViewMode('table')}
+                          onClick={() => { setViewMode('table'); setPage(1); }}
                           title="Switch to Structured Table View"
                         >
                           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" style={{ marginRight: '5px', verticalAlign: '-1px' }}>
@@ -1763,7 +1924,7 @@ export default function App() {
                         <button
                           type="button"
                           className={`segmented-option view-btn-map ${viewMode === 'map' ? 'active' : ''}`}
-                          onClick={() => setViewMode('map')}
+                          onClick={() => { setViewMode('map'); setPage(1); }}
                           title="Interactive GIS Tech Corridor Map"
                         >
                           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" style={{ marginRight: '5px', verticalAlign: '-1px' }}>
@@ -1796,7 +1957,7 @@ export default function App() {
                   </div>
                 </div>
 
-                {viewMode === 'map' ? (
+                {!loading && !error && displayedJobs.length > 0 && viewMode === 'map' ? (
                   <TechCorridorMapView
                     selectedCity={selectedCity}
                     selectedCorridor={selectedCorridor}
@@ -1827,10 +1988,14 @@ export default function App() {
                     <p className="state-desc">{error}</p>
                     <button className="clear-btn" onClick={fetchJobs}>Retry</button>
                   </div>
-                ) : jobs.length === 0 ? (
+                ) : displayedJobs.length === 0 ? (
                   <div className="state-box">
                     <p className="state-title">No jobs found</p>
-                    <p className="state-desc">Try loosening your search terms or selecting "All Cities".</p>
+                    <p className="state-desc">
+                      {jobs.length > 0
+                        ? 'No roles match your current filters. Try clearing filters or turning off "Eligible Roles Only".'
+                        : 'Try loosening your search terms or selecting "All Cities".'}
+                    </p>
                     <button className="clear-btn" onClick={handleResetFilters}>Clear Filters</button>
                   </div>
                 ) : (
@@ -1847,120 +2012,114 @@ export default function App() {
                               : `${rawLoc}${countryTag && !rawLoc.toLowerCase().includes(job.country.toLowerCase()) ? countryTag : ''}`);
 
                           const quickMatch = (isAuthenticated && candidateProfile) ? getJobMatchQuick(job, candidateProfile) : null;
-                          const monogram = (job.company || 'JR').slice(0, 2).toUpperCase();
+                          const branding = getCompanyBranding(job.company);
+                          const jobId = job._id || `${job.source}-${job.sourceJobId}`;
+                          const isSaved = savedJobs.has(jobId);
 
                           return (
-                            <div key={job._id || `${job.source}-${job.sourceJobId}`} className="radar-card">
+                            <div key={jobId} className="discover-job-card radar-card">
                               <div>
-                                <div className="radar-card-header">
-                                  <div className="radar-card-company">
-                                    <div className="radar-company-monogram">{monogram}</div>
-                                    <div>
-                                      <div className="radar-company-name">{job.company}</div>
-                                      <span className={`radar-source-pill ${getSourceBadgeClass(job.source)}`}>
-                                        {job.source}
-                                      </span>
+                                <div className="discover-card-top">
+                                  <div className="discover-card-company-group">
+                                    <div
+                                      className="discover-company-monogram"
+                                      style={{ backgroundColor: branding.bg, color: branding.color }}
+                                    >
+                                      {branding.monogram}
+                                    </div>
+                                    <div className="discover-company-details">
+                                      <span className="discover-company-name">{job.company}</span>
+                                      <div className="discover-job-title" title={job.title}>{job.title}</div>
                                     </div>
                                   </div>
-                                  <span className={`status-badge ${job.status}`}>
-                                    <span className="status-dot" />
-                                    {job.status}
+
+                                  {/* Match Score Badge matching reference: ✓ 92% Match */}
+                                  {quickMatch && !quickMatch.overall.isHardBlocker ? (
+                                    <button
+                                      type="button"
+                                      className="discover-match-badge"
+                                      onClick={() => setEligibilityJob(job)}
+                                      title={`Click for breakdown: ${quickMatch.overall.summary}`}
+                                    >
+                                      <Check size={12} strokeWidth={2.5} /> {quickMatch.overall.score}% Match
+                                    </button>
+                                  ) : quickMatch?.overall.isHardBlocker ? (
+                                    <button
+                                      type="button"
+                                      className="discover-match-badge"
+                                      style={{ background: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger)', borderColor: 'rgba(239, 68, 68, 0.25)' }}
+                                      onClick={() => setEligibilityJob(job)}
+                                    >
+                                      Auth Blocker
+                                    </button>
+                                  ) : (
+                                    <span className={`status-badge ${job.status}`}>
+                                      <span className="status-dot" />
+                                      {job.status}
+                                    </span>
+                                  )}
+                                </div>
+
+                                {/* Tags Row */}
+                                <div className="discover-tags-row" style={{ marginTop: '10px' }}>
+                                  {job.roleFamily && job.roleFamily !== 'other' && (
+                                    <span className="discover-tag-chip">
+                                      {job.roleFamily.replace(/_/g, ' ')}
+                                    </span>
+                                  )}
+                                  <span className="discover-tag-chip">
+                                    <MapPin size={11} /> {job.locality ? `${job.locality}, ${job.city || 'India'}` : displayCity}
                                   </span>
-                                </div>
-
-                                <div className="radar-card-title" title={job.title}>
-                                  {job.title}
-                                </div>
-
-                                {/* Live Eligibility Match Indicator */}
-                                {isAuthenticated && candidateProfile && quickMatch && (
-                                  <div
-                                    className={`job-row-match-pill ${quickMatch.overall.badgeTone}`}
-                                    style={{ marginBottom: '10px', width: 'fit-content', cursor: 'pointer' }}
-                                    onClick={() => setEligibilityJob(job)}
-                                    title={`Click for breakdown: ${quickMatch.overall.summary}`}
-                                  >
-                                    <span className="match-pill-dot" />
-                                    <span className="match-pill-text">
-                                      {quickMatch.overall.isHardBlocker
-                                        ? 'Work Authorization Required'
-                                        : `${quickMatch.overall.score}% Match • ${quickMatch.overall.status === 'ELIGIBLE' ? 'Eligible' : 'Partial Fit'}`}
+                                  {job.workMode
+                                    && !['unknown', 'unspecified'].includes(job.workMode)
+                                    && !(job.workMode === 'remote' && /remote/i.test(`${job.locality || ''} ${displayCity || ''}`)) && (
+                                    <span className="discover-tag-chip">
+                                      {job.workMode}
                                     </span>
-                                  </div>
-                                )}
-
-                                <div className="radar-card-meta">
-                                  <div className="radar-location-row">
-                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
-                                      <circle cx="12" cy="10" r="3" />
-                                    </svg>
-                                    <span className="location-name-truncate">{job.locality ? `${job.locality}, ${job.city || 'India'}` : displayCity}</span>
-                                  </div>
-
-                                  <div className="radar-tags-row">
-                                    <span className={`mode-badge ${getWorkModeBadgeClass(job.workMode)}`}>
-                                      {job.workMode || 'onsite'}
+                                  )}
+                                  {job.distanceKm != null && (
+                                    <span
+                                      className="discover-tag-chip"
+                                      title={job.distanceApproximate
+                                        ? `Estimated from the city centre: this posting only lists ${job.city || 'a city'}, not a building (~${job.distanceKm} km).`
+                                        : `Direct distance: ${job.distanceKm} km`}
+                                    >
+                                      <Navigation size={11} /> {job.distanceApproximate ? '~' : ''}{formatDistance(job.distanceKm)}
                                     </span>
-
-                                    {job.distanceKm != null && (
-                                      <span className="radar-tag distance-tag" title={`Direct distance: ${job.distanceKm} km`}>
-                                        📍 {formatDistance(job.distanceKm)}
-                                      </span>
-                                    )}
-
-                                    {job.techCorridor && (
-                                      <span className="radar-tag corridor">
-                                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                                          <polygon points="12 2 2 7 12 12 22 7 12 2" />
-                                          <polyline points="2 17 12 22 22 17" />
-                                          <polyline points="2 12 12 17 22 12" />
-                                        </svg>
-                                        {job.locality || job.techCorridor.replace(/_/g, ' ')}
-                                      </span>
-                                    )}
-
-                                    {job.fresherFriendly && (
-                                      <span className="radar-tag fresher">Freshers (0–1y)</span>
-                                    )}
-
-                                    {job.seniority && !job.fresherFriendly && (
-                                      <span className="radar-tag">{job.seniority}</span>
-                                    )}
-
-                                    {job.roleFamily && job.roleFamily !== 'other' && (
-                                      <span className="radar-tag">{job.roleFamily.replace(/_/g, ' ')}</span>
-                                    )}
-                                  </div>
+                                  )}
+                                  {job.fresherFriendly && (
+                                    <span className="discover-tag-chip" style={{ color: 'var(--success)' }}>Freshers (0–1y)</span>
+                                  )}
                                 </div>
                               </div>
 
-                              <div className="radar-card-actions">
-                                <button
-                                  type="button"
-                                  className={`radar-btn-secondary ${isAuthenticated && candidateProfile ? (quickMatch?.overall?.badgeTone || '') : ''}`}
-                                  onClick={() => setEligibilityJob(job)}
-                                  title="View eligibility, skills match and requirements"
-                                >
-                                  <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-                                    <path d="M12 2L14.39 8.26L21 9.27L16.27 13.88L17.82 20.46L12 17.07L6.18 20.46L7.73 13.88L3 9.27L9.61 8.26L12 2Z" />
-                                  </svg>
-                                  <span>{isAuthenticated && candidateProfile && quickMatch ? (quickMatch.overall.isHardBlocker ? 'Auth Blocker' : `${quickMatch.overall.score}% Fit`) : 'Eligibility'}</span>
-                                </button>
+                              {/* Card Footer: Save and Apply actions */}
+                              <div className="discover-card-footer">
+                                <span className="discover-posted-time">
+                                  {job.lastSeenAt ? `Updated ${new Date(job.lastSeenAt).toLocaleDateString([], { month: 'short', day: 'numeric' })}` : 'Live Posting'}
+                                </span>
 
-                                <a
-                                  href={job.applyUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="radar-btn-apply"
-                                  id={`grid-apply-link-${job.sourceJobId || job._id}`}
-                                >
-                                  <span>Apply Direct</span>
-                                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                    <line x1="7" y1="17" x2="17" y2="7" />
-                                    <polyline points="7 7 17 7 17 17" />
-                                  </svg>
-                                </a>
+                                <div className="discover-card-actions">
+                                  <button
+                                    type="button"
+                                    className={`discover-save-btn ${isSaved ? 'is-saved' : ''}`}
+                                    onClick={() => handleToggleSaveJob(jobId)}
+                                    title={isSaved ? 'Remove from saved' : 'Save job'}
+                                  >
+                                    <Bookmark size={13} fill={isSaved ? 'currentColor' : 'none'} />
+                                    <span>{isSaved ? 'Saved' : 'Save'}</span>
+                                  </button>
+
+                                  <a
+                                    href={job.applyUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="discover-apply-btn"
+                                    id={`grid-apply-link-${job.sourceJobId || job._id}`}
+                                  >
+                                    Apply Direct
+                                  </a>
+                                </div>
                               </div>
                             </div>
                           );
@@ -2040,13 +2199,20 @@ export default function App() {
                                         {displayCity}
                                       </span>
                                       {job.distanceKm != null && (
-                                        <span className="table-distance-badge" title={`Approximately ${job.distanceKm} km from your set location`}>
-                                          📍 {formatDistance(job.distanceKm)}
+                                        <span
+                                          className={`table-distance-badge ${job.distanceApproximate ? 'is-approximate' : ''}`}
+                                          title={job.distanceApproximate
+                                            ? `Approximate — this job only lists ${job.city || 'a city'}, measured from the city centre (~${job.distanceKm} km).`
+                                            : `${job.distanceKm} km from your set location`}
+                                        >
+                                          <Navigation size={11} /> {job.distanceApproximate ? '~' : ''}{formatDistance(job.distanceKm)}
                                         </span>
                                       )}
-                                      <span className={`mode-badge ${getWorkModeBadgeClass(job.workMode)}`}>
-                                        {job.workMode}
-                                      </span>
+                                      {job.workMode && !['unknown', 'unspecified'].includes(job.workMode) && (
+                                        <span className={`mode-badge ${getWorkModeBadgeClass(job.workMode)}`}>
+                                          {job.workMode}
+                                        </span>
+                                      )}
                                     </div>
                                   </td>
                                   <td>
@@ -2263,10 +2429,10 @@ export default function App() {
         <JobEligibilityModal
           job={eligibilityJob}
           onClose={() => setEligibilityJob(null)}
-          onAddToPipeline={(j) => {
-            setActiveTab('reachout');
-            setEligibilityJob(null);
-          }}
+          onAddToPipeline={handleAddToPipeline}
+          isInPipeline={Boolean(eligibilityJob && (
+            trackedCompanyIds.has(String(eligibilityJob.companyId || eligibilityJob.company?._id || ''))
+          ))}
           onOpenProfileModal={() => {
             if (!isAuthenticated) {
               openAuthModal('Please sign in or create an account to upload your CV and match your job eligibility.', 'login');

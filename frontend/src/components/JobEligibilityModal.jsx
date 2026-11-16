@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { AlertCircle, Check } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { evaluateCandidateMatch, generateClientEligibility } from '../utils/candidateMatcher';
 import CvTailorSection from './CvTailorSection';
@@ -50,7 +51,7 @@ export default function JobEligibilityModal({
             if (found) setIsStaged(true);
           }
         }
-      } catch (_) {}
+      } catch {}
     };
     checkStagedStatus();
     return () => { isMounted = false; };
@@ -190,6 +191,8 @@ export default function JobEligibilityModal({
       const data = await res.json();
       if (res.ok && data.success) {
         setIsStaged(true);
+        // Let the dashboard refresh its stage counts while it stays mounted.
+        window.dispatchEvent(new Event('jobradar:applications-changed'));
         setStageFeedback({
           type: 'success',
           message: 'Job successfully staged into your Applications pipeline with prefilled ATS blueprint & tailored resume snapshot!'
@@ -892,7 +895,7 @@ export default function JobEligibilityModal({
         {/* Stage Feedback Notification */}
         {stageFeedback && (
           <div className={`modal-stage-feedback-banner ${stageFeedback.type}`}>
-            <span className="feedback-icon">{stageFeedback.type === 'success' ? '✓' : '⚠️'}</span>
+            <span className="feedback-icon">{stageFeedback.type === 'success' ? <Check size={14} /> : <AlertCircle size={14} />}</span>
             <span className="feedback-text">{stageFeedback.message}</span>
             <button
               type="button"

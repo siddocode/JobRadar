@@ -565,209 +565,394 @@ export function searchCuratedPlaces(query, anchorLat, anchorLng) {
   return matches;
 }
 
+// ---------------------------------------------------------------------------
+// Structured suggestions, specificity & ranking
+// ---------------------------------------------------------------------------
+
+const CITY_STATES = {
+  kolkata: 'West Bengal',
+  howrah: 'West Bengal',
+  bengaluru: 'Karnataka',
+  hyderabad: 'Telangana',
+  gurugram: 'Haryana',
+  noida: 'Uttar Pradesh',
+  delhi: 'Delhi',
+  'new delhi': 'Delhi',
+  mumbai: 'Maharashtra',
+  pune: 'Maharashtra',
+  chennai: 'Tamil Nadu'
+};
+
+function normalizeText(value = '') {
+  return String(value).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+function stateForCity(city = '') {
+  return CITY_STATES[normalizeText(city)] || '';
+}
+
 /**
- * Unified Google Maps-like place search:
- * - Prioritizes current GPS / map viewport coordinates
- * - Runs Curated Local, Backend DB Offices, Photon, and Nominatim in parallel
- * - Sorts strictly by relevance and proximity
+ * 0-100 precision score. Buildings/POIs beat streets, which beat localities,
+ * which beat city/region centroids. Used for ranking and map zoom.
  */
-export async function searchPlacesLikeGoogleMaps(searchQuery, anchorLat, anchorLng, abortSignal) {
+function specificityFromPhoton(p = {}) {
+  const key = normalizeText(p.osm_key);
+  const value = normalizeText(p.osm_value);
+  const type = normalizeText(p.type);
+
+  if (['building', 'amenity', 'shop', 'office', 'tourism', 'leisure', 'craft'].includes(key)) return 92;
+  if (type === 'house' || value === 'house') return 92;
+  if (['house', 'building', 'office', 'commercial'].includes(type)) return 92;
+  if (['street', 'road', 'highway', 'footway', 'path'].includes(key) || ['street', 'road'].includes(type)) return 62;
+  if (['suburb', 'neighbourhood', 'quarter', 'locality', 'district', 'hamlet', 'borough'].includes(value)) return 52;
+  if (['suburb', 'neighbourhood', 'quarter', 'locality', 'district', 'city_district'].includes(type)) return 52;
+  if (['city', 'town', 'village', 'municipality'].includes(value) || ['city', 'town', 'village'].includes(type)) return 30;
+  if (['county', 'state', 'region'].includes(value) || ['state', 'county', 'region'].includes(type)) return 12;
+  return 40;
+}
+
+function specificityFromNominatim(item = {}) {
+  const cls = normalizeText(item.class);
+  const type = normalizeText(item.type);
+  const addresstype = normalizeText(item.addresstype);
+  const rank = Number(item.place_rank);
+
+  if (['building', 'amenity', 'office', 'shop', 'tourism', 'leisure', 'craft'].includes(cls)) return 92;
+  if (type === 'house' || addresstype === 'building') return 92;
+  if (['road', 'primary', 'secondary', 'tertiary', 'residential', 'unclassified', 'pedestrian'].includes(type)) return 62;
+  if (
+    ['suburb', 'neighbourhood', 'quarter', 'locality', 'city_district', 'borough'].includes(type) ||
+    ['suburb', 'neighbourhood', 'quarter', 'locality'].includes(addresstype)
+  ) return 52;
+  if (
+    ['city', 'town', 'village', 'municipality'].includes(type) ||
+    ['city', 'town', 'village'].includes(addresstype)
+  ) return 30;
+  if (['state', 'county', 'region'].includes(type) || ['state', 'county', 'region'].includes(addresstype)) return 12;
+  if (Number.isFinite(rank)) {
+    if (rank >= 26) return 60;
+    if (rank >= 22) return 45;
+    if (rank >= 16) return 30;
+  }
+  return 40;
+}
+
+/**
+ * Readable "locality · city · state" subtitle, without repeating the same value.
+ */
+export function formatPlaceSubtitle(place = {}) {
+  const parts = [];
+  for (const raw of [place.locality, place.city, place.state]) {
+    const value = String(raw || '').trim();
+    if (!value) continue;
+    const lower = value.toLowerCase();
+    if (parts.some((existing) => existing.toLowerCase() === lower)) continue;
+    if (parts.some((existing) => existing.toLowerCase().includes(lower) || lower.includes(existing.toLowerCase()))) continue;
+    parts.push(value);
+  }
+  return parts.join(' · ');
+}
+
+/**
+ * Zoom level that matches the precision of a suggestion.
+ */
+export function zoomForPlace(place = {}) {
+  const specificity = Number(place.specificity);
+  if (Number.isFinite(specificity)) {
+    if (specificity >= 80) return 18;
+    if (specificity >= 50) return 16;
+    if (specificity >= 28) return 13;
+    return 11;
+  }
+  return 15;
+}
+
+/**
+ * JSON fetch with a timeout that is linked to the caller's abort signal.
+ * Throws AbortError when the caller aborts and an HTTP error when the provider
+ * rejects the request (status attached for rate-limit detection).
+ */
+async function requestJson(url, { signal, headers, timeoutMs = 2200 } = {}) {
+  const controller = new AbortController();
+  const onParentAbort = () => controller.abort();
+
+  if (signal) {
+    if (signal.aborted) controller.abort();
+    else signal.addEventListener('abort', onParentAbort);
+  }
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const res = await fetch(url, { signal: controller.signal, headers });
+    if (!res.ok) {
+      const error = new Error(`HTTP ${res.status}`);
+      error.status = res.status;
+      throw error;
+    }
+    return await res.json();
+  } finally {
+    clearTimeout(timer);
+    if (signal) signal.removeEventListener('abort', onParentAbort);
+  }
+}
+
+function isSamePlace(a, b) {
+  const distance = calculateDistanceKm(a.lat, a.lng, b.lat, b.lng);
+  if (distance == null) return false;
+  if (distance < 0.03) return true;
+  if (distance >= 0.3) return false;
+
+  const nameA = normalizeText(a.name || a.label);
+  const nameB = normalizeText(b.name || b.label);
+  if (!nameA || !nameB) return false;
+  return nameA === nameB || nameA.includes(nameB) || nameB.includes(nameA);
+}
+
+function scoreSuggestion(item, queryText) {
+  const specificity = Number.isFinite(Number(item.specificity)) ? Number(item.specificity) : 40;
+  const query = normalizeText(queryText);
+  const tokens = query.split(' ').filter((token) => token.length > 1);
+  const haystack = normalizeText(
+    `${item.name || ''} ${item.label || ''} ${item.locality || ''} ${item.city || ''} ${item.fullAddress || ''}`
+  );
+
+  const matched = tokens.filter((token) => haystack.includes(token)).length;
+  const tokenScore = tokens.length ? (matched / tokens.length) * 100 : 0;
+  const exactName = tokens.length && normalizeText(item.name || item.label) === query ? 45 : 0;
+
+  const distance = item.distanceKm;
+  const proximity = distance == null ? 0 : Math.max(0, 100 - distance * 1.5);
+  const sourceBonus = {
+    google_places: 24,
+    local_db: 20,
+    curated_local: 18,
+    photon: 10,
+    osm_nominatim: 8
+  }[item.source] || 0;
+
+  // Searching for a multi-word building while a provider only offers the city
+  // centroid should not win just because it is close.
+  const genericPenalty = specificity < 40 && tokens.length > 1 ? 30 : 0;
+
+  return specificity * 1.4 + tokenScore * 0.9 + exactName + proximity * 0.6 + sourceBonus - genericPenalty;
+}
+
+/**
+ * Detailed place search with structured suggestions and failure telemetry.
+ *
+ * @returns {Promise<{results: Array, degraded: boolean, failures: Array}>}
+ */
+export async function searchPlacesDetailed(searchQuery, anchorLat, anchorLng, abortSignal) {
   if (!searchQuery || searchQuery.trim().length < 2) {
-    return [];
+    return { results: [], degraded: false, failures: [] };
   }
 
-  const { raw, clean, targetCity, cleanWithoutCity } = expandSearchQuery(searchQuery);
+  const { raw, cleanWithoutCity, targetCity } = expandSearchQuery(searchQuery);
+  const effectiveQuery = targetCity ? `${cleanWithoutCity} ${targetCity}`.trim() : raw;
+  const matchText = `${cleanWithoutCity} ${targetCity || ''}`.trim() || raw;
 
-  // 1. Instant Curated Local Landmarks (0ms)
-  const curatedResults = searchCuratedPlaces(raw, anchorLat, anchorLng);
+  const collected = [];
+  const failures = [];
 
-  // Prepare fallback queries
-  const effectiveQuery = targetCity ? clean : raw;
-  const seenCoords = new Set();
-  const allResults = [];
+  const push = (item) => {
+    if (!item) return;
+    const lat = Number(item.lat);
+    const lng = Number(item.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+    if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return;
 
-  // Helper to deduplicate items by coordinate proximity (~100m)
-  const addResult = (item) => {
-    if (!item || item.lat == null || item.lng == null) return;
-    const key = `${item.lat.toFixed(3)},${item.lng.toFixed(3)}`;
-    if (seenCoords.has(key)) return;
-    seenCoords.add(key);
-
-    const dist = anchorLat != null && anchorLng != null
-      ? calculateDistanceKm(anchorLat, anchorLng, item.lat, item.lng)
+    const distance = anchorLat != null && anchorLng != null
+      ? calculateDistanceKm(anchorLat, anchorLng, lat, lng)
       : null;
 
-    allResults.push({
+    collected.push({
       ...item,
-      distanceKm: dist,
-      distanceFormatted: formatDistance(dist)
+      lat,
+      lng,
+      distanceKm: distance,
+      distanceFormatted: formatDistance(distance)
     });
   };
 
-  // Add top curated matches first
-  curatedResults.forEach(addResult);
+  // 1. Curated local hubs & landmarks (instant, no network)
+  const curated = searchCuratedPlaces(raw, anchorLat, anchorLng).map((item) => ({
+    ...item,
+    name: item.label,
+    locality: '',
+    state: stateForCity(item.city),
+    specificity: item.category === 'office' ? 78 : 70,
+    source: 'curated_local'
+  }));
+  curated.forEach(push);
 
-  // 2. Parallel Remote Requests (Backend DB + Photon + Nominatim)
-  const remotePromises = [];
+  const recordFailure = (provider) => (error) => {
+    if (abortSignal?.aborted) throw error;
+    const status = error?.status || 0;
+    failures.push({
+      provider,
+      status,
+      reason: status === 429
+        ? 'rate_limited'
+        : (status === 401 || status === 403)
+          ? 'blocked'
+          : (error?.name === 'AbortError' ? 'timeout' : 'network_error')
+    });
+  };
 
-  // 2a. Backend Database Place Search
-  try {
-    let dbUrl = `/api/directory/places/search?q=${encodeURIComponent(effectiveQuery)}&limit=8`;
-    if (anchorLat != null && anchorLng != null) {
-      dbUrl += `&lat=${anchorLat}&lng=${anchorLng}`;
-    }
-    const dbPromise = fetch(dbUrl, { signal: abortSignal })
-      .then(r => r.ok ? r.json() : { places: [] })
-      .then(d => {
-        if (Array.isArray(d.places)) {
-          d.places.forEach(addResult);
-        }
-      })
-      .catch(() => {});
-    remotePromises.push(dbPromise);
-  } catch (_) {}
+  const tasks = [];
 
-  // 2b. Location-Biased Photon Geocoder
-  try {
-    let photonUrl = `https://photon.komoot.io/api/?q=${encodeURIComponent(effectiveQuery)}&limit=10`;
-    if (anchorLat != null && anchorLng != null) {
-      // Biases results to within range of user's current city/viewport
-      photonUrl += `&lat=${anchorLat}&lon=${anchorLng}&location_bias_scale=0.95`;
-    }
-    const photonPromise = fetch(photonUrl, { signal: abortSignal })
-      .then(r => r.ok ? r.json() : { features: [] })
-      .then(data => {
-        if (data?.features && Array.isArray(data.features)) {
-          data.features.forEach(f => {
-            const coords = f.geometry?.coordinates;
-            if (!coords || coords.length < 2) return;
-            const lng = coords[0];
-            const lat = coords[1];
-
-            const p = f.properties || {};
-            const name = p.name || '';
-            const street = p.street || '';
-            const locality = p.district || p.locality || '';
-            const city = p.city || p.county || p.state || '';
-            const country = p.country || '';
-            // Check if anchor is in India (lat: 6-37.5, lng: 68-98)
-            const isAnchorInIndia = anchorLat != null && anchorLng != null
-              && anchorLat >= 6.0 && anchorLat <= 37.5
-              && anchorLng >= 68.0 && anchorLng <= 98.0;
-
-            // Only filter cross-border results if searching within India and no foreign country mentioned
-            if (isAnchorInIndia && countryCode && countryCode !== 'in' && !raw.toLowerCase().includes(country.toLowerCase())) {
-              return;
-            }
-
-            const isFood = ['restaurant', 'food_court', 'dhaba', 'fast_food', 'cafe', 'bar'].includes(p.osm_value) || p.osm_key === 'amenity';
-            const isOffice = ['company', 'office', 'commercial'].includes(p.osm_value) || p.osm_key === 'office';
-
-            const parts = [name, street, locality, city, country].filter(Boolean);
-            const labelParts = [name, locality || street, city].filter(Boolean);
-            const label = labelParts.slice(0, 3).join(', ') || name;
-
-            addResult({
-              label: label || name,
-              fullAddress: parts.join(', '),
-              city,
-              lat,
-              lng,
-              category: isFood ? 'food' : (isOffice ? 'office' : 'landmark'),
-              source: 'photon'
-            });
+  // 2. Backend: Google Places (when configured) + JobRadar offices/companies
+  let dbUrl = `/api/directory/places/search?q=${encodeURIComponent(effectiveQuery)}&limit=10`;
+  if (anchorLat != null && anchorLng != null) {
+    dbUrl += `&lat=${anchorLat}&lng=${anchorLng}`;
+  }
+  tasks.push(
+    requestJson(dbUrl, { signal: abortSignal, timeoutMs: 2500 })
+      .then((data) => {
+        if (!Array.isArray(data?.places)) return;
+        data.places.forEach((item) => {
+          push({
+            ...item,
+            name: item.name || item.label,
+            locality: item.locality || '',
+            state: item.state || '',
+            specificity: item.specificity ?? (item.category === 'office' ? 85 : 60),
+            source: item.source || 'local_db'
           });
-        }
+        });
       })
-      .catch(() => {});
-    remotePromises.push(photonPromise);
-  } catch (_) {}
+      .catch(recordFailure('local_db'))
+  );
 
-  // 2c. Location-Biased Nominatim Geocoder
-  try {
-    const isAnchorInIndia = anchorLat != null && anchorLng != null
-      && anchorLat >= 6.0 && anchorLat <= 37.5
-      && anchorLng >= 68.0 && anchorLng <= 98.0;
+  // 3. Photon (OSM) building/POI coverage, biased to the user's area
+  let photonUrl = `https://photon.komoot.io/api/?q=${encodeURIComponent(effectiveQuery)}&limit=10&lang=en`;
+  if (anchorLat != null && anchorLng != null) {
+    photonUrl += `&lat=${anchorLat}&lon=${anchorLng}&location_bias_scale=0.95`;
+  }
+  const isAnchorInIndia = anchorLat != null && anchorLng != null
+    && anchorLat >= 6.0 && anchorLat <= 37.5
+    && anchorLng >= 68.0 && anchorLng <= 98.0;
 
-    let nomUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(effectiveQuery)}&limit=8&addressdetails=1`;
-    if (isAnchorInIndia) {
-      nomUrl += '&countrycodes=in';
-    }
-    if (anchorLat != null && anchorLng != null) {
-      const minLon = (anchorLng - 0.75).toFixed(4);
-      const maxLon = (anchorLng + 0.75).toFixed(4);
-      const minLat = (anchorLat - 0.75).toFixed(4);
-      const maxLat = (anchorLat + 0.75).toFixed(4);
-      nomUrl += `&viewbox=${minLon},${maxLat},${maxLon},${minLat}&bounded=0`;
-    }
-    const nomPromise = fetch(nomUrl, {
-      headers: { 'Accept': 'application/json' },
-      signal: abortSignal
+  tasks.push(
+    requestJson(photonUrl, { signal: abortSignal, timeoutMs: 2200 })
+      .then((data) => {
+        if (!Array.isArray(data?.features)) return;
+        data.features.forEach((feature) => {
+          const coords = feature.geometry?.coordinates;
+          if (!coords || coords.length < 2) return;
+
+          const p = feature.properties || {};
+          const country = p.country || '';
+          const countryCode = (p.countrycode || p.iso_a2 || '').toLowerCase();
+          const isIndianResult = countryCode === 'in' || /india|bharat/i.test(country);
+          const queryMentionsCountry = country && raw.toLowerCase().includes(country.toLowerCase());
+          if (isAnchorInIndia && !isIndianResult && !queryMentionsCountry) return;
+
+          const name = p.name || p.street || '';
+          const locality = p.locality || p.district || '';
+          const city = p.city || p.county || '';
+          const state = p.state || '';
+          const isFood = ['restaurant', 'food_court', 'dhaba', 'fast_food', 'cafe', 'bar'].includes(p.osm_value) || p.osm_key === 'amenity';
+          const isOffice = ['company', 'office', 'commercial'].includes(p.osm_value) || p.osm_key === 'office';
+
+          push({
+            label: name || locality || city,
+            name,
+            locality,
+            city,
+            state,
+            fullAddress: [p.name, p.street, p.locality, p.district, p.city, state, country].filter(Boolean).join(', '),
+            lat: coords[1],
+            lng: coords[0],
+            category: isFood ? 'food' : (isOffice ? 'office' : 'landmark'),
+            specificity: specificityFromPhoton(p),
+            source: 'photon'
+          });
+        });
+      })
+      .catch(recordFailure('photon'))
+  );
+
+  // 4. Nominatim (OSM) — strongest building/POI naming in India
+  let nominatimUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(effectiveQuery)}&limit=8&addressdetails=1`;
+  if (isAnchorInIndia) nominatimUrl += '&countrycodes=in';
+  if (anchorLat != null && anchorLng != null) {
+    const minLon = (anchorLng - 0.75).toFixed(4);
+    const maxLon = (anchorLng + 0.75).toFixed(4);
+    const minLat = (anchorLat - 0.75).toFixed(4);
+    const maxLat = (anchorLat + 0.75).toFixed(4);
+    nominatimUrl += `&viewbox=${minLon},${maxLat},${maxLon},${minLat}&bounded=0`;
+  }
+
+  tasks.push(
+    requestJson(nominatimUrl, {
+      signal: abortSignal,
+      headers: { Accept: 'application/json' },
+      timeoutMs: 2200
     })
-      .then(r => r.ok ? r.json() : [])
-      .then(data => {
-        if (Array.isArray(data)) {
-          data.forEach(item => {
-            const lat = parseFloat(item.lat);
-            const lng = parseFloat(item.lon);
-            if (isNaN(lat) || isNaN(lng)) return;
+      .then((data) => {
+        if (!Array.isArray(data)) return;
+        data.forEach((item) => {
+          const lat = parseFloat(item.lat);
+          const lng = parseFloat(item.lon);
+          if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
 
-            const addr = item.address || {};
-            const placeName = addr.amenity || addr.shop || addr.building || addr.tourism || addr.leisure || '';
-            const localPart = addr.suburb || addr.neighbourhood || addr.quarter || addr.road || '';
-            const cityPart = addr.city || addr.town || addr.municipality || addr.state_district || addr.state || '';
+          const addr = item.address || {};
+          const poi = addr.amenity || addr.shop || addr.building || addr.office || addr.tourism || addr.leisure || '';
+          const locality = addr.suburb || addr.neighbourhood || addr.quarter || addr.residential || addr.road || '';
+          const city = addr.city || addr.town || addr.municipality || addr.state_district || '';
+          const state = addr.state || '';
 
-            let label = '';
-            if (placeName && (localPart || cityPart)) {
-              label = `${placeName}, ${localPart || cityPart}`;
-            } else if (localPart && cityPart) {
-              label = `${localPart}, ${cityPart}`;
-            } else {
-              label = item.display_name.split(',').slice(0, 3).join(', ').trim();
-            }
+          const isFood = ['restaurant', 'dhaba', 'fast_food', 'cafe', 'food_court'].includes(item.type);
+          const isOffice = ['office', 'commercial', 'industrial'].includes(item.type) || ['office', 'building'].includes(item.class);
 
-            const isFood = ['restaurant', 'dhaba', 'fast_food', 'cafe', 'food_court'].includes(item.type);
-            const isOffice = ['office', 'commercial', 'industrial'].includes(item.type) || ['office', 'building'].includes(item.class);
-
-            addResult({
-              label,
-              fullAddress: item.display_name,
-              city: cityPart,
-              lat,
-              lng,
-              category: isFood ? 'food' : (isOffice ? 'office' : 'landmark'),
-              source: 'osm_nominatim'
-            });
+          push({
+            label: poi || locality || city || (item.display_name || '').split(',')[0],
+            name: poi || locality || city,
+            locality,
+            city,
+            state,
+            fullAddress: item.display_name || '',
+            lat,
+            lng,
+            category: isFood ? 'food' : (isOffice ? 'office' : 'landmark'),
+            specificity: specificityFromNominatim(item),
+            source: 'osm_nominatim'
           });
-        }
+        });
       })
-      .catch(() => {});
-    remotePromises.push(nomPromise);
-  } catch (_) {}
+      .catch(recordFailure('osm_nominatim'))
+  );
 
-  // Await all remote searches with a tight 1.5s race timeout
-  await Promise.race([
-    Promise.allSettled(remotePromises),
-    new Promise(res => setTimeout(res, 1800))
-  ]);
+  await Promise.allSettled(tasks);
 
-  // 3. Final Google Maps-Style Ranking & Sorting
-  // Heavily reward places closest to current anchor (< 30km), followed by same metro (< 80km)
-  allResults.sort((a, b) => {
-    // If a place has source 'curated_local' with high score and nearby distance, keep at top
-    const aDist = a.distanceKm != null ? a.distanceKm : 99999;
-    const bDist = b.distanceKm != null ? b.distanceKm : 99999;
+  if (abortSignal?.aborted) {
+    throw new DOMException('Search aborted', 'AbortError');
+  }
 
-    // Proximity buckets
-    const aIsNearby = aDist < 40;
-    const bIsNearby = bDist < 40;
+  // Specific places win dedupe ties, then ranking prefers precision over raw proximity.
+  const unique = [];
+  for (const item of [...collected].sort((a, b) => (b.specificity || 0) - (a.specificity || 0))) {
+    if (unique.some((existing) => isSamePlace(existing, item))) continue;
+    unique.push(item);
+  }
 
-    if (aIsNearby && !bIsNearby) return -1;
-    if (!aIsNearby && bIsNearby) return 1;
+  const results = unique
+    .map((item) => ({ ...item, score: scoreSuggestion(item, matchText) }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 15);
 
-    // Within same proximity tier, sort by distance
-    return aDist - bDist;
-  });
+  return {
+    results,
+    degraded: failures.length > 0,
+    failures
+  };
+}
 
-  return allResults.slice(0, 15);
+/**
+ * Backwards-compatible helper that returns only the ranked suggestions.
+ */
+export async function searchPlacesLikeGoogleMaps(searchQuery, anchorLat, anchorLng, abortSignal) {
+  const { results } = await searchPlacesDetailed(searchQuery, anchorLat, anchorLng, abortSignal);
+  return results;
 }

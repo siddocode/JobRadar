@@ -511,7 +511,7 @@ erDiagram
 
 | Method | Endpoint | Auth Required | Description |
 | :--- | :--- | :--- | :--- |
-| `GET` | `/api/jobs` | Optional | Queries jobs with pagination and filters (`q`, `city`, `corridor`, `seniority`, etc.). |
+| `GET` | `/api/jobs` | Optional | Queries jobs with pagination and filters (`q`, `city`, `corridor`, `seniority`, etc.). Proximity accepts `userLat`, `userLng`, `sortBy=distance`, and `maxDistanceKm`. |
 | `GET` | `/api/jobs/cities` | None | Aggregates distinct cities that have active jobs. |
 | `GET` | `/api/jobs/countries` | None | Aggregates distinct countries that have active jobs. |
 | `GET` | `/api/jobs/stats` | None | Aggregates job counts, fresher stats, and latest sync runs. |
@@ -548,6 +548,23 @@ erDiagram
 | `GET` | `/api/directory/places/reverse` | None | Reverse geocodes GPS coordinates to Indian neighborhoods and cities. |
 | `GET` | `/api/directory/uncertain-merges` | None | Retrieves fuzzy company duplicates requiring review. |
 | `POST` | `/api/directory/uncertain-merges/:id/resolve` | None | Merges or dismisses an ambiguous company duplicate record. |
+
+### 8.4 Proximity & Location Semantics
+
+- **GPS is staged, never auto-applied.** `UserLocationModal` keeps a draft (`draftLocation` + `draftRadius`) and only commits to `userLocation` / `maxDistanceKm` when the user presses **Apply**. Cancel, overlay click, and Escape discard the draft.
+- **Live GPS vs. manual.** A freshly detected browser position is kept as `liveGpsPosition` and shown with its accuracy; the committed location carries a source badge so UI copy can distinguish live GPS from a curated hub or map pick.
+- **Best-sample GPS + honest accuracy.** `detectCurrentLocation()` samples `watchPosition` for up to 8 s, groups fixes into a mutually consistent cluster (≤1.5 km spread), discards outlier/cached positions, and keeps the tightest *observed* sample. Early exit only happens once at least two samples agree (≤15 m, or ≤60 m after 3 s); a sample with a missing/invalid accuracy can never displace a measured one. Coordinates are never averaged or synthesised. The permission state from `navigator.permissions.query` is surfaced in the modal.
+- **GPS is cross-checked against the searched building.** When a user has searched a named place and the browser fix is more than 200 m away, the modal flags "Browser GPS looks off", shows the disagreement in km, and offers **Keep searched pin**. This catches desktop/IP-based geolocation that reports a city-level position while claiming high precision.
+- **Coarse fixes are labelled, not disguised.** `frontend/src/utils/locationFixQuality.js` flags city-level accuracy (≥1 km), neighbourhood-level (≥150 m), implausibly precise radii (<2 m), fixes that land exactly on a curated hub centroid, and labels that only exist because the metro table was used. The warning tells the user to drag the pin, click the map, or search their tower; GPS coordinates themselves are never rewritten.
+- **Reverse geocoding keeps building detail.** `GET /api/directory/places/reverse` prefers building/POI/block parts (`composeReverseLabel`) over generic hub names, deduplicates overlapping parts, and marks centroid-only fallbacks with `approximate: true`.
+- **Search is the primary method, GPS the shortcut.** `UserLocationModal` presents a step-1 place search above a step-2 optional GPS button. Searching stages a suggestion in the draft only; Apply is still required. GPS never silently replaces a manual selection, and every path (denied permission, coarse fix, provider outage) leaves search and map pin placement fully usable.
+- **Suggestions are structured and precision-ranked.** `frontend/src/utils/placeSearchService.js` returns `{name, locality, city, state, specificity, source}`. Ranking is `specificity × 1.4 + token match + exact-name bonus + proximity − generic-city penalty`, so a building or POI always outranks a closer city centroid. Results are deduplicated by proximity + normalized name, and exact provider coordinates are preserved (never replaced with a centroid).
+- **Searches are debounced, abortable and sequence-guarded.** A 300 ms debounce aborts the previous request, and a monotonic request id is checked after every await so a slow, older response can never overwrite a newer one. Rate limits, 401/403 blocks, timeouts and empty result sets each surface their own notice, and partial results are labelled as partial. `/api/directory/places/search` enriches Google Places and MongoDB office hits with the same structured fields and sorts precision-first before truncation.
+- **Staged source is explicit.** A staged location carries `source` ∈ `search`, `map_click`, `gps`, `curated` (plus legacy values), shown as a badge: searched location, adjusted on map, live GPS with accuracy, or curated tech hub. Area-level search hits (specificity < 45) show an advisory to pin the exact tower, and **Reset to searched result** restores the exact coordinates the user selected.
+- **Map interaction.** Selecting a suggestion flies the map to `zoomForPlace(specificity)` (building ≈ 18), a draggable pin is always visible, and map clicks reverse-geocode and relabel without re-centering unless the map is zoomed too far out to place a pin. Controls sit bottom-left so Leaflet's zoom and attribution stay clear.
+- **Sorting vs. filtering are separate.** `sortBy=distance` orders results nearest-first. `maxDistanceKm` filters results by radius and must **not** silently change the requested sort order.
+- **Distance math.** `/api/jobs` and `/api/directory/companies` compute great-circle distance with Haversine (Earth radius 6371 km) inside MongoDB aggregation; jobs missing coordinates fall back to a resolved city-centroid, and jobs that resolve to neither are excluded from radius filters and sorted last.
+- **City-centroid distances are labelled, never passed off as exact.** The jobs pipeline tags each distance with `coordSource` (`exact` / `city_centroid` / `unknown`) and returns `distanceApproximate: true` when a job only lists a city (e.g. "Kolkata" → 22.5726, 88.3639). The UI renders these as `~7.6 km away` with a dashed badge and an explanatory tooltip. A user standing in Sector V will still see ~7 km for a city-only ATS posting — that offset belongs to the posting's data, not to the user's pin.
 
 ---
 

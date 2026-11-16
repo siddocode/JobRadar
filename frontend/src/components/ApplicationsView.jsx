@@ -5,13 +5,11 @@ import {
   Plus,
   Clock,
   Building2,
-  MapPin,
   ExternalLink,
   Trash2,
   Edit3,
   Send,
   Download,
-  Eye,
   RefreshCw,
   Mail,
   Sparkles,
@@ -19,36 +17,123 @@ import {
   CheckCircle2,
   AlertCircle,
   HelpCircle,
+  ChevronRight,
   X
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { downloadResumePdf, downloadLatexFile } from '../utils/pdfGenerator';
+import './ApplicationsView.css';
 
 const STAGES = [
-  { key: 'all', label: 'All Stages', color: 'neutral' },
-  { key: 'shortlisted', label: 'Shortlisted', color: 'sand' },
-  { key: 'resume_ready', label: 'Resume Ready', color: 'info' },
-  { key: 'awaiting_approval', label: 'Awaiting Approval', color: 'warning' },
+  { key: 'all', label: 'All', color: 'neutral' },
   { key: 'applied', label: 'Applied', color: 'copper' },
-  { key: 'assessment', label: 'Assessment', color: 'info' },
+  { key: 'awaiting_approval', label: 'Reviewing', color: 'sand' },
   { key: 'interview', label: 'Interview', color: 'forest' },
-  { key: 'offer', label: 'Offer', color: 'success' },
+  { key: 'assessment', label: 'Assessment', color: 'info' },
   { key: 'rejected', label: 'Rejected', color: 'danger' },
+  { key: 'offer', label: 'Offer', color: 'success' },
+  { key: 'shortlisted', label: 'Shortlisted', color: 'neutral' },
+  { key: 'resume_ready', label: 'Resume Ready', color: 'neutral' },
   { key: 'withdrawn', label: 'Withdrawn', color: 'neutral' }
 ];
 
-export default function ApplicationsView({ onNavigateJobs }) {
+// 4 Core funnel steps for the visual progress bar
+const FUNNEL_STEPS = [
+  { id: 'applied', label: 'Applied' },
+  { id: 'reviewing', label: 'Reviewing' },
+  { id: 'interview', label: 'Interview' },
+  { id: 'offer', label: 'Offer' }
+];
+
+// Deterministic monogram and company branding
+function getCompanyBranding(companyName = '') {
+  const name = companyName.trim();
+  const lower = name.toLowerCase();
+
+  if (lower.includes('razorpay')) {
+    return { bg: '#EBF3FC', color: '#0C66E4', monogram: 'R' };
+  }
+  if (lower.includes('swiggy')) {
+    return { bg: '#FFF2E8', color: '#FC8019', monogram: 'S' };
+  }
+  if (lower.includes('cred')) {
+    return { bg: '#1B1C1D', color: '#FFFFFF', monogram: 'C' };
+  }
+  if (lower.includes('groww')) {
+    return { bg: '#E6FAF3', color: '#00D09C', monogram: 'G' };
+  }
+  if (lower.includes('zepto')) {
+    return { bg: '#FDF0F4', color: '#FF3269', monogram: 'Z' };
+  }
+  if (lower.includes('phonepe')) {
+    return { bg: '#F4EEFB', color: '#6739B7', monogram: 'P' };
+  }
+  if (lower.includes('meesho')) {
+    return { bg: '#FDEEF5', color: '#E4287C', monogram: 'M' };
+  }
+  if (lower.includes('zomato')) {
+    return { bg: '#FEECEC', color: '#CB202D', monogram: 'Z' };
+  }
+
+  // Consistent hash for any other company
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const hues = [168, 205, 32, 280, 195, 150];
+  const hue = hues[Math.abs(hash) % hues.length];
+  return {
+    bg: `hsl(${hue}, 40%, 93%)`,
+    color: `hsl(${hue}, 65%, 28%)`,
+    monogram: (name[0] || 'C').toUpperCase()
+  };
+}
+
+// Calculate recruitment step progress
+function calculateProgress(status) {
+  switch (status) {
+    case 'applied':
+      return { fillPercent: 12, completedSteps: ['applied'], currentStep: 'applied' };
+    case 'shortlisted':
+    case 'resume_ready':
+    case 'awaiting_approval':
+      return { fillPercent: 42, completedSteps: ['applied', 'reviewing'], currentStep: 'reviewing' };
+    case 'assessment':
+      return { fillPercent: 50, completedSteps: ['applied', 'reviewing'], currentStep: 'reviewing' };
+    case 'interview':
+      return { fillPercent: 75, completedSteps: ['applied', 'reviewing', 'interview'], currentStep: 'interview' };
+    case 'offer':
+      return { fillPercent: 100, completedSteps: ['applied', 'reviewing', 'interview', 'offer'], currentStep: 'offer' };
+    case 'rejected':
+      return { fillPercent: 20, completedSteps: ['applied'], currentStep: 'rejected' };
+    default:
+      return { fillPercent: 0, completedSteps: [], currentStep: 'applied' };
+  }
+}
+
+export default function ApplicationsView({ onNavigateJobs, initialStage = 'all', focusApplicationId = null, onFocusHandled }) {
   const { authFetch, isAuthenticated, openAuthModal } = useAuth();
   const [applications, setApplications] = useState([]);
   const [stats, setStats] = useState({});
-  const [selectedStage, setSelectedStage] = useState('all');
+  const [selectedStage, setSelectedStage] = useState(initialStage);
   const [searchQuery, setSearchQuery] = useState('');
-  const [viewMode, setViewMode] = useState('kanban'); // 'kanban' | 'table'
+  const [sortBy, setSortBy] = useState('updated'); // 'updated' | 'applied' | 'match'
+  const [viewMode, setViewMode] = useState('list'); // Default to clean 'list' as in visual reference, with 'kanban' toggle
   const [loading, setLoading] = useState(true);
   const [, setError] = useState(null);
 
   // Selected application for detail modal
   const [activeApp, setActiveApp] = useState(null);
+
+  // Deep-link support: open a specific application requested by the dashboard
+  useEffect(() => {
+    if (!focusApplicationId || !applications.length) return;
+    const match = applications.find((a) => a._id === focusApplicationId);
+    if (match) {
+      setActiveApp(match);
+      if (onFocusHandled) onFocusHandled();
+    }
+  }, [focusApplicationId, applications, onFocusHandled]);
   const [editingNotes, setEditingNotes] = useState(false);
   const [notesDraft, setNotesDraft] = useState('');
   const [migrating, setMigrating] = useState(false);
@@ -121,7 +206,7 @@ export default function ApplicationsView({ onNavigateJobs }) {
           setGmailStatus(data);
         }
       }
-    } catch (_) {}
+    } catch {}
   }, [authFetch, isAuthenticated]);
 
   useEffect(() => {
@@ -249,7 +334,6 @@ export default function ApplicationsView({ onNavigateJobs }) {
       if (res.ok && data.success) {
         setIngestFeedback(data);
         fetchApplications();
-        // If an active app matches or is affected, update activeApp with new event timeline
         if (data.linked && data.applicationId) {
           const updatedRes = await authFetch(`/api/applications?q=${encodeURIComponent(data.company || '')}`);
           if (updatedRes.ok) {
@@ -300,17 +384,32 @@ export default function ApplicationsView({ onNavigateJobs }) {
       } else {
         setShowGmailModal(true);
       }
-    } catch (_) {
+    } catch {
       setShowGmailModal(true);
     }
   };
+
+  // Filter & sort applications
+  const filteredApplications = useMemo(() => {
+    let result = [...applications];
+
+    if (sortBy === 'updated') {
+      result.sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
+    } else if (sortBy === 'applied') {
+      result.sort((a, b) => new Date(b.appliedAt || b.createdAt || 0) - new Date(a.appliedAt || a.createdAt || 0));
+    } else if (sortBy === 'match') {
+      result.sort((a, b) => (b.matchScore || 0) - (a.matchScore || 0));
+    }
+
+    return result;
+  }, [applications, sortBy]);
 
   // Group applications by stage for Kanban board
   const kanbanColumns = useMemo(() => {
     const primaryStages = ['shortlisted', 'awaiting_approval', 'applied', 'interview', 'offer', 'rejected'];
     const map = {};
     primaryStages.forEach(s => { map[s] = []; });
-    applications.forEach(app => {
+    filteredApplications.forEach(app => {
       if (map[app.status]) {
         map[app.status].push(app);
       } else {
@@ -319,7 +418,7 @@ export default function ApplicationsView({ onNavigateJobs }) {
       }
     });
     return map;
-  }, [applications]);
+  }, [filteredApplications]);
 
   // Sample templates for testing recruiter emails
   const sampleTemplates = useMemo(() => [
@@ -379,14 +478,17 @@ export default function ApplicationsView({ onNavigateJobs }) {
     );
   }
 
+  // Calculate total count for "All"
+  const totalCount = Object.values(stats).reduce((acc, c) => acc + (typeof c === 'number' ? c : 0), 0) || applications.length;
+
   return (
-    <div className="applications-container">
-      {/* Top Header Bar */}
+    <div className="apps-page">
+      {/* Top Header Bar matching reference: "Application Lifecycle" */}
       <div className="view-header">
         <div>
-          <h1 className="view-title">Application Lifecycle Board</h1>
+          <h1 className="view-title">Application Lifecycle</h1>
           <p className="view-subtitle">
-            Track and manage your engineering applications across all stages of the recruitment funnel.
+            Track and manage your applications across all recruitment stages.
           </p>
         </div>
         <div className="view-header-actions">
@@ -436,8 +538,9 @@ export default function ApplicationsView({ onNavigateJobs }) {
             title="Import existing cold-outreach contacts into this lifecycle board"
           >
             <RefreshCw size={14} className={migrating ? 'spin' : ''} />
-            {migrating ? 'Importing...' : 'Sync Outreach Pipeline'}
+            {migrating ? 'Importing...' : 'Sync Outreach'}
           </button>
+
           <button
             type="button"
             className="btn btn-primary btn-sm"
@@ -448,64 +551,94 @@ export default function ApplicationsView({ onNavigateJobs }) {
         </div>
       </div>
 
-      {/* Filter Ribbon & View Controls */}
-      <div className="applications-controls-bar">
-        <div className="search-input-wrap">
-          <Search size={15} className="search-icon" />
+      {/* 1. Stage Filter Pills Strip (Matching reference: All (12), Applied (3), Reviewing (2), etc.) */}
+      <div className="apps-stage-bar">
+        {STAGES.slice(0, 7).map(stage => {
+          const isActive = selectedStage === stage.key;
+          let count = 0;
+          if (stage.key === 'all') {
+            count = totalCount;
+          } else if (stage.key === 'awaiting_approval') {
+            // Count reviewing / awaiting approval / resume ready
+            count = (stats['awaiting_approval'] || 0) + (stats['resume_ready'] || 0) + (stats['shortlisted'] || 0);
+          } else {
+            count = stats[stage.key] || 0;
+          }
+
+          return (
+            <button
+              key={stage.key}
+              type="button"
+              className={`apps-stage-pill ${isActive ? 'is-active' : ''}`}
+              onClick={() => setSelectedStage(stage.key)}
+            >
+              <span>{stage.label}</span>
+              <span className="apps-stage-count">{count}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* 2. Search & Toolbar Controls (Search input, Sort dropdown, List/Kanban switch) */}
+      <div className="apps-toolbar">
+        <div className="apps-search-wrap">
+          <Search size={15} className="apps-search-icon" />
           <input
             type="text"
-            className="search-input-field"
-            placeholder="Search by role, company, or notes..."
+            className="apps-search-input"
+            placeholder="Search by company, role or stage..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
 
-        <div className="stage-filter-pills">
-          {STAGES.slice(0, 7).map(stage => (
-            <button
-              key={stage.key}
-              type="button"
-              className={`stage-filter-pill ${selectedStage === stage.key ? 'active' : ''}`}
-              onClick={() => setSelectedStage(stage.key)}
-            >
-              {stage.label}
-              {stats[stage.key] !== undefined && (
-                <span className="stage-pill-count">{stats[stage.key]}</span>
-              )}
-            </button>
-          ))}
-        </div>
+        <div className="apps-actions-wrap">
+          <select
+            className="apps-sort-select"
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value)}
+          >
+            <option value="updated">Last Updated</option>
+            <option value="applied">Applied Date</option>
+            <option value="match">Match Score</option>
+          </select>
 
-        <div className="view-toggle-btns">
-          <button
-            type="button"
-            className={`view-toggle-btn ${viewMode === 'kanban' ? 'active' : ''}`}
-            onClick={() => setViewMode('kanban')}
-          >
-            Kanban
-          </button>
-          <button
-            type="button"
-            className={`view-toggle-btn ${viewMode === 'table' ? 'active' : ''}`}
-            onClick={() => setViewMode('table')}
-          >
-            List
-          </button>
+          <div className="apps-view-toggle">
+            <button
+              type="button"
+              className={`apps-view-btn ${viewMode === 'list' ? 'is-active' : ''}`}
+              onClick={() => setViewMode('list')}
+              title="List View with Progress Track"
+            >
+              List
+            </button>
+            <button
+              type="button"
+              className={`apps-view-btn ${viewMode === 'kanban' ? 'is-active' : ''}`}
+              onClick={() => setViewMode('kanban')}
+              title="Kanban Board View"
+            >
+              Kanban
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Main View Area */}
+      {/* Main Applications Content */}
       {loading ? (
         <div className="loading-state-box">
           <RefreshCw size={24} className="spin text-copper" />
           <p>Loading application pipeline...</p>
         </div>
-      ) : applications.length === 0 ? (
+      ) : filteredApplications.length === 0 ? (
         <div className="empty-state-large">
           <Layers size={48} className="text-muted opacity-40" />
           <h3>No applications found</h3>
-          <p>Discover tech jobs from direct ATS boards and stage them here to track your progress.</p>
+          <p>
+            {selectedStage !== 'all'
+              ? `No applications currently in the "${STAGES.find(s => s.key === selectedStage)?.label}" stage.`
+              : 'Discover tech jobs from direct ATS boards and stage them here to track your progress.'}
+          </p>
           <button
             type="button"
             className="btn btn-primary btn-md"
@@ -514,166 +647,191 @@ export default function ApplicationsView({ onNavigateJobs }) {
             Discover Jobs Now
           </button>
         </div>
-      ) : viewMode === 'kanban' ? (
-        /* Kanban Columns View */
-        <div className="kanban-grid">
-          {Object.entries(kanbanColumns).map(([stageKey, items]) => {
-            const stageMeta = STAGES.find(s => s.key === stageKey) || { label: stageKey, color: 'neutral' };
+      ) : viewMode === 'list' ? (
+        /* List View: Matching Visual Reference Card Rows */
+        <div className="apps-list">
+          {filteredApplications.map(app => {
+            const branding = getCompanyBranding(app.companyName);
+            const progress = calculateProgress(app.status);
+            const appliedDate = app.appliedAt || app.createdAt;
+            const timeAgo = appliedDate
+              ? new Date(appliedDate).toLocaleDateString([], { month: 'short', day: 'numeric' })
+              : 'Recent';
+
             return (
-              <div key={stageKey} className="kanban-column">
-                <div className="kanban-column-header">
-                  <span className={`stage-indicator-dot dot-${stageMeta.color}`} />
-                  <span className="kanban-column-title">{stageMeta.label}</span>
-                  <span className="kanban-column-count">{items.length}</span>
-                </div>
-                <div className="kanban-cards-list">
-                  {items.map(app => (
-                    <div
-                      key={app._id}
-                      className="kanban-card"
-                      onClick={() => {
-                        setActiveApp(app);
-                        setNotesDraft(app.notes || '');
-                        setEditingNotes(false);
-                      }}
-                    >
-                      <div className="kanban-card-top">
-                        <span className="kanban-card-company">{app.companyName}</span>
-                        {app.matchScore && (
-                          <span className="match-tag-micro">{app.matchScore}%</span>
-                        )}
-                      </div>
-                      <h4 className="kanban-card-role">{app.jobTitle}</h4>
-                      <div className="kanban-card-meta">
-                        <span className="kanban-meta-item">
-                          <MapPin size={11} /> {app.location || 'India'}
-                        </span>
-                        {app.appliedAt && (
-                          <span className="kanban-meta-item">
-                            <Clock size={11} /> {new Date(app.appliedAt).toLocaleDateString()}
-                          </span>
-                        )}
-                        {app.events && app.events.length > 0 && (
-                          <span className="kanban-meta-item text-forest" title="Timeline events recorded">
-                            • {app.events.length} event{app.events.length > 1 ? 's' : ''}
-                          </span>
-                        )}
-                      </div>
-                      <div className="kanban-card-footer">
-                        <select
-                          className="kanban-stage-select"
-                          value={app.status}
-                          onClick={(e) => e.stopPropagation()}
-                          onChange={(e) => handleUpdateStatus(app._id, e.target.value)}
-                        >
-                          {STAGES.filter(s => s.key !== 'all').map(st => (
-                            <option key={st.key} value={st.key}>{st.label}</option>
-                          ))}
-                        </select>
-                      </div>
+              <div
+                key={app._id}
+                className="apps-card-row"
+                onClick={() => {
+                  setActiveApp(app);
+                  setNotesDraft(app.notes || '');
+                  setEditingNotes(false);
+                }}
+              >
+                {/* Left: Monogram, Company, Role, Date */}
+                <div className="apps-row-left">
+                  <div
+                    className="apps-monogram"
+                    style={{ backgroundColor: branding.bg, color: branding.color }}
+                  >
+                    {branding.monogram}
+                  </div>
+                  <div className="apps-title-col">
+                    <div className="apps-title-line">
+                      <span className="apps-company-name">{app.companyName}</span>
+                      <span className="apps-role-title">{app.jobTitle}</span>
                     </div>
-                  ))}
-                  {items.length === 0 && (
-                    <div className="kanban-column-empty">No applications</div>
-                  )}
+                    <span className="text-xs text-muted">
+                      {app.location || 'India'} • {timeAgo}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Center: 4-Step Recruitment Progress Bar */}
+                <div className="apps-progress-track-wrap" onClick={(e) => e.stopPropagation()}>
+                  <div className="apps-progress-bar">
+                    <div className="apps-progress-line-bg" />
+                    <div
+                      className="apps-progress-line-fill"
+                      style={{ width: `${progress.fillPercent}%` }}
+                    />
+                    {FUNNEL_STEPS.map(step => {
+                      const isCompleted = progress.completedSteps.includes(step.id);
+                      const isActive = progress.currentStep === step.id;
+
+                      return (
+                        <div
+                          key={step.id}
+                          className={`apps-step-node ${isCompleted ? 'completed' : ''} ${isActive ? 'active' : ''}`}
+                        >
+                          <div className="apps-step-circle" />
+                          <span className="apps-step-label">{step.label}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Right: Stage Badge & Quick Actions */}
+                <div className="apps-row-right" onClick={(e) => e.stopPropagation()}>
+                  <span className={`apps-status-badge ${app.status}`}>
+                    ● {app.status.replace('_', ' ')}
+                  </span>
+
+                  <button
+                    type="button"
+                    className="icon-btn-subtle"
+                    title="View details & timeline"
+                    onClick={() => {
+                      setActiveApp(app);
+                      setNotesDraft(app.notes || '');
+                      setEditingNotes(false);
+                    }}
+                  >
+                    <ChevronRight size={16} />
+                  </button>
                 </div>
               </div>
             );
           })}
         </div>
       ) : (
-        /* Table List View */
-        <div className="app-table-container">
-          <table className="app-table">
-            <thead>
-              <tr>
-                <th>Job Title & Role</th>
-                <th>Company</th>
-                <th>Location</th>
-                <th>Stage</th>
-                <th>Match</th>
-                <th>Events</th>
-                <th>Updated</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {applications.map(app => (
-                <tr
-                  key={app._id}
-                  onClick={() => {
-                    setActiveApp(app);
-                    setNotesDraft(app.notes || '');
-                    setEditingNotes(false);
-                  }}
-                >
-                  <td className="font-semibold text-forest">{app.jobTitle}</td>
-                  <td>
-                    <span className="flex-inline-gap">
-                      <Building2 size={13} className="text-muted" /> {app.companyName}
-                    </span>
-                  </td>
-                  <td>{app.location || 'India'}</td>
-                  <td>
-                    <span className={`status-pill status-${app.status}`}>
-                      {app.status.replace('_', ' ')}
-                    </span>
-                  </td>
-                  <td>
-                    {app.matchScore ? `${app.matchScore}%` : '—'}
-                  </td>
-                  <td>
-                    <span className="text-xs text-muted">
-                      {app.events?.length || 0}
-                    </span>
-                  </td>
-                  <td className="text-muted">
-                    {new Date(app.updatedAt).toLocaleDateString()}
-                  </td>
-                  <td onClick={(e) => e.stopPropagation()}>
-                    <button
-                      type="button"
-                      className="icon-btn-subtle"
-                      title="View Details"
-                      onClick={() => {
-                        setActiveApp(app);
-                        setNotesDraft(app.notes || '');
-                        setEditingNotes(false);
-                      }}
-                    >
-                      <Eye size={15} />
-                    </button>
-                    {app.applyUrl && (
-                      <a
-                        href={app.applyUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="icon-btn-subtle"
-                        title="Open Job Posting"
+        /* Kanban Columns View */
+        <div className="apps-kanban-board">
+          {Object.entries(kanbanColumns).map(([stageKey, items]) => {
+            const stageMeta = STAGES.find(s => s.key === stageKey) || { label: stageKey, color: 'neutral' };
+            return (
+              <div key={stageKey} className="apps-kanban-col">
+                <div className="apps-kanban-header">
+                  <div className="flex-inline-gap" style={{ alignItems: 'center' }}>
+                    <span className={`stage-indicator-dot dot-${stageMeta.color}`} />
+                    <span className="apps-kanban-title">{stageMeta.label}</span>
+                  </div>
+                  <span className="apps-stage-count">{items.length}</span>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {items.map(app => {
+                    const branding = getCompanyBranding(app.companyName);
+                    return (
+                      <div
+                        key={app._id}
+                        className="apps-kanban-card"
+                        onClick={() => {
+                          setActiveApp(app);
+                          setNotesDraft(app.notes || '');
+                          setEditingNotes(false);
+                        }}
                       >
-                        <ExternalLink size={15} />
-                      </a>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                        <div className="flex-between">
+                          <div className="flex-inline-gap" style={{ alignItems: 'center' }}>
+                            <div
+                              className="apps-monogram"
+                              style={{
+                                width: '24px',
+                                height: '24px',
+                                fontSize: '11px',
+                                borderRadius: '6px',
+                                backgroundColor: branding.bg,
+                                color: branding.color
+                              }}
+                            >
+                              {branding.monogram}
+                            </div>
+                            <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                              {app.companyName}
+                            </span>
+                          </div>
+                          {app.matchScore && (
+                            <span className="match-tag-micro">{app.matchScore}%</span>
+                          )}
+                        </div>
+
+                        <h4 style={{ margin: 0, fontSize: '13.5px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                          {app.jobTitle}
+                        </h4>
+
+                        <div className="flex-between" style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                          <span>{app.location || 'India'}</span>
+                          <span>{new Date(app.updatedAt || app.createdAt).toLocaleDateString()}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {items.length === 0 && (
+                    <div style={{ padding: '16px', textAlign: 'center', fontSize: '12px', color: 'var(--text-muted)', border: '1px dashed var(--border-subtle)', borderRadius: '8px' }}>
+                      No applications
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
 
-      {/* Application Detail Modal / Drawer */}
+      {/* Application Detail Modal / Notes Drawer */}
       {activeApp && (
         <div className="modal-backdrop" onClick={() => setActiveApp(null)}>
           <div className="modal-card modal-md" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <div>
-                <span className="modal-eyebrow">Application Details</span>
-                <h2 className="modal-title">{activeApp.jobTitle}</h2>
-                <span className="modal-subtitle">
-                  <Building2 size={14} /> {activeApp.companyName}
-                  {activeApp.location && ` • ${activeApp.location}`}
-                </span>
+              <div className="flex-inline-gap" style={{ alignItems: 'center', gap: '12px' }}>
+                <div
+                  className="apps-monogram"
+                  style={{
+                    backgroundColor: getCompanyBranding(activeApp.companyName).bg,
+                    color: getCompanyBranding(activeApp.companyName).color
+                  }}
+                >
+                  {getCompanyBranding(activeApp.companyName).monogram}
+                </div>
+                <div>
+                  <span className="modal-eyebrow">Application Lifecycle Record</span>
+                  <h2 className="modal-title">{activeApp.jobTitle}</h2>
+                  <span className="modal-subtitle">
+                    <Building2 size={13} /> {activeApp.companyName}
+                    {activeApp.location && ` • ${activeApp.location}`}
+                  </span>
+                </div>
               </div>
               <button
                 type="button"
@@ -685,9 +843,9 @@ export default function ApplicationsView({ onNavigateJobs }) {
             </div>
 
             <div className="modal-body">
-              {/* Stage Progression Bar */}
+              {/* Stage Progression Buttons */}
               <div className="app-detail-section">
-                <label className="section-label">Lifecycle Stage</label>
+                <label className="section-label">Advance Lifecycle Stage</label>
                 <div className="stage-selector-grid">
                   {STAGES.filter(s => s.key !== 'all').map(stage => (
                     <button
@@ -702,16 +860,16 @@ export default function ApplicationsView({ onNavigateJobs }) {
                 </div>
               </div>
 
-              {/* Tailored Resume Snapshot (if available) */}
+              {/* Submitted Resume Snapshot */}
               {activeApp.tailoredResumeSnapshot && (
                 <div className="app-detail-section">
-                  <label className="section-label">Submitted Resume Snapshot</label>
+                  <label className="section-label">Tailored Resume Snapshot</label>
                   <div className="resume-snapshot-box">
                     <div>
                       <span className="font-semibold text-forest">
                         {activeApp.tailoredResumeSnapshot.name || 'Candidate Resume'}
                       </span>
-                      <p className="text-muted text-xs">
+                      <p className="text-muted text-xs" style={{ margin: '2px 0 0 0' }}>
                         Single-column ATS LaTeX format tailored specifically for {activeApp.companyName}.
                       </p>
                     </div>
@@ -735,10 +893,10 @@ export default function ApplicationsView({ onNavigateJobs }) {
                 </div>
               )}
 
-              {/* Notes & Follow-up Log */}
+              {/* Private Notes */}
               <div className="app-detail-section">
                 <div className="flex-between">
-                  <label className="section-label">Private Notes & Follow-up History</label>
+                  <label className="section-label">Private Notes & Recruiter Contacts</label>
                   {!editingNotes && (
                     <button
                       type="button"
@@ -803,7 +961,7 @@ export default function ApplicationsView({ onNavigateJobs }) {
                       setShowIngestModal(true);
                     }}
                   >
-                    <Mail size={12} /> Test Recruiter Email for this Role
+                    <Mail size={12} /> Simulate Recruiter Email
                   </button>
                 </div>
 
@@ -892,7 +1050,7 @@ export default function ApplicationsView({ onNavigateJobs }) {
                 <span className="modal-eyebrow">Inbound Recruiter Tracking Engine</span>
                 <h2 className="modal-title">Track & Ingest Recruiter Email</h2>
                 <span className="modal-subtitle">
-                  Classifies responses into lifecycle stages (Interview, Assessment, Offer, Rejection) and records timeline events in real-time.
+                  Classifies responses into lifecycle stages and records timeline events in real-time.
                 </span>
               </div>
               <button
@@ -938,8 +1096,8 @@ export default function ApplicationsView({ onNavigateJobs }) {
                   <label className="section-label">Sender Email (From):</label>
                   <input
                     type="text"
-                    className="search-input-field"
-                    style={{ width: '100%', padding: '8px 12px' }}
+                    className="apps-search-input"
+                    style={{ height: '36px' }}
                     placeholder="e.g. recruiter@swiggy.in or hr@razorpay.com"
                     value={ingestDraft.from}
                     onChange={(e) => setIngestDraft(prev => ({ ...prev, from: e.target.value }))}
@@ -950,8 +1108,8 @@ export default function ApplicationsView({ onNavigateJobs }) {
                   <label className="section-label">Subject Line:</label>
                   <input
                     type="text"
-                    className="search-input-field"
-                    style={{ width: '100%', padding: '8px 12px' }}
+                    className="apps-search-input"
+                    style={{ height: '36px' }}
                     placeholder="e.g. Invitation to Interview with Engineering Team"
                     value={ingestDraft.subject}
                     onChange={(e) => setIngestDraft(prev => ({ ...prev, subject: e.target.value }))}

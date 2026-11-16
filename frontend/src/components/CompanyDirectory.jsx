@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { Building2, CheckCircle2, MapPin, Zap, Plus } from 'lucide-react';
+import { getShortLocationLabel } from '../utils/resolveLocationName';
 import CompanyCard from './CompanyCard';
 import PersonalizeModal from './PersonalizeModal';
 import DiscoveredPlacesMap from './DiscoveredPlacesMap';
@@ -6,6 +8,7 @@ import ClassyDropdown from './ClassyDropdown';
 import { useAuth } from '../context/AuthContext';
 import { useLocation, formatDistance, calculateDistanceKm } from '../context/LocationContext';
 import { useModalScrollLock } from '../utils/useModalScrollLock';
+import './CompanyDirectory.css';
 
 const AVAILABLE_INDIAN_HUBS = [
   { slug: 'kolkata', name: 'Kolkata', state: 'West Bengal', tier: 1 },
@@ -52,13 +55,15 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
   const [error, setError] = useState(null);
 
   // Auth & Personalize modal
-  const { authFetch } = useAuth();
+  const { authFetch, isAuthenticated, openAuthModal } = useAuth();
   const {
     userLocation,
     sortByDistance,
     setSortByDistance,
     openLocationModal,
-    maxDistanceKm
+    maxDistanceKm,
+    setMaxDistanceKm,
+    clearUserLocation
   } = useLocation();
   const [personalizeCompany, setPersonalizeCompany] = useState(null);
 
@@ -144,7 +149,7 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
 
   const cleanPhoneForTel = (rawPhone) => {
     if (!rawPhone) return '';
-    return rawPhone.replace(/^[:\s-]+/, '').split(/[\/,|]/)[0].replace(/Fax:.*/i, '').trim();
+    return rawPhone.replace(/^[:\s-]+/, '').split(/[/,|]/)[0].replace(/Fax:.*/i, '').trim();
   };
 
   const groupedDirectoryCities = useMemo(() => {
@@ -299,7 +304,7 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
     } finally {
       setLoading(false);
     }
-  }, [selectedCity, hiringFilter, searchQuery, techOnly, page, userLocation, sortByDistance, maxDistanceKm]);
+  }, [selectedCity, hiringFilter, searchQuery, techOnly, page, userLocation, sortByDistance, maxDistanceKm, authFetch]);
 
   useEffect(() => {
     fetchAggregateMetrics();
@@ -332,7 +337,7 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
             if (onRefreshMeta) onRefreshMeta();
           }
         }
-      } catch (_) {
+      } catch {
         clearInterval(interval);
         setIsScanning(false);
       }
@@ -370,7 +375,7 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
             pollDiscoveryStatus('osm');
           }
         }
-      } catch (_) {}
+      } catch {}
     }
     checkActiveScan();
   }, [pollDiscoveryStatus]);
@@ -382,7 +387,7 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
       setScanStatus({ isRunning: true, citySlug: discoveryCitySlug, error: null, lastSummary: null });
 
       if (scannerEngine === 'google_places') {
-        const res = await fetch('/api/directory/scan-google-places', {
+        const res = await authFetch('/api/directory/scan-google-places', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -399,7 +404,7 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
           setScanStatus({ isRunning: false, error: data.error || data.message || 'Failed to start Google Places scan' });
         }
       } else {
-        const res = await fetch('/api/directory/discover-city', {
+        const res = await authFetch('/api/directory/discover-city', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ citySlug: discoveryCitySlug, forceRefresh })
@@ -442,7 +447,7 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
     try {
       setIsAddingCompany(true);
       setAddError(null);
-      const res = await fetch('/api/directory/companies', {
+      const res = await authFetch('/api/directory/companies', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -491,10 +496,15 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
     setHiringFilter('all');
     setSearchQuery('');
     setTechOnly(true);
+    setSortByDistance(false);
+    setMaxDistanceKm(null);
+    clearUserLocation();
     setPage(1);
   };
 
-  const hasActiveFilters = selectedCity !== 'all' || hiringFilter !== 'all' || searchQuery.trim() !== '' || !techOnly;
+  const hasActiveFilters = selectedCity !== 'all' || hiringFilter !== 'all'
+    || searchQuery.trim() !== '' || !techOnly
+    || Boolean(userLocation) || sortByDistance || maxDistanceKm != null;
 
   // Memoize and sort discovered preview places nearest-to-farthest if user location is set
   const sortedDiscoveredPreview = useMemo(() => {
@@ -511,51 +521,51 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
   }, [scanStatus?.discoveredPreview, userLocation]);
 
   return (
-    <div className="directory-view-container">
-      {/* Dynamic Metrics Cards Banner */}
-      <section className="directory-metrics-grid" aria-label="Directory Overview">
-        <div className="metric-card card-blue">
-          <div className="metric-icon-wrapper icon-blue">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <rect x="4" y="2" width="16" height="20" rx="2" ry="2" />
-              <path d="M9 22v-4h6v4M8 6h.01M16 6h.01M12 6h.01M12 10h.01M12 14h.01M16 10h.01M16 14h.01M8 10h.01M8 14h.01" />
-            </svg>
+    <div className="directory-page-wrap">
+      {/* Header matching visual reference: "Company Directory & Hubs" */}
+      <div className="view-header">
+        <div>
+          <h1 className="view-title">Company Directory & Hubs</h1>
+          <p className="view-subtitle">
+            Verified employers, detected ATS portals, and physical office hubs.
+          </p>
+        </div>
+      </div>
+
+      {/* 3 Refined Stat Cards */}
+      <section className="directory-stats-ribbon" aria-label="Directory Overview">
+        <div className="directory-stat-card">
+          <div className="directory-stat-icon-wrap">
+            <Building2 size={20} />
           </div>
-          <div className="metric-content">
-            <span className="metric-number">{Number(aggregateStats.total || totalCount || 0).toLocaleString()}</span>
-            <span className="metric-label">Companies</span>
+          <div className="directory-stat-info">
+            <span className="directory-stat-val">{Number(aggregateStats.total || totalCount || 0).toLocaleString()}</span>
+            <span className="directory-stat-lbl">Companies</span>
           </div>
         </div>
 
-        <div className="metric-card card-green">
-          <div className="metric-icon-wrapper icon-green">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" />
-              <circle cx="9" cy="7" r="4" />
-              <path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" />
-            </svg>
+        <div className="directory-stat-card is-hiring">
+          <div className="directory-stat-icon-wrap">
+            <CheckCircle2 size={20} />
           </div>
-          <div className="metric-content">
-            <span className="metric-number text-green">{Number(aggregateStats.hiring || 0).toLocaleString()}</span>
-            <span className="metric-label text-green">Hiring now</span>
+          <div className="directory-stat-info">
+            <span className="directory-stat-val text-green">{Number(aggregateStats.hiring || 0).toLocaleString()}</span>
+            <span className="directory-stat-lbl text-green">Hiring Now</span>
           </div>
         </div>
 
-        <div className="metric-card card-purple">
-          <div className="metric-icon-wrapper icon-purple">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" />
-              <circle cx="12" cy="10" r="3" />
-            </svg>
+        <div className="directory-stat-card is-offices">
+          <div className="directory-stat-icon-wrap">
+            <MapPin size={20} />
           </div>
-          <div className="metric-content">
-            <span className="metric-number">{Number(aggregateStats.offices || totalCount || 0).toLocaleString()}</span>
-            <span className="metric-label">Verified offices</span>
+          <div className="directory-stat-info">
+            <span className="directory-stat-val">{Number(aggregateStats.offices || totalCount || 0).toLocaleString()}</span>
+            <span className="directory-stat-lbl">Verified Offices</span>
           </div>
         </div>
       </section>
 
-      {/* Directory Filter Bar */}
+      {/* Directory Filter Bar & Toolbar */}
       <div className="directory-filter-bar">
         <div className="filter-row-primary">
           {/* Search box */}
@@ -633,8 +643,8 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
               {isScanning
                 ? 'Scanning in Progress...'
                 : selectedCity !== 'all' 
-                ? `Scan ${cities.find(c => c.slug === selectedCity)?.name || selectedCity} (Google / Map)` 
-                : 'Map-Wise Places Scanner'}
+                ? `Scan ${cities.find(c => c.slug === selectedCity)?.name || selectedCity}` 
+                : 'Map-Wise Places'}
             </span>
           </button>
 
@@ -645,22 +655,26 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
             onClick={() => setShowAtsModal(true)}
             title="Automatically detect and verify ATS provider for any company career portal"
           >
-            <span className="osm-scan-icon">⚡</span>
+            <Zap size={14} className="osm-scan-icon" />
             <span className="osm-scan-text">Detect ATS</span>
           </button>
 
-          {/* Quick Add Company Button - Preserved for upcoming Admin portal (hidden for general users to prevent spam) */}
-          {/*
+          {/* Add Company Trigger */}
           <button
-            className="quick-add-company-btn"
-            onClick={() => handleOpenAddModal(searchQuery)}
-            title="Add a company or startup directly"
+            className="osm-scan-trigger-btn"
+            onClick={() => {
+              if (!isAuthenticated) {
+                openAuthModal('Sign in to add a company to the verified directory.', 'login');
+                return;
+              }
+              handleOpenAddModal(searchQuery.trim());
+            }}
+            title="Add a missing company to the verified directory"
             id="open-add-company-btn"
           >
-            <span className="add-icon">+</span>
-            <span className="add-text">Add Company</span>
+            <Plus size={14} className="osm-scan-icon" />
+            <span className="osm-scan-text">Add Company</span>
           </button>
-          */}
         </div>
 
         {/* Secondary Filter Row: Hiring Status Tabs & Tech Checkbox */}
@@ -709,8 +723,8 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
               </svg>
               <span className="proximity-btn-text">
                 {userLocation
-                  ? (sortByDistance ? `Nearest: ${userLocation.label?.split(',')[0]}` : 'Sort by Distance')
-                  : '📍 Set Location'}
+                  ? (sortByDistance ? `Nearest: ${getShortLocationLabel(userLocation)}` : 'Sort by Distance')
+                  : 'Set Location'}
               </span>
               {userLocation && (
                 <span
@@ -1071,7 +1085,7 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
                                         className="place-distance-tag"
                                         title={`Approximately ${previewDist} km from your set location`}
                                       >
-                                        📍 {formatDistance(previewDist)}
+                                        {formatDistance(previewDist)}
                                       </span>
                                     )}
                                     {place.category && (
@@ -1747,7 +1761,7 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
           <div className="discovery-modal-card" style={{ maxWidth: '540px' }} onClick={(e) => e.stopPropagation()}>
             <div className="discovery-modal-header">
               <div className="header-badge-title-group">
-                <span className="discovery-engine-badge">⚡ Real-Time ATS Sniffer</span>
+                <span className="discovery-engine-badge"><Zap size={13} style={{ display: 'inline-block', verticalAlign: '-1px', marginRight: '4px' }} />Real-Time ATS Sniffer</span>
                 <h3 className="discovery-modal-title">Detect Company ATS Provider</h3>
                 <p className="discovery-modal-subtitle">
                   Inspects company websites and career portals to identify and verify public ATS feeds (Greenhouse, Lever, Ashby, Workable, Recruitee, SmartRecruiters).

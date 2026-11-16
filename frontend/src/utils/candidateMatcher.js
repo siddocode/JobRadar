@@ -473,7 +473,7 @@ export function generateClientEligibility(job) {
       canIndiansApply: true,
       badgeText: 'Direct India Opening',
       badgeTone: 'success',
-      badgeIcon: '🇮🇳',
+      badgeIcon: 'india',
       verdictTitle: '100% Eligible: Direct India Entity Hire',
       explanation: `Officially based at ${company}'s India office (${city || rawLoc || 'India'}). Indian residents are fully eligible with local payroll and benefits.`
     };
@@ -503,7 +503,7 @@ export function generateClientEligibility(job) {
       canIndiansApply: true,
       badgeText: 'Location Specific',
       badgeTone: 'info',
-      badgeIcon: 'ℹ️',
+      badgeIcon: 'info',
       verdictTitle: 'Check ATS Requirements',
       explanation: `Check official ${company} ATS listing for location-specific work permit prerequisites.`
     };

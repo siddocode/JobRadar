@@ -474,6 +474,10 @@ exports.saveCandidateProfile = async (req, res) => {
       { new: true }
     ).select('email name isVerified createdAt candidateProfile');
 
+    if (!updatedUser) {
+      return res.status(404).json({ success: false, error: 'User account not found' });
+    }
+
     return res.status(200).json({
       success: true,
       message: 'Candidate profile saved successfully',

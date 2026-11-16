@@ -373,7 +373,7 @@ exports.getGmailAuthUrl = (req, res) => {
  * GET /api/applications/gmail/callback?code=...&state=...
  */
 exports.handleGmailCallback = async (req, res) => {
-  const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+  const clientUrl = process.env.CLIENT_URL || process.env.APP_URL || 'http://localhost:5173';
   try {
     const { code, state, error } = req.query;
 

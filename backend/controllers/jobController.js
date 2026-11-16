@@ -169,17 +169,23 @@ async function getJobs(req, res) {
     // Proximity parameters
     const numUserLat = userLat != null && userLat !== '' ? parseFloat(userLat) : null;
     const numUserLng = userLng != null && userLng !== '' ? parseFloat(userLng) : null;
-    const hasUserLocation = numUserLat != null && numUserLng != null && !isNaN(numUserLat) && !isNaN(numUserLng);
-    const maxDist = maxDistanceKm ? parseFloat(maxDistanceKm) : null;
-    const isSortByDistance = hasUserLocation && (sortBy === 'distance' || maxDist != null);
+    const validLat = numUserLat != null && numUserLat >= -90 && numUserLat <= 90;
+    const validLng = numUserLng != null && numUserLng >= -180 && numUserLng <= 180;
+    const hasUserLocation = validLat && validLng;
+    const maxDist = maxDistanceKm != null && maxDistanceKm !== '' && !isNaN(parseFloat(maxDistanceKm))
+      ? parseFloat(maxDistanceKm)
+      : null;
+    // A radius filters results; it does not override the explicit sort choice.
+    const useProximity = hasUserLocation && (sortBy === 'distance' || maxDist != null);
+    const isSortByDistance = hasUserLocation && sortBy === 'distance';
 
     let jobs = [];
     let totalCount = 0;
     let openCount = 0;
     let totalInDb = 0;
 
-    if (isSortByDistance) {
-      // High-speed database-level proximity aggregation across all matching jobs
+    if (useProximity) {
+      // Database-level Haversine aggregation across all matching jobs
       const proximityPipeline = [
         { $match: filter },
         {
@@ -239,42 +245,120 @@ async function getJobs(req, res) {
                   }
                 }
               ]
+            },
+            // Whether the distance is based on a real job coordinate or a
+            // city-centroid estimate. Surfaced to the UI as `distanceApproximate`
+            // so a city-only posting never pretends to be building-level.
+            // Computed from source fields because sibling `$addFields` values
+            // are not visible to each other in the same aggregation stage.
+            coordSource: {
+              $cond: [
+                {
+                  $and: [
+                    { $ne: ['$coordinates.lat', null] },
+                    { $isNumber: '$coordinates.lat' },
+                    { $ne: ['$coordinates.lng', null] },
+                    { $isNumber: '$coordinates.lng' }
+                  ]
+                },
+                'exact',
+                {
+                  $cond: [
+                    { $ne: [{ $ifNull: ['$city', ''] }, ''] },
+                    'city_centroid',
+                    'unknown'
+                  ]
+                }
+              ]
             }
           }
         },
         {
+          // Exact great-circle distance in kilometres (Haversine). Doing this
+          // in the database keeps pagination and counts consistent and avoids
+          // planar degree approximations that leak jobs outside the radius.
           $addFields: {
-            distApprox: {
+            distKm: {
               $cond: [
                 { $and: [{ $isNumber: '$rawLat' }, { $isNumber: '$rawLng' }] },
                 {
-                  $add: [
-                    { $pow: [{ $subtract: ['$rawLat', numUserLat] }, 2] },
-                    { $pow: [{ $subtract: ['$rawLng', numUserLng] }, 2] }
-                  ]
+                  $let: {
+                    vars: {
+                      dLat: { $multiply: [{ $subtract: ['$rawLat', numUserLat] }, Math.PI / 180] },
+                      dLng: { $multiply: [{ $subtract: ['$rawLng', numUserLng] }, Math.PI / 180] },
+                      lat1: { $multiply: [numUserLat, Math.PI / 180] },
+                      lat2: { $multiply: ['$rawLat', Math.PI / 180] }
+                    },
+                    in: {
+                      $multiply: [
+                        12742,
+                        {
+                          $atan2: [
+                            {
+                              $sqrt: {
+                                $add: [
+                                  { $pow: [{ $sin: { $divide: ['$$dLat', 2] } }, 2] },
+                                  {
+                                    $multiply: [
+                                      { $cos: '$$lat1' },
+                                      { $cos: '$$lat2' },
+                                      { $pow: [{ $sin: { $divide: ['$$dLng', 2] } }, 2] }
+                                    ]
+                                  }
+                                ]
+                              }
+                            },
+                            {
+                              $sqrt: {
+                                $subtract: [
+                                  1,
+                                  {
+                                    $add: [
+                                      { $pow: [{ $sin: { $divide: ['$$dLat', 2] } }, 2] },
+                                      {
+                                        $multiply: [
+                                          { $cos: '$$lat1' },
+                                          { $cos: '$$lat2' },
+                                          { $pow: [{ $sin: { $divide: ['$$dLng', 2] } }, 2] }
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              }
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  }
                 },
-                99999999
+                999999
               ]
             }
           }
         }
       ];
 
-      if (maxDist && !isNaN(maxDist)) {
-        const degRadius = maxDist / 95;
-        const degRadiusSq = degRadius * degRadius;
-        proximityPipeline.push({ $match: { distApprox: { $lte: degRadiusSq } } });
+      if (maxDist != null && maxDist > 0) {
+        proximityPipeline.push({ $match: { distKm: { $lte: maxDist } } });
       }
 
       const [countAgg, jobsList, oCount, tInDb] = await Promise.all([
         Job.aggregate([...proximityPipeline, { $count: 'total' }]),
         Job.aggregate([
           ...proximityPipeline,
-          { $sort: { distApprox: 1, lastSeenAt: -1, updatedAt: -1 } },
+          // A radius filter narrows results; it must not silently change the
+          // user's chosen sort order unless they explicitly asked for distance.
+          isSortByDistance
+            ? { $sort: { distKm: 1, lastSeenAt: -1, updatedAt: -1 } }
+            : { $sort: { lastSeenAt: -1, updatedAt: -1 } },
           { $skip: skip },
           { $limit: parsedLimit },
           {
             $project: {
+              distKm: 1,
+              coordSource: 1,
               source: 1,
               sourceJobId: 1,
               company: 1,
@@ -386,15 +470,39 @@ async function getJobs(req, res) {
       delete job.descriptionHtml;
 
       if (hasUserLocation) {
-        const lat = job.rawLat != null ? job.rawLat : (job.coordinates?.lat || resolveItemCoordinates(job)?.lat);
-        const lng = job.rawLng != null ? job.rawLng : (job.coordinates?.lng || resolveItemCoordinates(job)?.lng);
-        if (lat != null && lng != null) {
-          job.distanceKm = calculateDistanceKm(numUserLat, numUserLng, lat, lng);
+        let hasExactCoordinate = false;
+        if (typeof job.distKm === 'number' && job.distKm < 900000) {
+          // Haversine value already computed by the aggregation pipeline.
+          job.distanceKm = Math.round(job.distKm * 10) / 10;
+          hasExactCoordinate = job.coordSource === 'exact';
         } else {
-          job.distanceKm = null;
+          // Resolve lat/lng as a single pair so a partial coordinate can never
+          // be mixed with a city-centroid fallback.
+          const coords = (job.coordinates && job.coordinates.lat != null && job.coordinates.lng != null)
+            ? job.coordinates
+            : (resolveItemCoordinates(job) || {});
+          const lat = job.rawLat != null ? job.rawLat : coords.lat;
+          const lng = job.rawLng != null ? job.rawLng : coords.lng;
+          job.distanceKm = (lat != null && lng != null)
+            ? calculateDistanceKm(numUserLat, numUserLng, lat, lng)
+            : null;
+          hasExactCoordinate = Boolean(
+            job.coordinates &&
+            typeof job.coordinates.lat === 'number' &&
+            typeof job.coordinates.lng === 'number' &&
+            lat === job.coordinates.lat &&
+            lng === job.coordinates.lng
+          );
         }
+        // A job that only lists a city gets a centroid-derived estimate. Never
+        // present that as an exact distance from the user's building.
+        job.distanceApproximate = !hasExactCoordinate && job.distanceKm != null;
+        delete job.distKm;
+        delete job.coordSource;
       } else {
         job.distanceKm = null;
+        job.distanceApproximate = false;
+        delete job.coordSource;
       }
     }
 

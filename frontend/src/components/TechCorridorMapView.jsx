@@ -2,6 +2,8 @@ import React, { useEffect, useRef, useState, useMemo } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { getCompanyOfficeDetails } from '../utils/companyOfficeRegistry';
+import { useAuth } from '../context/AuthContext';
+import { useLocation } from '../context/LocationContext';
 
 // Fix Leaflet's default icon path issues in bundlers
 delete L.Icon.Default.prototype._getIconUrl;
@@ -41,10 +43,14 @@ export default function TechCorridorMapView({
   onOpenEligibility,
   onRefreshJobs
 }) {
+  const { authFetch } = useAuth();
+  const { userLocation, sortByDistance, maxDistanceKm } = useLocation();
   const mapContainerRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const markersLayerRef = useRef(null);
   const officeMarkerRef = useRef(null);
+  const userMarkerRef = useRef(null);
+  const userCircleRef = useRef(null);
 
   const [activeCorridorKey, setActiveCorridorKey] = useState(selectedCorridor);
   const [allIndiaCorridors, setAllIndiaCorridors] = useState([]);
@@ -230,6 +236,55 @@ export default function TechCorridorMapView({
       easeLinearity: 0.25
     });
   }, [selectedCity]);
+
+  // Show the user's reference point (and optional radius) so proximity mode
+  // is visually consistent with the jobs list and the other maps.
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+    if (userMarkerRef.current) {
+      map.removeLayer(userMarkerRef.current);
+      userMarkerRef.current = null;
+    }
+    if (userCircleRef.current) {
+      map.removeLayer(userCircleRef.current);
+      userCircleRef.current = null;
+    }
+    if (!userLocation || userLocation.lat == null || userLocation.lng == null) return;
+    if (!sortByDistance && maxDistanceKm == null) return;
+
+    const lat = Number(userLocation.lat);
+    const lng = Number(userLocation.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+
+    const icon = L.divIcon({
+      className: 'corridor-user-marker',
+      html: '<div class="corridor-user-dot"></div>',
+      iconSize: [18, 18],
+      iconAnchor: [9, 9]
+    });
+    userMarkerRef.current = L.marker([lat, lng], { icon, zIndexOffset: 1000 })
+      .addTo(map)
+      .bindPopup(`<strong>You are here</strong><br/><span style="font-size:11px;color:#64748b;">${userLocation.label || 'Your location'}${userLocation.source === 'gps' ? ' · Live GPS' : ''}</span>`);
+
+    if (maxDistanceKm != null && maxDistanceKm > 0) {
+      userCircleRef.current = L.circle([lat, lng], {
+        radius: maxDistanceKm * 1000,
+        color: '#B47A49',
+        weight: 1.5,
+        fillColor: '#B47A49',
+        fillOpacity: 0.06,
+        dashArray: '5 5'
+      }).addTo(map);
+    }
+
+    return () => {
+      if (userMarkerRef.current) map.removeLayer(userMarkerRef.current);
+      if (userCircleRef.current) map.removeLayer(userCircleRef.current);
+      userMarkerRef.current = null;
+      userCircleRef.current = null;
+    };
+  }, [userLocation, sortByDistance, maxDistanceKm]);
 
   // Render Corridor Markers
   useEffect(() => {
@@ -427,7 +482,7 @@ export default function TechCorridorMapView({
     setIsSyncing(true);
     setSyncMessage(`Probing free public ATS boards for ${targetCity}...`);
     try {
-      const res = await fetch(`/api/jobs/harvest?city=${encodeURIComponent(targetCity)}`, { method: 'POST' });
+      const res = await authFetch(`/api/jobs/harvest?city=${encodeURIComponent(targetCity)}`, { method: 'POST' });
       if (res.ok) {
         setSyncMessage(`Scanning live openings in ${targetCity}...`);
         setTimeout(() => {
@@ -439,7 +494,7 @@ export default function TechCorridorMapView({
         setIsSyncing(false);
         setSyncMessage(null);
       }
-    } catch (_) {
+    } catch {
       setIsSyncing(false);
       setSyncMessage(null);
     }

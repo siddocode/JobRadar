@@ -1,9 +1,33 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { useLocation, POPULAR_TECH_HUBS } from '../context/LocationContext';
+import {
+  MapPin,
+  Navigation,
+  Search,
+  Sparkles,
+  SlidersHorizontal,
+  Info,
+  AlertCircle,
+  AlertTriangle,
+  Building2,
+  Crosshair,
+  ShieldAlert,
+  ShieldCheck,
+  Utensils,
+  Compass,
+  Globe,
+  X
+} from 'lucide-react';
+import { useLocation, POPULAR_TECH_HUBS, calculateDistanceKm } from '../context/LocationContext';
 import { useModalScrollLock } from '../utils/useModalScrollLock';
-import { searchPlacesLikeGoogleMaps } from '../utils/placeSearchService';
+import {
+  searchPlacesDetailed,
+  formatPlaceSubtitle,
+  zoomForPlace
+} from '../utils/placeSearchService';
+import { resolveLocationName } from '../utils/resolveLocationName';
+import { evaluateLocationFix, formatAccuracy } from '../utils/locationFixQuality';
 import './UserLocationModal.css';
 
 // Fix Leaflet marker icons in Vite / Webpack
@@ -14,6 +38,51 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png'
 });
 
+/**
+ * Build a display label from the structured suggestion fields.
+ * Keeps the provider's exact name first and de-duplicates overlapping parts so
+ * "Technopolis, CP Block, Sector V, Kolkata" never becomes just "Kolkata".
+ */
+function composePlaceLabel(place = {}) {
+  const parts = [place.name || place.label, place.locality, place.city, place.state]
+    .map((value) => String(value || '').trim())
+    .filter(Boolean);
+
+  const out = [];
+  for (const part of parts) {
+    const lower = part.toLowerCase();
+    if (out.some((existing) => {
+      const existingLower = existing.toLowerCase();
+      return existingLower === lower || existingLower.includes(lower);
+    })) continue;
+    out.push(part);
+  }
+  return out.join(', ');
+}
+
+/**
+ * True when two staged locations describe the same spot, so the
+ * "reset to searched result" affordance is only offered when it matters.
+ */
+function isSameStagedSpot(a, b) {
+  if (!a || !b) return false;
+  const dLat = Math.abs(Number(a.lat) - Number(b.lat));
+  const dLng = Math.abs(Number(a.lng) - Number(b.lng));
+  return dLat < 0.00012 && dLng < 0.00012;
+}
+
+/**
+ * Geocoder names are remote data; never inject them into a Leaflet popup raw.
+ */
+function escapeHtml(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 export default function UserLocationModal() {
   const {
     userLocation,
@@ -22,157 +91,255 @@ export default function UserLocationModal() {
     detectCurrentLocation,
     isDetecting,
     detectError,
-    sortByDistance,
     setSortByDistance,
     maxDistanceKm,
     setMaxDistanceKm,
+    liveGpsPosition,
     isLocationModalOpen,
     closeLocationModal
   } = useLocation();
 
   useModalScrollLock(isLocationModalOpen);
 
+  // Close on Escape so the modal behaves like the rest of the app's dialogs.
+  useEffect(() => {
+    if (!isLocationModalOpen) return undefined;
+    const handleKey = (event) => {
+      if (event.key === 'Escape') closeLocationModal();
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [isLocationModalOpen, closeLocationModal]);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
-  const [isSearching, setIsSearching] = useState(false);
+  // idle | loading | done | empty | error
+  const [searchStatus, setSearchStatus] = useState('idle');
+  const [searchNotice, setSearchNotice] = useState('');
+  // The last suggestion the user picked from search; used by "reset" and by
+  // the map so a map drag never silently replaces it with a coarse centroid.
+  const [searchSelection, setSearchSelection] = useState(null);
+  const [activeResultIndex, setActiveResultIndex] = useState(-1);
   const [draftLocation, setDraftLocation] = useState(userLocation);
+  // Radius is part of the draft: changing it must not affect results until Apply.
+  const [draftRadius, setDraftRadius] = useState(maxDistanceKm);
+  // "Pin mode" makes the map-click affordance explicit instead of hidden.
+  const [pinMode, setPinMode] = useState(false);
+  const [permissionState, setPermissionState] = useState('unknown');
 
-  const searchTimeoutRef = useRef(null);
-  const abortControllerRef = useRef(null);
+  // Surface the browser's actual geolocation permission state so a blocked or
+  // not-yet-granted permission is visible instead of looking like a GPS failure.
+  useEffect(() => {
+    if (!isLocationModalOpen) return undefined;
+    let cancelled = false;
+    let status = null;
+
+    const readPermission = async () => {
+      if (!navigator.permissions?.query) {
+        if (!cancelled) setPermissionState('unknown');
+        return;
+      }
+      try {
+        status = await navigator.permissions.query({ name: 'geolocation' });
+        if (cancelled) return;
+        setPermissionState(status.state);
+        status.onchange = () => setPermissionState(status.state);
+      } catch {
+        if (!cancelled) setPermissionState('unknown');
+      }
+    };
+
+    readPermission();
+    return () => {
+      cancelled = true;
+      if (status) status.onchange = null;
+    };
+  }, [isLocationModalOpen]);
+
+  const searchDebounceRef = useRef(null);
+  const searchAbortRef = useRef(null);
+  // Monotonic request id: only the newest search is allowed to write results.
+  const searchSeqRef = useRef(0);
   const mapContainerRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const markerRef = useRef(null);
+  const liveGpsMarkerRef = useRef(null);
+  const searchInputRef = useRef(null);
 
-  // Sync draftLocation when userLocation changes
+  // Reset the whole draft each time the modal opens so Cancel never leaves a
+  // half-applied location or radius behind.
   useEffect(() => {
-    if (userLocation) {
-      setDraftLocation(userLocation);
-    }
-  }, [userLocation]);
+    if (!isLocationModalOpen) return;
+    setDraftLocation(userLocation);
+    setDraftRadius(maxDistanceKm);
+    setSearchQuery('');
+    setSearchResults([]);
+    setSearchStatus('idle');
+    setSearchNotice('');
+    setSearchSelection(null);
+    setActiveResultIndex(-1);
+    setPinMode(false);
+  }, [isLocationModalOpen, userLocation, maxDistanceKm]);
 
-  // Google Maps-like place search with real-time location bias and distance ranking
+  // Debounced, abortable, sequence-guarded place search.
+  // A stale response can never overwrite a newer one: the sequence check runs
+  // after every await, and each keystroke aborts the previous request.
   useEffect(() => {
-    if (!searchQuery || searchQuery.trim().length < 2) {
+    const trimmed = searchQuery.trim();
+
+    if (trimmed.length < 2) {
+      searchSeqRef.current += 1;
+      if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+      if (searchAbortRef.current) searchAbortRef.current.abort();
+      searchAbortRef.current = null;
       setSearchResults([]);
-      setIsSearching(false);
-      return;
+      setSearchStatus('idle');
+      setSearchNotice('');
+      setActiveResultIndex(-1);
+      return undefined;
     }
 
-    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
-    if (abortControllerRef.current) abortControllerRef.current.abort();
+    const seq = searchSeqRef.current + 1;
+    searchSeqRef.current = seq;
 
-    // Determine reference anchor coordinates (draft/pinned point > GPS user location > map center > default Kolkata)
-    let anchorLat = draftLocation?.lat || userLocation?.lat;
-    let anchorLng = draftLocation?.lng || userLocation?.lng;
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    if (searchAbortRef.current) searchAbortRef.current.abort();
 
-    if ((anchorLat == null || anchorLng == null) && mapInstanceRef.current) {
+    const controller = new AbortController();
+    searchAbortRef.current = controller;
+    setSearchStatus('loading');
+    setSearchNotice('');
+    setActiveResultIndex(-1);
+
+    // Bias the search to the committed / known position, never to the draft
+    // pin, so dragging the marker does not restart the search.
+    let anchorLat = userLocation?.lat ?? liveGpsPosition?.lat ?? null;
+    let anchorLng = userLocation?.lng ?? liveGpsPosition?.lng ?? null;
+    if (anchorLat == null && mapInstanceRef.current) {
       try {
         const center = mapInstanceRef.current.getCenter();
         anchorLat = center.lat;
         anchorLng = center.lng;
-      } catch (_) {}
+      } catch {}
     }
-
+    // Last resort: bias to India instead of leaving the providers unbounded,
+    // so a generic query cannot return a matching street in another country.
     if (anchorLat == null || anchorLng == null) {
-      anchorLat = 22.5726;
-      anchorLng = 88.3639;
+      anchorLat = 20.5937;
+      anchorLng = 78.9629;
     }
 
-    searchTimeoutRef.current = setTimeout(async () => {
-      setIsSearching(true);
-      const controller = new AbortController();
-      abortControllerRef.current = controller;
-
+    searchDebounceRef.current = setTimeout(async () => {
       try {
-        const results = await searchPlacesLikeGoogleMaps(
-          searchQuery,
+        const { results, degraded, failures } = await searchPlacesDetailed(
+          trimmed,
           anchorLat,
           anchorLng,
           controller.signal
         );
+
+        if (searchSeqRef.current !== seq || controller.signal.aborted) return;
+
         setSearchResults(results);
-      } catch (err) {
-        if (err.name !== 'AbortError') {
-          setSearchResults([]);
+        setSearchStatus(results.length ? 'done' : 'empty');
+
+        if (degraded && results.length) {
+          const reasons = new Set(failures.map((f) => f.reason));
+          const detail = reasons.has('rate_limited')
+            ? 'one is rate-limiting us'
+            : reasons.has('blocked')
+              ? 'one refused the request'
+              : 'one did not respond in time';
+          setSearchNotice(
+            `Showing results from the providers that answered — ${detail}. You can also fine-tune with the map pin.`
+          );
+        } else if (degraded && !results.length) {
+          setSearchNotice('Search providers are unreachable right now. Drop the pin on the map or pick a tech hub below.');
         }
-      } finally {
-        setIsSearching(false);
+      } catch (err) {
+        if (searchSeqRef.current !== seq) return;
+        if (err?.name === 'AbortError') return;
+        setSearchResults([]);
+        setSearchStatus('error');
+        setSearchNotice('Location search failed. Click your building on the map or pick a tech hub below.');
       }
-    }, 250);
+    }, 300);
 
     return () => {
-      if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
-      if (abortControllerRef.current) abortControllerRef.current.abort();
+      if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
     };
-  }, [searchQuery, draftLocation, userLocation]);
+  }, [searchQuery, userLocation, liveGpsPosition]);
 
-  // Reverse geocode when user clicks on the map
+  // Abort in-flight search work when the modal unmounts.
+  useEffect(() => () => {
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    if (searchAbortRef.current) searchAbortRef.current.abort();
+  }, []);
+
   // Reverse geocode when user clicks on the map or drags pin
   const reverseGeocodeCoords = useCallback(async (lat, lng) => {
-    // 1. Try our high-precision backend reverse geocode
+    let rawLabel = '';
+    let rawCity = '';
+    let reverseApproximate = false;
+
+    // 1. Try backend high-precision reverse geocode
     try {
       const res = await fetch(`/api/directory/places/reverse?lat=${lat}&lng=${lng}`);
       if (res.ok) {
         const data = await res.json();
         if (data.success && data.label) {
-          return {
-            label: data.label,
-            city: data.city || '',
-            lat,
-            lng,
-            source: 'map_click'
-          };
+          rawLabel = data.label;
+          rawCity = data.city || '';
+          if (data.approximate === true) reverseApproximate = true;
         }
       }
-    } catch (_) {}
+    } catch {}
 
-    // 2. Fallback to OpenStreetMap
-    try {
-      const res = await fetch(
-        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
-        { headers: { 'Accept': 'application/json' } }
-      );
-      if (res.ok) {
-        const data = await res.json();
-        const addr = data.address || {};
-        const poi = addr.amenity || addr.shop || addr.building || addr.tourism || '';
-        const road = addr.road || addr.suburb || addr.neighbourhood || '';
-        const city = addr.city || addr.town || addr.municipality || addr.state || '';
+    // 2. Client-side OSM fallback
+    if (!rawCity) {
+      try {
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
+          { headers: { 'Accept': 'application/json' } }
+        );
+        if (res.ok) {
+          const data = await res.json();
+          const addr = data.address || {};
+          const poi = addr.amenity || addr.shop || addr.building || addr.office || addr.tourism || '';
+          const road = addr.road || addr.suburb || addr.neighbourhood || '';
+          const city = addr.city || addr.town || addr.municipality || addr.state || '';
+          rawCity = city;
 
-        let label = '';
-        if (poi && (road || city)) {
-          label = `${poi}, ${road || city}`;
-        } else if (road && city) {
-          label = `${road}, ${city}`;
-        } else if (data.display_name) {
-          label = data.display_name.split(',').slice(0, 3).join(', ').trim();
-        } else {
-          label = `Location (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
+          if (poi && (road || city)) {
+            rawLabel = `${poi}, ${road || city}`;
+          } else if (road && city) {
+            rawLabel = `${road}, ${city}`;
+          } else if (data.display_name) {
+            rawLabel = data.display_name.split(',').slice(0, 3).join(', ').trim();
+          }
         }
+      } catch {}
+    }
 
-        return {
-          label,
-          city,
-          lat,
-          lng,
-          source: 'map_click'
-        };
-      }
-    } catch (_) {}
+    // 3. Guarantee human-readable Indian city & locality (NEVER raw coordinates)
+    const resolved = resolveLocationName(lat, lng, rawLabel, rawCity);
 
     return {
-      label: `Pinned Point (${lat.toFixed(4)}, ${lng.toFixed(4)})`,
-      city: '',
+      label: resolved.label,
+      city: resolved.city,
       lat,
       lng,
-      source: 'map_click'
+      source: 'map_click',
+      approximate: resolved.approximate === true || reverseApproximate
     };
   }, []);
 
-  // Update map pin position and fly map
-  const updateMapMarker = useCallback((loc) => {
-    if (!mapInstanceRef.current || !loc?.lat || !loc?.lng) return;
+  // Update target map pin position, optionally flying/zooming to it.
+  const updateMapMarker = useCallback((loc, { fly = true, zoom } = {}) => {
+    if (!mapInstanceRef.current || loc?.lat == null || loc?.lng == null) return;
     const map = mapInstanceRef.current;
+
+    const displayLabel = loc.label || composePlaceLabel(loc) || 'Selected location';
 
     if (!markerRef.current) {
       const customPinIcon = L.divIcon({
@@ -192,35 +359,70 @@ export default function UserLocationModal() {
         draggable: true
       }).addTo(map);
 
-      // Listen for marker drag
+      // Listen for marker drag: reverse geocode and relabel, never re-center.
       markerRef.current.on('dragend', async (e) => {
         const newPos = e.target.getLatLng();
-        const resolved = await reverseGeocodeCoords(newPos.lat, newPos.lng);
-        setDraftLocation(resolved);
-        markerRef.current.bindPopup(`<strong>📍 ${resolved.label}</strong>`).openPopup();
+        const res = await reverseGeocodeCoords(newPos.lat, newPos.lng);
+        setDraftLocation(res);
+        e.target.bindPopup(`<strong>${escapeHtml(res.label)}</strong>`).openPopup();
       });
     } else {
       markerRef.current.setLatLng([loc.lat, loc.lng]);
     }
 
-    markerRef.current.bindPopup(`<strong>📍 ${loc.label || 'Selected Location'}</strong>`).openPopup();
-    map.flyTo([loc.lat, loc.lng], Math.max(map.getZoom(), 14), { duration: 0.8 });
+    markerRef.current.bindPopup(`<strong>${escapeHtml(displayLabel)}</strong>`);
+    if (fly) {
+      const targetZoom = zoom != null ? zoom : Math.max(map.getZoom(), 15);
+      map.flyTo([loc.lat, loc.lng], targetZoom, { duration: 0.8 });
+    }
+    markerRef.current.openPopup();
   }, [reverseGeocodeCoords]);
+
+  // Render live GPS Beacon (blue pulsing dot)
+  const renderLiveGpsBeacon = useCallback((gpsLoc) => {
+    if (!mapInstanceRef.current || !gpsLoc?.lat || !gpsLoc?.lng) return;
+    const map = mapInstanceRef.current;
+
+    if (!liveGpsMarkerRef.current) {
+      const beaconIcon = L.divIcon({
+        className: 'modal-live-gps-beacon',
+        html: `
+          <div class="live-gps-beacon-wrapper" title="Your Live Device Location">
+            <div class="live-gps-beacon-pulse"></div>
+            <div class="live-gps-beacon-core"></div>
+          </div>
+        `,
+        iconSize: [28, 28],
+        iconAnchor: [14, 14]
+      });
+
+      liveGpsMarkerRef.current = L.marker([gpsLoc.lat, gpsLoc.lng], {
+        icon: beaconIcon,
+        interactive: true
+      }).addTo(map);
+
+      liveGpsMarkerRef.current.bindPopup(`<strong>Your Live Device Location</strong><br/><span style="font-size:11px;color:#64748b;">${gpsLoc.label || 'Detected via GPS'}</span>`);
+    } else {
+      liveGpsMarkerRef.current.setLatLng([gpsLoc.lat, gpsLoc.lng]);
+    }
+  }, []);
 
   // Initialize Leaflet Map inside Modal
   useEffect(() => {
     if (!isLocationModalOpen || !mapContainerRef.current) return;
 
-    // Small delay to allow modal CSS transition to complete
     const timer = setTimeout(() => {
       if (!mapInstanceRef.current && mapContainerRef.current) {
         if (mapContainerRef.current._leaflet_id) {
           delete mapContainerRef.current._leaflet_id;
         }
 
-        const initialLat = draftLocation?.lat || userLocation?.lat || 22.5726;
-        const initialLng = draftLocation?.lng || userLocation?.lng || 88.3639;
-        const initialZoom = (draftLocation || userLocation) ? 14 : 11;
+        const hasAnchor = Boolean(draftLocation || userLocation || liveGpsPosition);
+        // With no saved anchor, frame the whole country instead of implying an
+        // arbitrary city is selected.
+        const initialLat = draftLocation?.lat || userLocation?.lat || liveGpsPosition?.lat || 20.5937;
+        const initialLng = draftLocation?.lng || userLocation?.lng || liveGpsPosition?.lng || 78.9629;
+        const initialZoom = hasAnchor ? 14 : 4;
 
         const map = L.map(mapContainerRef.current, {
           center: [initialLat, initialLng],
@@ -235,13 +437,17 @@ export default function UserLocationModal() {
 
         L.control.zoom({ position: 'bottomright' }).addTo(map);
 
-        // Click map to drop pin and reverse-geocode
+        // Click map to drop pin and reverse-geocode.
+        // If the user is zoomed far out, zoom in so the pin can actually be
+        // placed on a building instead of a whole district.
         map.on('click', async (e) => {
           const lat = e.latlng.lat;
           const lng = e.latlng.lng;
+          const shouldZoomIn = map.getZoom() < 15;
           const resolved = await reverseGeocodeCoords(lat, lng);
           setDraftLocation(resolved);
-          updateMapMarker(resolved);
+          updateMapMarker(resolved, shouldZoomIn ? { fly: true, zoom: 16 } : { fly: false });
+          setPinMode(false);
         });
 
         mapInstanceRef.current = map;
@@ -250,10 +456,20 @@ export default function UserLocationModal() {
         if (draftLocation || userLocation) {
           updateMapMarker(draftLocation || userLocation);
         }
+
+        // If live GPS exists, render beacon
+        if (liveGpsPosition) {
+          renderLiveGpsBeacon(liveGpsPosition);
+        }
       } else if (mapInstanceRef.current) {
         mapInstanceRef.current.invalidateSize();
-        if (draftLocation) {
+        // Never re-center just because the draft changed; interactions and the
+        // explicit "reset to search result" action own the viewport.
+        if (draftLocation && !markerRef.current) {
           updateMapMarker(draftLocation);
+        }
+        if (liveGpsPosition) {
+          renderLiveGpsBeacon(liveGpsPosition);
         }
       }
     }, 150);
@@ -261,7 +477,7 @@ export default function UserLocationModal() {
     return () => {
       clearTimeout(timer);
     };
-  }, [isLocationModalOpen, draftLocation, userLocation, reverseGeocodeCoords, updateMapMarker]);
+  }, [isLocationModalOpen, draftLocation, userLocation, liveGpsPosition, reverseGeocodeCoords, updateMapMarker, renderLiveGpsBeacon]);
 
   // Clean up map instance on modal close
   useEffect(() => {
@@ -269,61 +485,289 @@ export default function UserLocationModal() {
       mapInstanceRef.current.remove();
       mapInstanceRef.current = null;
       markerRef.current = null;
+      liveGpsMarkerRef.current = null;
     }
   }, [isLocationModalOpen]);
 
-  if (!isLocationModalOpen) return null;
+  // Stage a searched or curated place in the draft. Never commits global state.
+  const stagePlace = (place, source) => {
+    const lat = Number(place.lat);
+    const lng = Number(place.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
 
-  // Handle selecting an autocomplete result or tech hub
-  const handleSelectLocation = (loc) => {
-    setDraftLocation(loc);
+    const name = String(place.name || place.label || '').trim();
+    // Preserve the provider's precise coordinates and structured fields; only
+    // build a display label from them. No centroid substitution happens here.
+    const label = composePlaceLabel(place) || name || 'Pinned location';
+    const specificity = Number(place.specificity);
+
+    const clean = {
+      ...place,
+      lat,
+      lng,
+      name: name || label,
+      label,
+      city: place.city || '',
+      state: place.state || '',
+      locality: place.locality || '',
+      source,
+      specificity: Number.isFinite(specificity) ? specificity : 55,
+      approximate: place.approximate === true
+    };
+
+    setDraftLocation(clean);
+    setPinMode(false);
+    updateMapMarker(clean, { fly: true, zoom: zoomForPlace(clean) });
+    return clean;
+  };
+
+  const clearSearchPanel = () => {
     setSearchQuery('');
     setSearchResults([]);
-    updateMapMarker(loc);
+    setSearchStatus('idle');
+    setSearchNotice('');
+    setActiveResultIndex(-1);
+  };
+
+  // Selecting a suggestion only stages it; Apply is still required.
+  const handleSelectSearchResult = (place) => {
+    const clean = stagePlace(place, 'search');
+    if (!clean) return;
+    setSearchSelection(clean);
+    clearSearchPanel();
+  };
+
+  // Curated tech-hub chips stage a city/hub centroid, so they are labelled as
+  // such rather than masquerading as a searched building.
+  const handleSelectHub = (hub) => {
+    stagePlace(
+      { ...hub, name: hub.label, source: 'curated', specificity: 45 },
+      'curated'
+    );
+    clearSearchPanel();
+  };
+
+  // Put the pin back on the exact suggestion the user picked.
+  const handleResetToSearchResult = () => {
+    if (!searchSelection) return;
+    const clean = { ...searchSelection, source: 'search' };
+    setDraftLocation(clean);
+    setPinMode(false);
+    updateMapMarker(clean, { fly: true, zoom: zoomForPlace(clean) });
+  };
+
+  const focusSearchInput = () => {
+    if (searchInputRef.current) {
+      searchInputRef.current.focus();
+      searchInputRef.current.select();
+    }
+  };
+
+  // Keyboard combobox: arrows move, Enter selects, Escape only closes search.
+  const handleSearchKeyDown = (event) => {
+    if (event.key === 'Escape') {
+      if (searchQuery) {
+        event.stopPropagation();
+        clearSearchPanel();
+      }
+      return;
+    }
+    if (!searchResults.length) return;
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      setActiveResultIndex((idx) => (idx + 1) % searchResults.length);
+      return;
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      setActiveResultIndex((idx) => (idx <= 0 ? searchResults.length - 1 : idx - 1));
+      return;
+    }
+    if (event.key === 'Enter') {
+      const target = activeResultIndex >= 0 ? searchResults[activeResultIndex] : searchResults[0];
+      if (target) {
+        event.preventDefault();
+        handleSelectSearchResult(target);
+      }
+    }
   };
 
   // 1-Click GPS button
   const handleGpsDetect = async () => {
     const loc = await detectCurrentLocation();
     if (loc) {
-      setDraftLocation(loc);
-      updateMapMarker(loc);
+      const resolved = resolveLocationName(loc.lat, loc.lng, loc.label, loc.city);
+      const clean = {
+        ...loc,
+        label: resolved.label,
+        city: resolved.city,
+        approximate: resolved.approximate === true || loc.approximate === true
+      };
+      setDraftLocation(clean);
+      updateMapMarker(clean);
+      renderLiveGpsBeacon(clean);
+      setPinMode(false);
     }
   };
 
-  // Apply location and save
+  // Recenter map back to user's live device location
+  const handleRecenterToLiveLocation = async () => {
+    if (liveGpsPosition?.lat != null && liveGpsPosition?.lng != null) {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.flyTo([liveGpsPosition.lat, liveGpsPosition.lng], 15, {
+          animate: true,
+          duration: 1.1
+        });
+      }
+      setDraftLocation(liveGpsPosition);
+      updateMapMarker(liveGpsPosition);
+      renderLiveGpsBeacon(liveGpsPosition);
+    } else {
+      // Trigger live GPS detection and snap map back
+      const loc = await detectCurrentLocation();
+      if (loc) {
+        const resolved = resolveLocationName(loc.lat, loc.lng, loc.label, loc.city);
+        const clean = {
+          ...loc,
+          label: resolved.label,
+          city: resolved.city,
+          approximate: resolved.approximate === true || loc.approximate === true
+        };
+        setDraftLocation(clean);
+        updateMapMarker(clean);
+        renderLiveGpsBeacon(clean);
+      }
+    }
+  };
+
+  // Apply location + radius together and only when explicitly confirmed
   const handleApply = () => {
     if (draftLocation) {
-      setUserLocation(draftLocation);
+      const resolved = resolveLocationName(draftLocation.lat, draftLocation.lng, draftLocation.label, draftLocation.city);
+      const clean = {
+        ...draftLocation,
+        label: resolved.label,
+        city: resolved.city,
+        approximate: resolved.approximate === true || draftLocation.approximate === true
+      };
+      setUserLocation(clean);
       setSortByDistance(true);
+    } else {
+      clearUserLocation();
     }
+    setMaxDistanceKm(draftRadius);
     closeLocationModal();
   };
 
+  // Clear is a draft action; global state only changes on Apply
   const handleClear = () => {
-    clearUserLocation();
     setDraftLocation(null);
+    setDraftRadius(null);
     if (markerRef.current && mapInstanceRef.current) {
       mapInstanceRef.current.removeLayer(markerRef.current);
       markerRef.current = null;
     }
   };
 
+  if (!isLocationModalOpen) return null;
+
+  const currentDisplayLabel = draftLocation
+    ? resolveLocationName(draftLocation.lat, draftLocation.lng, draftLocation.label, draftLocation.city).label
+    : '';
+
+  const shortCityLabel = draftLocation
+    ? (draftLocation.city || currentDisplayLabel.split(',')[0].trim())
+    : 'Location';
+
+  const fixAssessment = evaluateLocationFix(draftLocation);
+  const permissionCopy = {
+    granted: 'Browser location permission: allowed.',
+    prompt: 'Browser location permission: not granted yet — you will be asked when you tap GPS.',
+    denied: 'Browser location permission: blocked. Allow location for this site in your browser site settings (and enable "Precise location" on phones), then retry.'
+  }[permissionState] || '';
+  const permissionIsWarning = permissionState === 'denied';
+
+  const searchTooShort = searchQuery.trim().length > 0 && searchQuery.trim().length < 2;
+  const distanceReferenceLabel = liveGpsPosition?.source === 'gps'
+    ? 'your live GPS fix'
+    : userLocation
+      ? 'your saved location'
+      : 'the map centre';
+  const searchDropdownOpen =
+    searchQuery.trim().length >= 2 &&
+    (searchStatus === 'loading' || searchStatus === 'error' || searchResults.length > 0 || Boolean(searchNotice));
+
+  // What the pin is currently based on, stated explicitly.
+  const draftSource = draftLocation?.source || '';
+  const sourceBadge = (() => {
+    if (draftSource === 'gps') {
+      return {
+        className: 'is-gps',
+        icon: <Navigation size={11} />,
+        text: `Live GPS${draftLocation.accuracy ? ` · ${formatAccuracy(draftLocation.accuracy)}` : ''}`
+      };
+    }
+    if (draftSource === 'search') {
+      return { className: 'is-search', icon: <Search size={11} />, text: 'Searched location' };
+    }
+    if (draftSource === 'map_click') {
+      return { className: 'is-adjusted', icon: <Crosshair size={11} />, text: 'Adjusted on map' };
+    }
+    if (draftSource === 'curated') {
+      return { className: 'is-curated', icon: <Sparkles size={11} />, text: 'Curated tech hub' };
+    }
+    return { className: 'is-manual', icon: <MapPin size={11} />, text: 'Manually selected' };
+  })();
+
+  const draftSubtitle = draftLocation
+    ? (formatPlaceSubtitle(draftLocation) ||
+       (draftLocation.fullAddress && draftLocation.fullAddress !== draftLocation.label
+         ? draftLocation.fullAddress
+         : ''))
+    : '';
+
+  const canResetToSearch =
+    Boolean(searchSelection) &&
+    Boolean(draftLocation) &&
+    !isSameStagedSpot(draftLocation, searchSelection);
+
+  // A search hit that is only a locality/city centroid is still honest — the
+  // coordinates match what the provider returned — but the user should know
+  // they are not yet building-level.
+  const coarseSearchHit =
+    Boolean(draftLocation) &&
+    draftSource !== 'gps' &&
+    Number.isFinite(Number(draftLocation.specificity)) &&
+    Number(draftLocation.specificity) < 45;
+
+  // Old localStorage entries (and city-only GPS labels) have no source or
+  // building detail. Tell the user instead of quietly showing a 7 km error.
+  const legacyCoarseDraft = Boolean(draftLocation) && !draftSource && !draftLocation.accuracy;
+
+  // The strongest available truth check: the user searched for a named building,
+  // so a browser fix kilometres away is almost certainly a city/IP fallback.
+  const gpsVsSearchKm = draftSource === 'gps' && searchSelection
+    ? calculateDistanceKm(draftLocation.lat, draftLocation.lng, searchSelection.lat, searchSelection.lng)
+    : null;
+  const gpsDisagreesWithSearch = gpsVsSearchKm != null && gpsVsSearchKm >= 0.2;
+
   return (
     <div className="location-modal-overlay" onClick={closeLocationModal}>
-      <div className="location-modal-container" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="location-modal-container"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="location-modal-title"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
         <header className="location-modal-topbar">
           <div className="location-modal-title-wrap">
             <div className="location-icon-badge">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="10" />
-                <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20" />
-                <path d="M2 12h20" />
-              </svg>
+              <Globe size={20} />
             </div>
             <div>
-              <h3 className="location-modal-heading">Set Your Job Radar Location</h3>
+              <h3 className="location-modal-heading" id="location-modal-title">Set Your Job Radar Location</h3>
               <p className="location-modal-subheading">
                 Companies and live jobs will be sorted and measured nearest to this spot
               </p>
@@ -335,7 +779,7 @@ export default function UserLocationModal() {
             onClick={closeLocationModal}
             aria-label="Close modal"
           >
-            ×
+            <X size={18} />
           </button>
         </header>
 
@@ -343,119 +787,184 @@ export default function UserLocationModal() {
         <div className="location-modal-grid">
           {/* Left Panel: Search & Controls */}
           <div className="location-controls-pane">
-            {/* 1-Click GPS Button */}
+            {/* STEP 1 — primary method: search */}
+            <div className="location-step-head">
+              <span className="location-step-index">1</span>
+              <div className="location-step-copy">
+                <span className="location-step-title">Search for your building</span>
+                <span className="location-step-desc">Tower, office, tech park, street, sector or PIN code</span>
+              </div>
+            </div>
+
+            <div className="location-search-wrapper">
+              <div className="location-search-field">
+                <Search className="location-search-field-icon" size={16} />
+                <input
+                  type="text"
+                  ref={searchInputRef}
+                  className="location-search-field-input"
+                  placeholder="Try “Technopolis, Sector V” or “Candor TechSpace”"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={handleSearchKeyDown}
+                  autoComplete="off"
+                  autoFocus
+                  role="combobox"
+                  aria-expanded={searchDropdownOpen}
+                  aria-controls="location-search-suggestions"
+                  aria-autocomplete="list"
+                  aria-activedescendant={
+                    activeResultIndex >= 0 ? `location-search-option-${activeResultIndex}` : undefined
+                  }
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    className="location-search-field-clear"
+                    onClick={clearSearchPanel}
+                    aria-label="Clear search query"
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
+
+              {searchTooShort && (
+                <span className="location-search-hint">Type at least 2 characters to search.</span>
+              )}
+
+              {searchQuery.trim().length >= 2 && (
+                <span className="location-search-hint">
+                  Distances are measured from {distanceReferenceLabel}.
+                  {!liveGpsPosition && ' Use my current location to measure from where you are standing.'}
+                </span>
+              )}
+
+              {searchDropdownOpen && (
+                <div
+                  className="location-dropdown-list"
+                  id="location-search-suggestions"
+                  role="listbox"
+                  aria-label="Location suggestions"
+                >
+                  {searchStatus === 'loading' && searchResults.length === 0 && (
+                    <div className="location-dropdown-loading">
+                      <Search size={14} />
+                      <span>Searching buildings, offices and localities…</span>
+                    </div>
+                  )}
+
+                  {searchStatus !== 'loading' && searchResults.length === 0 && (
+                    <div className="location-dropdown-empty">
+                      {searchStatus === 'error'
+                        ? (searchNotice || 'Location search failed.')
+                        : `No matches for “${searchQuery.trim()}”. Try the tower name, the locality, or click your building on the map.`}
+                    </div>
+                  )}
+
+                  {searchResults.map((result, idx) => {
+                    const subtitle = formatPlaceSubtitle(result) || result.fullAddress || '';
+                    return (
+                      <button
+                        key={`${result.source || 'place'}-${Number(result.lat).toFixed(5)}-${Number(result.lng).toFixed(5)}`}
+                        id={`location-search-option-${idx}`}
+                        type="button"
+                        role="option"
+                        aria-selected={activeResultIndex === idx}
+                        className={`location-dropdown-item ${activeResultIndex === idx ? 'is-active' : ''}`}
+                        onMouseEnter={() => setActiveResultIndex(idx)}
+                        onClick={() => handleSelectSearchResult(result)}
+                      >
+                        <span className="dropdown-item-icon">
+                          {result.category === 'food' ? (
+                            <Utensils size={14} />
+                          ) : result.category === 'office' ? (
+                            <Building2 size={14} />
+                          ) : (
+                            <MapPin size={14} />
+                          )}
+                        </span>
+                        <div className="dropdown-item-content">
+                          <div className="dropdown-item-header">
+                            <span className="dropdown-item-title">{result.name || result.label}</span>
+                            {result.distanceFormatted && (
+                              <span
+                                className={`dropdown-item-dist-pill ${result.distanceKm != null && result.distanceKm < 30 ? 'is-nearby' : ''}`}
+                                title={`${result.distanceFormatted} from ${distanceReferenceLabel}`}
+                              >
+                                {result.distanceFormatted}
+                              </span>
+                            )}
+                          </div>
+                          {subtitle && <span className="dropdown-item-sub">{subtitle}</span>}
+                        </div>
+                      </button>
+                    );
+                  })}
+
+                  {searchNotice && searchResults.length > 0 && (
+                    <div className="location-dropdown-notice">{searchNotice}</div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* STEP 2 — optional GPS shortcut */}
+            <div className="location-step-head">
+              <span className="location-step-index">2</span>
+              <div className="location-step-copy">
+                <span className="location-step-title">Or use your current location</span>
+                <span className="location-step-desc">Optional GPS shortcut — search stays usable if it fails</span>
+              </div>
+            </div>
+
             <button
               type="button"
-              className="gps-hero-btn"
+              className="gps-hero-btn is-secondary"
               onClick={handleGpsDetect}
               disabled={isDetecting}
               title="Automatically detect your location via browser GPS"
             >
               <div className="gps-hero-left">
                 <div className="gps-hero-icon">
-                  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-                    <polygon points="3 11 22 2 13 21 11 13 3 11" />
-                  </svg>
+                  <Navigation size={18} />
                 </div>
                 <div className="gps-hero-text">
                   <span className="gps-hero-title">
                     {isDetecting ? 'Pinpointing GPS Location...' : 'Use My Current Location'}
                   </span>
                   <span className="gps-hero-desc">
-                    {isDetecting ? 'Fetching exact coordinates & address' : 'Auto-pinpoint via browser GPS'}
+                    {isDetecting ? 'Sampling the most accurate fix' : 'Auto-pinpoint via browser GPS'}
                   </span>
                 </div>
               </div>
               <span className="gps-hero-badge">1-Click GPS</span>
             </button>
 
-            {detectError && (
-              <div className="location-error-alert">
-                ⚠️ {detectError}
+            {permissionCopy && (
+              <div
+                className={`location-permission-note ${permissionIsWarning ? 'is-warning' : 'is-ok'}`}
+                aria-live="polite"
+              >
+                {permissionIsWarning ? <ShieldAlert size={13} /> : <ShieldCheck size={13} />}
+                <span>{permissionCopy}</span>
               </div>
             )}
 
-            {/* Live Autocomplete Search Input */}
-            <div className="location-search-wrapper">
-              <div className="location-search-field">
-                <svg className="location-search-field-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3">
-                  <circle cx="11" cy="11" r="8" />
-                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
-                </svg>
-                <input
-                  type="text"
-                  className="location-search-field-input"
-                  placeholder="Search any dhaba, landmark, office, tech park, or street..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  autoComplete="off"
-                  autoFocus
-                />
-                {searchQuery && (
-                  <button
-                    type="button"
-                    className="location-search-field-clear"
-                    onClick={() => setSearchQuery('')}
-                    aria-label="Clear search query"
-                  >
-                    ×
-                  </button>
-                )}
+            {detectError && (
+              <div className="location-error-alert" role="alert">
+                <AlertCircle size={15} />
+                <span>{detectError}</span>
               </div>
+            )}
 
-              {/* Autocomplete Dropdown */}
-              {isSearching && (
-                <div className="location-dropdown-list">
-                  <div className="location-dropdown-loading">
-                    🔍 Searching nearest places & landmarks...
-                  </div>
-                </div>
-              )}
-
-              {!isSearching && searchQuery.trim().length >= 2 && searchResults.length === 0 && (
-                <div className="location-dropdown-list">
-                  <div className="location-dropdown-empty">
-                    No places found near your location for "{searchQuery}". Try searching by area, road, or tech park.
-                  </div>
-                </div>
-              )}
-
-              {!isSearching && searchResults.length > 0 && (
-                <div className="location-dropdown-list">
-                  {searchResults.map((result, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      className="location-dropdown-item"
-                      onClick={() => handleSelectLocation(result)}
-                    >
-                      <span className="dropdown-item-icon">
-                        {result.category === 'food' ? '🍴' : (result.category === 'office' ? '🏢' : '📍')}
-                      </span>
-                      <div className="dropdown-item-content">
-                        <div className="dropdown-item-header">
-                          <span className="dropdown-item-title">{result.label}</span>
-                          {result.distanceFormatted && (
-                            <span className={`dropdown-item-dist-pill ${result.distanceKm != null && result.distanceKm < 30 ? 'is-nearby' : ''}`}>
-                              {result.distanceFormatted}
-                            </span>
-                          )}
-                        </div>
-                        <span className="dropdown-item-sub">{result.fullAddress}</span>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Active Selected Location Card */}
+            {/* Staged selection card (draft only until Apply) */}
             {draftLocation ? (
               <div className="active-pinpoint-card">
                 <div className="active-pinpoint-header">
                   <span className="active-pinpoint-tag">
                     <span className="active-pulse-dot" />
-                    Active Proximity Reference
+                    Draft location — not applied yet
                   </span>
                   <button
                     type="button"
@@ -466,17 +975,118 @@ export default function UserLocationModal() {
                     Clear
                   </button>
                 </div>
-                <h4 className="active-pinpoint-name">{draftLocation.label}</h4>
-                <div className="active-pinpoint-coords">
-                  <span>📍 GPS: {draftLocation.lat.toFixed(4)}° N, {draftLocation.lng.toFixed(4)}° E</span>
-                  {draftLocation.city && <span>• {draftLocation.city}</span>}
+                <h4 className="active-pinpoint-name">
+                  {draftLocation.name || currentDisplayLabel}
+                </h4>
+                {draftSubtitle && (
+                  <p className="active-pinpoint-subtitle">{draftSubtitle}</p>
+                )}
+                <div className="location-source-row">
+                  <span className={`location-source-badge ${sourceBadge.className}`}>
+                    {sourceBadge.icon} {sourceBadge.text}
+                  </span>
+                  {canResetToSearch && (
+                    <button
+                      type="button"
+                      className="location-reset-link"
+                      onClick={handleResetToSearchResult}
+                      title="Move the pin back to the location you searched for"
+                    >
+                      Reset to searched result
+                    </button>
+                  )}
                 </div>
+                <div className="active-pinpoint-coords">
+                  <MapPin size={12} className="text-forest" />
+                  <span>
+                    {draftLocation.city || 'Pinned location'} •{' '}
+                    {Number(draftLocation.lat).toFixed(5)}, {Number(draftLocation.lng).toFixed(5)}
+                  </span>
+                </div>
+                {fixAssessment.isCoarse && (
+                  <div className="location-fix-warning" role="status">
+                    <AlertTriangle size={14} className="location-fix-warning-icon" />
+                    <div className="location-fix-warning-body">
+                      <span>{fixAssessment.message}</span>
+                      <button
+                        type="button"
+                        className="location-fix-warning-action"
+                        onClick={() => setPinMode(true)}
+                      >
+                        <Crosshair size={12} />
+                        <span>Pin my building</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="location-fix-warning-action is-search"
+                        onClick={focusSearchInput}
+                      >
+                        <Search size={12} />
+                        <span>Search my building instead</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {gpsDisagreesWithSearch && (
+                  <div className="location-gps-mismatch" role="alert">
+                    <AlertTriangle size={14} />
+                    <div className="location-gps-mismatch-body">
+                      <strong>Browser GPS looks off</strong>
+                      <span>
+                        This fix is {formatDistance(gpsVsSearchKm)} from “{searchSelection.name || searchSelection.label}”.
+                        Desktop browsers often fall back to city-level IP location. Keep the searched pin for exact distances.
+                      </span>
+                      <button
+                        type="button"
+                        className="location-reset-link"
+                        onClick={handleResetToSearchResult}
+                      >
+                        Keep searched pin
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {coarseSearchHit && (
+                  <div className="location-precision-note" role="status">
+                    <Info size={13} />
+                    <span>
+                      This match is area-level. Drag the pin to your tower, or search the building name
+                      for building-level distances.
+                    </span>
+                  </div>
+                )}
+                {legacyCoarseDraft && (
+                  <div className="location-precision-note" role="status">
+                    <Info size={13} />
+                    <span>
+                      This saved location has no building detail. Search your tower above, then press Apply
+                      for exact distances.
+                    </span>
+                  </div>
+                )}
               </div>
             ) : null}
 
-            {/* Quick-Pick Indian Tech Corridors */}
+            <div className="location-pin-row">
+              <button
+                type="button"
+                className={`location-pin-btn ${pinMode ? 'is-active' : ''}`}
+                onClick={() => setPinMode((value) => !value)}
+                aria-pressed={pinMode}
+                title="Click the map to drop a pin on your exact building"
+              >
+                <Crosshair size={14} />
+                <span>{pinMode ? 'Now click your building on the map' : 'Pin my building on the map'}</span>
+              </button>
+              <span className="location-pin-hint">or drag the red pin to fine-tune</span>
+            </div>
+
+            {/* Curated Indian Tech Corridors */}
             <div className="corridors-section">
-              <span className="corridors-heading">⚡ Quick-Pick Tech Hubs</span>
+              <span className="corridors-heading">
+                <Sparkles size={14} className="text-copper" />
+                <span>Curated Tech Hubs</span>
+              </span>
               <div className="corridors-chips-grid">
                 {POPULAR_TECH_HUBS.map((hub, idx) => {
                   const isSelected =
@@ -489,9 +1099,9 @@ export default function UserLocationModal() {
                       key={idx}
                       type="button"
                       className={`corridor-chip-btn ${isSelected ? 'is-active' : ''}`}
-                      onClick={() => handleSelectLocation(hub)}
+                      onClick={() => handleSelectHub(hub)}
                     >
-                      <span>📍</span>
+                      <MapPin size={11} className="corridor-chip-icon" />
                       <span>{hub.label}</span>
                     </button>
                   );
@@ -502,7 +1112,10 @@ export default function UserLocationModal() {
             {/* Proximity Radius Filter */}
             {draftLocation && (
               <div className="radius-section">
-                <span className="corridors-heading">📏 Maximum Proximity Radius</span>
+                <span className="corridors-heading">
+                  <SlidersHorizontal size={14} />
+                  <span>Maximum Distance Filter</span>
+                </span>
                 <div className="radius-pills-row">
                   {[
                     { label: 'All Distances', val: null },
@@ -514,8 +1127,8 @@ export default function UserLocationModal() {
                     <button
                       key={i}
                       type="button"
-                      className={`radius-pill-btn ${maxDistanceKm === r.val ? 'is-active' : ''}`}
-                      onClick={() => setMaxDistanceKm(r.val)}
+                      className={`radius-pill-btn ${draftRadius === r.val ? 'is-active' : ''}`}
+                      onClick={() => setDraftRadius(r.val)}
                     >
                       {r.label}
                     </button>
@@ -526,17 +1139,56 @@ export default function UserLocationModal() {
           </div>
 
           {/* Right Panel: Interactive Leaflet Map */}
-          <div className="location-map-pane">
+          <div className={`location-map-pane ${pinMode ? 'is-pin-mode' : ''}`}>
             <div className="map-floating-overlay-bar">
               <span className="map-overlay-title">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3">
-                  <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6" />
-                </svg>
-                Interactive Location Radar Map
+                <Compass size={14} />
+                {pinMode ? 'Click your exact building' : 'Preview & fine-tune your pin'}
               </span>
               <span className="map-overlay-hint">
-                💡 Click anywhere on map to reposition pin
+                <Info size={12} />
+                <span>
+                  {draftSource === 'search'
+                    ? 'Searched result'
+                    : draftSource === 'gps'
+                      ? 'GPS fix'
+                      : draftSource === 'map_click'
+                        ? 'Map-adjusted'
+                        : draftSource === 'curated'
+                          ? 'Tech hub centroid'
+                          : 'Drop a pin'}
+                </span>
               </span>
+            </div>
+
+            {/* Map actions live bottom-left so they never collide with the
+                Leaflet zoom control and attribution at bottom-right. */}
+            <div className="map-action-stack">
+              {canResetToSearch && (
+                <button
+                  type="button"
+                  className="map-recenter-floating-btn"
+                  onClick={handleResetToSearchResult}
+                  title="Move the pin back to the location you searched for"
+                >
+                  <Search size={13} className="recenter-nav-icon" />
+                  <span>Reset to searched result</span>
+                </button>
+              )}
+              <button
+                type="button"
+                className="map-recenter-floating-btn"
+                onClick={handleRecenterToLiveLocation}
+                title="Recenter map to your current live location"
+              >
+                <Navigation size={13} className="recenter-nav-icon" />
+                <span>{isDetecting ? 'Locating…' : 'Recenter to My Location'}</span>
+              </button>
+            </div>
+
+            <div className="map-drag-instruction" role="note">
+              <Crosshair size={12} />
+              <span>Drag the pin or click the map to adjust your exact location.</span>
             </div>
 
             <div ref={mapContainerRef} className="modal-map-viewport" />
@@ -546,7 +1198,8 @@ export default function UserLocationModal() {
         {/* Footer */}
         <footer className="location-modal-bottom-bar">
           <span className="bottom-bar-hint">
-            📍 Distance to all companies and live ATS jobs will be calculated in real-time
+            <Navigation size={13} />
+            <span>Distance to all companies and live ATS jobs will be calculated in real-time</span>
           </span>
           <div className="bottom-bar-actions">
             <button
@@ -560,13 +1213,13 @@ export default function UserLocationModal() {
               type="button"
               className="btn-loc-apply"
               onClick={handleApply}
-              title={draftLocation ? `Apply location: ${draftLocation.label}` : 'Done'}
+              title={draftLocation ? `Apply location: ${currentDisplayLabel}` : 'Done'}
             >
               <span className="btn-loc-apply-desktop">
-                {draftLocation ? `Apply & Sort: ${draftLocation.label?.split(',')[0] || 'Location'}` : 'Done'}
+                {draftLocation ? `Apply & Sort: ${shortCityLabel}` : 'Done'}
               </span>
               <span className="btn-loc-apply-mobile">
-                {draftLocation ? '✓ Apply Location' : 'Done'}
+                {draftLocation ? `Apply: ${shortCityLabel}` : 'Done'}
               </span>
             </button>
           </div>
