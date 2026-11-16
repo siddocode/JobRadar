@@ -227,7 +227,7 @@ APP_URL=https://job-radarr.vercel.app
 
 # Transactional Email (Brevo Free Tier - 300 emails/day)
 BREVO_API_KEY=
-BREVO_SENDER_EMAIL=siddocode@gmail.com
+BREVO_SENDER_EMAIL=
 BREVO_SENDER_NAME=JobRadar
 
 # Optional Inbound Recruiter Sync (Google Cloud Free Tier)
