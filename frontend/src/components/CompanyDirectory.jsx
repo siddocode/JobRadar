@@ -536,21 +536,11 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
 
   return (
     <div className="directory-page-wrap">
-      {/* Header matching visual reference: "Company Directory & Hubs" */}
-      <div className="view-header">
-        <div>
-          <h1 className="view-title">Company Directory & Hubs</h1>
-          <p className="view-subtitle">
-            Verified employers, detected ATS portals, and physical office hubs.
-          </p>
-        </div>
-      </div>
-
       {/* 3 Refined Stat Cards */}
       <section className="directory-stats-ribbon" aria-label="Directory Overview">
         <div className="directory-stat-card">
           <div className="directory-stat-icon-wrap">
-            <Building2 size={20} />
+            <Building2 size={18} />
           </div>
           <div className="directory-stat-info">
             <span className="directory-stat-val">{Number(aggregateStats.total || totalCount || 0).toLocaleString()}</span>
@@ -560,7 +550,7 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
 
         <div className="directory-stat-card is-hiring">
           <div className="directory-stat-icon-wrap">
-            <CheckCircle2 size={20} />
+            <CheckCircle2 size={18} />
           </div>
           <div className="directory-stat-info">
             <span className="directory-stat-val text-green">{Number(aggregateStats.hiring || 0).toLocaleString()}</span>
@@ -570,7 +560,7 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
 
         <div className="directory-stat-card is-offices">
           <div className="directory-stat-icon-wrap">
-            <MapPin size={20} />
+            <MapPin size={18} />
           </div>
           <div className="directory-stat-info">
             <span className="directory-stat-val">{Number(aggregateStats.offices || totalCount || 0).toLocaleString()}</span>
@@ -1729,22 +1719,28 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
         <div className="modal-backdrop" onClick={() => !isAddingCompany && setShowAddModal(false)}>
           <div className="discovery-modal-card add-company-modal-card" onClick={(e) => e.stopPropagation()}>
             <div className="discovery-modal-header">
+              <div className="discovery-header-top-row">
+                <div className="discovery-modal-badge">
+                  <Plus size={12} />
+                  <span>Manual & Google Import</span>
+                </div>
+                {!isAddingCompany && (
+                  <button
+                    type="button"
+                    className="modal-close-btn"
+                    onClick={() => setShowAddModal(false)}
+                    aria-label="Close modal"
+                  >
+                    <X size={15} />
+                  </button>
+                )}
+              </div>
               <div className="discovery-modal-title-group">
-                <div className="discovery-modal-badge">Manual & Google Import</div>
                 <h3 className="discovery-modal-title">Add Company to Directory</h3>
                 <p className="discovery-modal-subtitle">
                   Add local startups or companies found on Google directly to your directory and outreach pipeline.
                 </p>
               </div>
-              {!isAddingCompany && (
-                <button
-                  className="modal-close-btn"
-                  onClick={() => setShowAddModal(false)}
-                  aria-label="Close modal"
-                >
-                  ×
-                </button>
-              )}
             </div>
 
             <form onSubmit={handleSubmitAddCompany}>
@@ -1883,83 +1879,108 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
       {/* Automated ATS Sniffer Modal */}
       {showAtsModal && (
         <div className="modal-backdrop" onClick={() => !isDetectingAts && setShowAtsModal(false)}>
-          <div className="discovery-modal-card" style={{ maxWidth: '540px' }} onClick={(e) => e.stopPropagation()}>
+          <div className="discovery-modal-card ats-sniffer-modal-card" style={{ maxWidth: '520px' }} onClick={(e) => e.stopPropagation()}>
             <div className="discovery-modal-header">
-              <div className="header-badge-title-group">
-                <span className="discovery-engine-badge"><Zap size={13} style={{ display: 'inline-block', verticalAlign: '-1px', marginRight: '4px' }} />Real-Time ATS Sniffer</span>
+              <div className="discovery-header-top-row">
+                <div className="discovery-modal-badge">
+                  <Zap size={12} />
+                  <span>Real-Time ATS Sniffer</span>
+                </div>
+                <button
+                  type="button"
+                  className="modal-close-btn"
+                  onClick={() => setShowAtsModal(false)}
+                  disabled={isDetectingAts}
+                  aria-label="Close modal"
+                >
+                  <X size={15} />
+                </button>
+              </div>
+              <div className="discovery-modal-title-group">
                 <h3 className="discovery-modal-title">Detect Company ATS Provider</h3>
                 <p className="discovery-modal-subtitle">
                   Inspects company websites and career portals to identify and verify public ATS feeds (Greenhouse, Lever, Ashby, Workable, Recruitee, SmartRecruiters).
                 </p>
               </div>
-              <button
-                type="button"
-                className="discovery-modal-close-btn"
-                onClick={() => setShowAtsModal(false)}
-                disabled={isDetectingAts}
-              >
-                ✕
-              </button>
             </div>
 
-            <form onSubmit={handleDetectAts} className="discovery-modal-body" style={{ padding: '20px 24px' }}>
-              <div className="form-group" style={{ marginBottom: '16px' }}>
-                <label className="form-label">Company Name (Optional)</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  placeholder="e.g. Figma, Swiggy, Razorpay"
-                  value={atsDetectName}
-                  onChange={(e) => setAtsDetectName(e.target.value)}
-                />
+            <form onSubmit={handleDetectAts}>
+              <div className="discovery-modal-body">
+                <div className="discovery-form-group">
+                  <label className="discovery-label" htmlFor="ats-company-name">Company Name (Optional)</label>
+                  <input
+                    id="ats-company-name"
+                    type="text"
+                    className="discovery-input"
+                    placeholder="e.g. Figma, Swiggy, Razorpay"
+                    value={atsDetectName}
+                    onChange={(e) => setAtsDetectName(e.target.value)}
+                  />
+                </div>
+
+                <div className="discovery-form-group">
+                  <label className="discovery-label" htmlFor="ats-company-url">Company Website or Career URL *</label>
+                  <input
+                    id="ats-company-url"
+                    type="text"
+                    className="discovery-input"
+                    placeholder="e.g. figma.com or boards.greenhouse.io/figma"
+                    value={atsDetectUrl}
+                    onChange={(e) => setAtsDetectUrl(e.target.value)}
+                    required
+                  />
+                </div>
+
+                {atsDetectError && (
+                  <div className="discovery-error-box">
+                    <span>{atsDetectError}</span>
+                  </div>
+                )}
+
+                {atsDetectResult && (
+                  <div className={`ats-result-card ${atsDetectResult.detected ? 'is-detected' : 'is-not-detected'}`}>
+                    {atsDetectResult.detected ? (
+                      <div>
+                        <div className="ats-result-header">
+                          <CheckCircle2 size={16} />
+                          <span>Verified ATS Feed Found</span>
+                        </div>
+                        <div className="ats-result-details">
+                          <div className="ats-result-row">
+                            <span className="ats-result-key">ATS Engine</span>
+                            <span className="ats-result-val-badge">{atsDetectResult.ats}</span>
+                          </div>
+                          <div className="ats-result-row">
+                            <span className="ats-result-key">Target Slug</span>
+                            <code className="ats-result-code">{atsDetectResult.slug}</code>
+                          </div>
+                          <div className="ats-result-row">
+                            <span className="ats-result-key">Detection Method</span>
+                            <span className="ats-result-val">{atsDetectResult.method}</span>
+                          </div>
+                          {atsDetectResult.sourceUrl && (
+                            <div className="ats-result-row">
+                              <span className="ats-result-key">Source</span>
+                              <a href={atsDetectResult.sourceUrl} target="_blank" rel="noopener noreferrer" className="ats-result-link">
+                                {atsDetectResult.sourceUrl}
+                              </a>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="ats-result-empty">
+                        No supported public ATS board detected for this URL. The company may use custom proprietary portals or gated intranet listings.
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
-              <div className="form-group" style={{ marginBottom: '16px' }}>
-                <label className="form-label">Company Website or Career URL *</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  placeholder="e.g. figma.com or boards.greenhouse.io/figma"
-                  value={atsDetectUrl}
-                  onChange={(e) => setAtsDetectUrl(e.target.value)}
-                  required
-                />
-              </div>
-
-              {atsDetectError && (
-                <div style={{ padding: '12px', background: 'var(--danger-light)', color: 'var(--danger)', borderRadius: 'var(--radius-md)', fontSize: '13px', marginBottom: '16px' }}>
-                  {atsDetectError}
-                </div>
-              )}
-
-              {atsDetectResult && (
-                <div style={{ padding: '16px', background: 'var(--bg-card-subtle)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', marginBottom: '16px' }}>
-                  {atsDetectResult.detected ? (
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--success)', fontWeight: '700', fontSize: '14px', marginBottom: '8px' }}>
-                        <span>✓ Verified ATS Feed Found!</span>
-                      </div>
-                      <div style={{ fontSize: '13px', color: 'var(--text-primary)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                        <div><strong>ATS Engine:</strong> <span style={{ textTransform: 'uppercase', color: 'var(--primary)' }}>{atsDetectResult.ats}</span></div>
-                        <div><strong>Target Slug:</strong> <code>{atsDetectResult.slug}</code></div>
-                        <div><strong>Detection Method:</strong> {atsDetectResult.method}</div>
-                        {atsDetectResult.sourceUrl && (
-                          <div><strong>Source:</strong> <a href={atsDetectResult.sourceUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)' }}>{atsDetectResult.sourceUrl}</a></div>
-                        )}
-                      </div>
-                    </div>
-                  ) : (
-                    <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-                      No supported public ATS board detected for this URL. The company may use custom proprietary portals or gated intranet listings.
-                    </div>
-                  )}
-                </div>
-              )}
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <div className="discovery-modal-footer">
                 <button
                   type="button"
-                  className="btn btn-secondary btn-sm"
+                  className="btn-modal-secondary"
                   onClick={() => setShowAtsModal(false)}
                   disabled={isDetectingAts}
                 >
@@ -1967,10 +1988,20 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
                 </button>
                 <button
                   type="submit"
-                  className="btn btn-primary btn-sm"
+                  className="btn-modal-primary"
                   disabled={isDetectingAts || !atsDetectUrl.trim()}
                 >
-                  {isDetectingAts ? 'Sniffing & Verifying...' : 'Scan & Verify ATS'}
+                  {isDetectingAts ? (
+                    <>
+                      <span className="btn-spinner" />
+                      <span>Sniffing & Verifying...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Zap size={14} />
+                      <span>Scan & Verify ATS</span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>

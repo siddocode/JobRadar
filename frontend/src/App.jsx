@@ -1054,7 +1054,7 @@ export default function App() {
             </div>
           </div>
 
-          <div className={`topbar-title-block ${['applications', 'companies', 'directory', 'profile', 'autopilot'].includes(activeTab) ? 'is-duplicated' : ''}`}>
+          <div className={`topbar-title-block ${['applications', 'profile', 'autopilot'].includes(activeTab) ? 'is-duplicated' : ''}`}>
             <h1 className="page-heading">
               {activeTab === 'overview' && 'Mission Control & Overview'}
               {activeTab === 'jobs' && 'Discover Engineering Jobs'}
@@ -1325,7 +1325,7 @@ export default function App() {
               <section className="discover-stats-ribbon" aria-label="Job Statistics">
                 <div className="discover-stat-card">
                   <div className="discover-stat-icon-wrap">
-                    <Briefcase size={20} />
+                    <Briefcase size={18} />
                   </div>
                   <div className="discover-stat-info">
                     <span className="discover-stat-val">{stats ? stats.total.toLocaleString() : meta.totalInDb.toLocaleString()}</span>
@@ -1335,7 +1335,7 @@ export default function App() {
 
                 <div className="discover-stat-card is-open">
                   <div className="discover-stat-icon-wrap">
-                    <CheckCircle2 size={20} />
+                    <CheckCircle2 size={18} />
                   </div>
                   <div className="discover-stat-info">
                     <span className="discover-stat-val text-green">
@@ -1347,7 +1347,7 @@ export default function App() {
 
                 <div className="discover-stat-card is-today">
                   <div className="discover-stat-icon-wrap">
-                    <Sparkles size={20} />
+                    <Sparkles size={18} />
                   </div>
                   <div className="discover-stat-info">
                     <span className="discover-stat-val text-copper">
@@ -1359,7 +1359,7 @@ export default function App() {
 
                 <div className="discover-stat-card is-match">
                   <div className="discover-stat-icon-wrap">
-                    <Bot size={20} />
+                    <Bot size={18} />
                   </div>
                   <div className="discover-stat-info">
                     <span className="discover-stat-val">{meta.total.toLocaleString()}</span>

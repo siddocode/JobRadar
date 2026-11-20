@@ -729,11 +729,12 @@ body {
 
 
 .main-content-body {
-  padding: 28px 36px 64px;
+  padding: 16px 24px 60px 24px;
   flex: 1;
-  max-width: 1440px;
+  max-width: 1760px;
   width: 100%;
   margin: 0 auto;
+  box-sizing: border-box;
 }
 
 /* ==========================================================================
@@ -1198,9 +1199,15 @@ option {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
+  padding: 9px 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  margin-bottom: 2px;
   font-size: 13px;
   color: var(--text-muted);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+  box-sizing: border-box;
 }
 
 .results-count strong {
@@ -1225,8 +1232,8 @@ option {
    ========================================================================== */
 .companies-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
+  gap: 16px;
   align-items: stretch;
 }
 
@@ -1234,13 +1241,13 @@ option {
   background-color: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
-  padding: 20px 22px;
+  padding: 16px 18px;
   box-shadow: var(--shadow-card);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   height: 100%;
-  min-height: 280px;
+  min-height: 240px;
   transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
   position: relative;
   overflow: hidden;
@@ -2373,7 +2380,7 @@ option {
 .discover-page-wrap {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 14px;
   width: 100%;
 }
 
@@ -2381,7 +2388,7 @@ option {
 .discover-stats-ribbon {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 14px;
+  gap: 12px;
   width: 100%;
 }
 
@@ -2396,7 +2403,7 @@ option {
   .stats-ribbon,
   .discover-stats-ribbon {
     grid-template-columns: 1fr;
-    gap: 10px;
+    gap: 8px;
   }
 }
 
@@ -2404,13 +2411,15 @@ option {
 .discover-stat-card {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
-  border-radius: 12px;
-  padding: 16px 18px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  border-radius: 10px;
+  padding: 8px 14px;
+  min-height: 48px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
   transition: all 0.15s ease;
+  box-sizing: border-box;
 }
 
 .stat-card:hover,
@@ -2420,9 +2429,9 @@ option {
 }
 
 .discover-stat-icon-wrap {
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
   background: var(--bg-card-subtle);
   border: 1px solid var(--border-color);
   color: var(--primary);
@@ -2457,7 +2466,7 @@ option {
 
 .stat-value,
 .discover-stat-val {
-  font-size: 22px;
+  font-size: 18px;
   font-weight: 700;
   color: var(--text-primary);
   line-height: 1.15;
@@ -2466,10 +2475,10 @@ option {
 
 .stat-label,
 .discover-stat-lbl {
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 500;
   color: var(--text-muted);
-  margin-top: 2px;
+  margin-top: 1px;
 }
 
 /* ==========================================================================
@@ -2478,8 +2487,8 @@ option {
 .jobs-discovery-layout,
 .companies-discovery-layout {
   display: grid;
-  grid-template-columns: 280px 1fr;
-  gap: 24px;
+  grid-template-columns: 260px 1fr;
+  gap: 20px;
   align-items: start;
   width: 100%;
 }
@@ -3773,19 +3782,19 @@ option {
 }
 
 .results-container {
-  background-color: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  padding: 20px;
-  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.04), 0 1px 3px rgba(0, 0, 0, 0.02);
+  background-color: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  box-shadow: none;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
 }
 
 [data-theme="dark"] .results-container {
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
-  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow: none;
+  border-color: transparent;
 }
 
 .results-header {
@@ -3795,8 +3804,12 @@ option {
   flex-wrap: wrap;
   gap: 12px;
   width: 100%;
-  padding-bottom: 14px;
-  border-bottom: 1px solid var(--border-subtle);
+  padding: 9px 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+  box-sizing: border-box;
 }
 
 .results-controls-cluster {
@@ -4609,6 +4622,182 @@ option {
   flex-direction: column;
   overflow: hidden;
   animation: modalScaleUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Generic SaaS Modal Card (ApplicationsView, Ingest, Gmail, etc.) */
+.modal-card {
+  width: 95%;
+  max-width: 560px;
+  max-height: calc(100dvh - 32px);
+  margin: auto;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-xl, 20px);
+  box-shadow: 0 25px 65px -15px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: modalScaleUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  pointer-events: auto !important;
+  overscroll-behavior: contain !important;
+}
+
+.modal-card.modal-md {
+  max-width: 640px;
+}
+
+.modal-card.modal-lg {
+  max-width: 820px;
+}
+
+.modal-header {
+  padding: 22px 26px 18px;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  background-color: var(--bg-card);
+}
+
+.modal-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: var(--primary-light);
+  color: var(--primary);
+  border: 1px solid var(--primary-border);
+  margin-bottom: 6px;
+}
+
+.modal-title {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
+  margin: 0 0 4px;
+  line-height: 1.25;
+}
+
+.modal-subtitle {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.modal-body {
+  padding: 20px 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.modal-footer {
+  padding: 16px 26px 20px;
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  background-color: var(--bg-card);
+}
+
+/* ATS Sniffer Result Card */
+.ats-result-card {
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  background: var(--bg-card-subtle);
+}
+
+.ats-result-card.is-detected {
+  background: rgba(16, 185, 129, 0.06);
+  border-color: rgba(16, 185, 129, 0.28);
+}
+
+.ats-result-header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--success, #10b981);
+  font-weight: 700;
+  font-size: 13.5px;
+  margin-bottom: 10px;
+}
+
+.ats-result-details {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12.5px;
+}
+
+.ats-result-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ats-result-key {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.ats-result-val-badge {
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--primary-light);
+  color: var(--primary);
+}
+
+.ats-result-code {
+  font-family: monospace;
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+}
+
+.ats-result-val {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.ats-result-link {
+  color: var(--primary);
+  font-weight: 500;
+  text-decoration: none;
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ats-result-link:hover {
+  text-decoration: underline;
+}
+
+.ats-result-empty {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.5;
 }
 
 /* Discovery Scanner Modal sizing: When scanning, keep it tightly focused & centered like mobile; expand only with results */
@@ -11907,7 +12096,7 @@ body.modal-open .mobile-bottom-nav {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  margin-bottom: 20px;
+  margin-bottom: 12px;
 }
 
 .tech-hubs-bar,
@@ -12388,9 +12577,9 @@ body.modal-open .mobile-bottom-nav {
 /* Radar Cards Grid */
 .radar-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
   gap: 16px;
-  margin-top: 16px;
+  margin-top: 0;
 }
 
 .radar-card {
@@ -16926,29 +17115,30 @@ html, body {
    CLASSY COMPANY CARD MOBILE VIEW (Fixes Issue 2: Cards breaking on mobile)
    ========================================================================== */
 .outreach-discovery-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
   width: 100%;
 }
 
 .outreach-discovery-grid .outreach-quick-chip {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  height: 34px;
-  padding: 0 10px;
-  border-radius: 8px;
+  gap: 5px;
+  height: 28px;
+  padding: 0 9px;
+  border-radius: 6px;
   border: 1px solid var(--border-color);
   background-color: var(--bg-card);
   color: var(--text-primary);
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 11.5px;
+  font-weight: 500;
   text-decoration: none;
   box-sizing: border-box;
   transition: all 0.15s ease;
   white-space: nowrap;
+  flex: 1 1 auto;
 }
 
 .outreach-discovery-grid .outreach-quick-chip svg {
