@@ -1232,7 +1232,7 @@ option {
    ========================================================================== */
 .companies-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
   gap: 16px;
   align-items: stretch;
 }
@@ -1325,7 +1325,7 @@ option {
 }
 
 .company-heading {
-  font-size: 16px;
+  font-size: 15.5px;
   font-weight: 700;
   color: var(--text-primary);
   letter-spacing: -0.015em;
@@ -1334,7 +1334,7 @@ option {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 220px;
+  max-width: 100%;
 }
 
 .external-site-link {
@@ -1371,13 +1371,17 @@ option {
 }
 
 .clean-pill {
+  display: inline-flex;
+  align-items: center;
   font-size: 11px;
   font-weight: 500;
-  padding: 2px 7px;
+  padding: 2px 8px;
   border-radius: 9999px;
   background-color: var(--bg-card-subtle);
   border: 1px solid var(--border-color);
   color: var(--text-secondary);
+  white-space: nowrap;
+  line-height: 1.35;
 }
 
 .clean-pill.category-pill {
@@ -12577,7 +12581,7 @@ body.modal-open .mobile-bottom-nav {
 /* Radar Cards Grid */
 .radar-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
   gap: 16px;
   margin-top: 0;
 }

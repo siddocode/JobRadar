@@ -235,7 +235,7 @@ export default function CompanyCard({ company, onUpdate, onPersonalize }) {
   return (
     <div className={`classy-card ${company.isHiring ? 'is-hiring' : ''}`} id={`company-${company.slug || company._id}`}>
       <div className="card-main-content">
-        {/* Card Header: Monogram Avatar, Company Name, Category & Hiring Pill */}
+        {/* Card Header: Monogram Avatar, Company Name, Website & Hiring Pill */}
         <div className="card-top-row">
           <div className="avatar-and-info">
             <div
@@ -254,41 +254,20 @@ export default function CompanyCard({ company, onUpdate, onPersonalize }) {
                   {company.name}
                 </h3>
               </div>
-
-              <div className="badges-inline-row">
-                {websiteUrl && (
-                  <a
-                    href={websiteUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="external-site-link"
-                    title={`Visit ${displayDomain || 'Website'}`}
-                  >
-                    <span>{displayDomain || 'Website'}</span>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mini-icon arrow-icon">
-                      <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3" />
-                    </svg>
-                  </a>
-                )}
-                <span className="clean-pill category-pill">{company.category || 'Company'}</span>
-
-                {company.atsType && (
-                  <span className="clean-pill ats-pill">
-                    ATS: {company.atsType}
-                  </span>
-                )}
-
-                {company.isTech && (
-                  <button
-                    type="button"
-                    className="clean-pill tech-pill"
-                    onClick={() => setShowEvidence(!showEvidence)}
-                    title="Click to toggle verified tech evidence"
-                  >
-                    Tech {company.techEvidence?.length > 0 && `(${company.techEvidence.length})`}
-                  </button>
-                )}
-              </div>
+              {websiteUrl && (
+                <a
+                  href={websiteUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="external-site-link"
+                  title={`Visit ${displayDomain || 'Website'}`}
+                >
+                  <span>{displayDomain || 'Website'}</span>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mini-icon arrow-icon">
+                    <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3" />
+                  </svg>
+                </a>
+              )}
             </div>
           </div>
 
@@ -312,6 +291,28 @@ export default function CompanyCard({ company, onUpdate, onPersonalize }) {
               </span>
             )}
           </div>
+        </div>
+
+        {/* Full-Width Category, ATS & Tech Badges Row */}
+        <div className="badges-inline-row">
+          <span className="clean-pill category-pill">{company.category || 'Company'}</span>
+
+          {company.atsType && (
+            <span className="clean-pill ats-pill">
+              ATS: {company.atsType}
+            </span>
+          )}
+
+          {company.isTech && (
+            <button
+              type="button"
+              className="clean-pill tech-pill"
+              onClick={() => setShowEvidence(!showEvidence)}
+              title="Click to toggle verified tech evidence"
+            >
+              Tech {company.techEvidence?.length > 0 && `(${company.techEvidence.length})`}
+            </button>
+          )}
         </div>
 
         {/* Tech Evidence Drawer (Expandable) */}
