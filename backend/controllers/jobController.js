@@ -97,7 +97,7 @@ async function getJobs(req, res) {
       filter.techCorridor = corridor.trim();
     }
 
-    // Filter by fresher / early career friendly
+    // Filter by fresher / early career friendly (guarantee senior/staff titles are never returned)
     if (fresherFriendly === 'true' || fresherFriendly === true) {
       addOrFilter([
         { fresherFriendly: true },
@@ -105,6 +105,7 @@ async function getJobs(req, res) {
         { seniority: 'intern' },
         { expMin: { $lte: 1 } }
       ]);
+      filter.title = { $not: /\b(staff|principal|architect|tech lead|engineering manager|director|vp|senior|sr\.?)\b/i };
     }
 
     // Filter by seniority ('entry' | 'mid' | 'senior' | 'lead_staff' | 'manager' | 'director_plus')
@@ -966,7 +967,7 @@ async function parseCandidateCv(req, res) {
  */
 async function parseCandidateUrl(req, res) {
   try {
-    const { portfolioUrl } = req.body;
+    const { portfolioUrl, previewOnly = false } = req.body || {};
     if (!portfolioUrl || typeof portfolioUrl !== 'string') {
       return res.status(400).json({
         success: false,
@@ -981,10 +982,24 @@ async function parseCandidateUrl(req, res) {
       sourceName: portfolioUrl
     });
 
-    if (req.user && req.user.id) {
+    if (!previewOnly && req.user && req.user.id) {
       try {
         const User = require('../models/User');
-        await User.findByIdAndUpdate(req.user.id, { candidateProfile: profile });
+        const existingUser = await User.findById(req.user.id).select('candidateProfile name email').lean();
+        const existing = existingUser?.candidateProfile || {};
+        const mergedProfile = {
+          ...profile,
+          name: profile.name || existing.name || existingUser?.name || '',
+          email: profile.email || existing.email || existingUser?.email || '',
+          targetRoles: Array.isArray(existing.targetRoles) && existing.targetRoles.length > 0
+            ? existing.targetRoles
+            : undefined,
+          preferredLocations: Array.isArray(existing.preferredLocations) && existing.preferredLocations.length > 0
+            ? existing.preferredLocations
+            : undefined,
+          minLpa: existing.minLpa || undefined
+        };
+        await User.findByIdAndUpdate(req.user.id, { candidateProfile: mergedProfile });
       } catch (userErr) {
         console.warn('[jobController:parseCandidateUrl] Could not sync to user record:', userErr.message);
       }

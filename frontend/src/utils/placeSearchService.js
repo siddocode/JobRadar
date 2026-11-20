@@ -63,12 +63,193 @@ const CITY_ABBREVIATIONS = {
   noida: 'noida'
 };
 
-// Curated high-frequency Indian tech hubs, business clusters, eateries & landmarks
+// Curated high-frequency Indian tech hubs, business clusters, corporate towers, eateries & landmarks
 export const CURATED_PLACES = [
   // --- KOLKATA ---
   {
+    label: 'Technopolis IT Hub, BP Block, Sector V',
+    fullAddress: 'Plot BP-4, Sector V, Bidhannagar, Salt Lake, Kolkata, West Bengal 700091',
+    locality: 'Salt Lake Sector V',
+    city: 'Kolkata',
+    lat: 22.5798,
+    lng: 88.4368,
+    category: 'office',
+    aliases: ['technopolis', 'technopolis sector 5', 'technopolis sector v', 'technopolis kolkata', 'bp block sector 5']
+  },
+  {
+    label: 'Ecospace Business Park, New Town',
+    fullAddress: 'Plot IIF/11, Action Area II, New Town, Rajarhat, Kolkata, West Bengal 700160',
+    locality: 'New Town Action Area II',
+    city: 'Kolkata',
+    lat: 22.5892,
+    lng: 88.4902,
+    category: 'office',
+    aliases: ['ecospace', 'ecospace business park', 'ecospace new town', 'new town ecospace']
+  },
+  {
+    label: 'Infinity Benchmark, GP Block, Sector V',
+    fullAddress: 'Plot G1, Block EP & GP, Sector V, Bidhannagar, Kolkata, West Bengal 700091',
+    locality: 'Salt Lake Sector V',
+    city: 'Kolkata',
+    lat: 22.5698,
+    lng: 88.4335,
+    category: 'office',
+    aliases: ['infinity benchmark', 'infinity think tank', 'gp block sector 5', 'infinity sector v']
+  },
+  {
+    label: 'Godrej Waterside, DP Block, Sector V',
+    fullAddress: 'Plot 5, Block DP, Sector V, Bidhannagar, Salt Lake, Kolkata, West Bengal 700091',
+    locality: 'Salt Lake Sector V',
+    city: 'Kolkata',
+    lat: 22.5736,
+    lng: 88.4425,
+    category: 'office',
+    aliases: ['godrej waterside', 'dp block sector 5', 'waterside sector v']
+  },
+  {
+    label: 'Bengal Eco Intelligent Park (Techna), Sector V',
+    fullAddress: 'Plot EM-3, EM Block, Sector V, Bidhannagar, Kolkata, West Bengal 700091',
+    locality: 'Salt Lake Sector V',
+    city: 'Kolkata',
+    lat: 22.5705,
+    lng: 88.4295,
+    category: 'office',
+    aliases: ['eco intelligent park', 'bengal eco intelligent park', 'techna building', 'em block sector 5']
+  },
+  {
+    label: 'SDF Building & Webel IT Park, Sector V',
+    fullAddress: 'SDF Building, GP Block, Sector V, Bidhannagar, Kolkata, West Bengal 700091',
+    locality: 'Salt Lake Sector V',
+    city: 'Kolkata',
+    lat: 22.5691,
+    lng: 88.4316,
+    category: 'office',
+    aliases: ['sdf building', 'webel', 'webel bhavan', 'webel it park', 'sdf sector 5']
+  },
+  {
+    label: 'Mani Casadona IT Park, New Town',
+    fullAddress: 'Plot IIF/04, Action Area IIF, New Town, Rajarhat, Kolkata, West Bengal 700156',
+    locality: 'New Town Action Area II',
+    city: 'Kolkata',
+    lat: 22.5872,
+    lng: 88.4810,
+    category: 'office',
+    aliases: ['mani casadona', 'casadona new town', 'mani casadona it park']
+  },
+  {
+    label: 'Merlin Infinite, DN Block, Sector V',
+    fullAddress: 'Plot DN-51, Sector V, Bidhannagar, Salt Lake, Kolkata, West Bengal 700091',
+    locality: 'Salt Lake Sector V',
+    city: 'Kolkata',
+    lat: 22.5785,
+    lng: 88.4342,
+    category: 'office',
+    aliases: ['merlin infinite', 'dn 51 sector 5', 'merlin sector v']
+  },
+  {
+    label: 'Globsyn Crystals, EP Block, Sector V',
+    fullAddress: 'XI-11 & 12, Block EP, Sector V, Salt Lake Electronics Complex, Kolkata 700091',
+    locality: 'Salt Lake Sector V',
+    city: 'Kolkata',
+    lat: 22.5718,
+    lng: 88.4368,
+    category: 'office',
+    aliases: ['globsyn crystals', 'globsyn sector 5', 'ep block globsyn']
+  },
+  {
+    label: 'Millennium City IT Park, DN Block, Sector V',
+    fullAddress: 'Plot DN-62, Sector V, Bidhannagar, Salt Lake, Kolkata, West Bengal 700091',
+    locality: 'Salt Lake Sector V',
+    city: 'Kolkata',
+    lat: 22.5790,
+    lng: 88.4385,
+    category: 'office',
+    aliases: ['millennium city', 'millennium city it park', 'dn 62 sector 5']
+  },
+  {
+    label: 'College More / Sector V Metro Gate',
+    fullAddress: 'College More, Sector V, Bidhannagar, Salt Lake, Kolkata, West Bengal 700091',
+    locality: 'Salt Lake Sector V',
+    city: 'Kolkata',
+    lat: 22.5778,
+    lng: 88.4318,
+    category: 'landmark',
+    aliases: ['college more', 'sector 5 metro', 'salt lake sector v metro']
+  },
+  {
+    label: 'Karunamoyee, Salt Lake Sector II',
+    fullAddress: 'Karunamoyee Bus Terminus & Metro, Bidhannagar, Kolkata, West Bengal 700091',
+    locality: 'Salt Lake Sector II',
+    city: 'Kolkata',
+    lat: 22.5844,
+    lng: 88.4220,
+    category: 'landmark',
+    aliases: ['karunamoyee', 'salt lake sector 2', 'sector 2 salt lake', 'sector 1 salt lake', 'sector 3 salt lake']
+  },
+  {
+    label: 'Biswa Bangla Gate (Narkelbagan), New Town',
+    fullAddress: 'Major Arterial Road, Action Area I, New Town, Kolkata, West Bengal 700156',
+    locality: 'New Town Action Area I',
+    city: 'Kolkata',
+    lat: 22.5819,
+    lng: 88.4589,
+    category: 'landmark',
+    aliases: ['biswa bangla gate', 'narkelbagan', 'new town gate', 'axis mall new town', 'action area 1']
+  },
+  {
+    label: 'Chinar Park & Rajarhat Main Road',
+    fullAddress: 'Chinar Park Crossing, Rajarhat, Tegharia, Kolkata, West Bengal 700157',
+    locality: 'Rajarhat / Chinar Park',
+    city: 'Kolkata',
+    lat: 22.6231,
+    lng: 88.4452,
+    category: 'landmark',
+    aliases: ['chinar park', 'rajarhat', 'city centre 2', 'teghoria', 'haldiram vip road']
+  },
+  {
+    label: 'Gariahat & Ballygunge Crossing',
+    fullAddress: 'Gariahat Road, Ballygunge, Kolkata, West Bengal 700019',
+    locality: 'Ballygunge / Gariahat',
+    city: 'Kolkata',
+    lat: 22.5194,
+    lng: 88.3656,
+    category: 'landmark',
+    aliases: ['gariahat', 'ballygunge', 'golpark', 'dhakuria', 'rashbehari']
+  },
+  {
+    label: 'Jadavpur & 8B Bus Stand',
+    fullAddress: 'Raja Subodh Chandra Mallick Rd, Jadavpur, Kolkata, West Bengal 700032',
+    locality: 'Jadavpur',
+    city: 'Kolkata',
+    lat: 22.4955,
+    lng: 88.3709,
+    category: 'landmark',
+    aliases: ['jadavpur', 'jadavpur university', '8b bus stand', 'tollygunge', 'garia']
+  },
+  {
+    label: 'Ruby Crossing & Kasba Industrial Estate',
+    fullAddress: 'EM Bypass, Ruby General Hospital Crossing, Anandapur, Kasba, Kolkata 700107',
+    locality: 'Kasba / EM Bypass',
+    city: 'Kolkata',
+    lat: 22.5133,
+    lng: 88.4017,
+    category: 'office',
+    aliases: ['ruby crossing', 'kasba', 'acropolis mall', 'anandapur', 'science city kolkata']
+  },
+  {
+    label: 'Esplanade / Dharmatala & Chandni Chowk',
+    fullAddress: 'Esplanade Metro & Chowringhee Road, Central Kolkata, West Bengal 700069',
+    locality: 'Central Kolkata',
+    city: 'Kolkata',
+    lat: 22.5646,
+    lng: 88.3521,
+    category: 'landmark',
+    aliases: ['esplanade', 'dharmatala', 'chandni chowk kolkata', 'central kolkata', 'dalhousie', 'bbd bagh']
+  },
+  {
     label: 'Rang De Basanti Dhaba, Sector 5, Salt Lake',
     fullAddress: 'DN-37, Sector V, Bidhannagar, Kolkata, West Bengal 700091',
+    locality: 'Salt Lake Sector V',
     city: 'Kolkata',
     lat: 22.5804,
     lng: 88.4378,
@@ -498,12 +679,55 @@ export function expandSearchQuery(inputQuery) {
 }
 
 /**
- * Searches the curated in-memory dataset of high-priority hubs, eateries and landmarks
+ * Searches the curated in-memory dataset of high-priority hubs, eateries and landmarks.
+ * When query is empty or 1 char, returns the closest curated places to the user's anchor
+ * (or top tech corridors across India) for instant zero-latency recommendations.
  */
 export function searchCuratedPlaces(query, anchorLat, anchorLng) {
   const { raw, cleanWithoutCity, targetCity } = expandSearchQuery(query);
   const qLower = raw.toLowerCase();
   const qCleanNoCity = cleanWithoutCity.toLowerCase();
+
+  // Instant recommendations when input is empty or 1 character
+  if (!raw || raw.length < 2) {
+    const firstChar = qLower;
+    const items = CURATED_PLACES
+      .filter((place) => {
+        if (!firstChar) return place.category === 'office' || place.category === 'landmark';
+        const hay = `${place.label} ${place.city} ${place.locality || ''} ${(place.aliases || []).join(' ')}`.toLowerCase();
+        return hay.includes(firstChar);
+      })
+      .map((place) => {
+        const dist = anchorLat != null && anchorLng != null
+          ? calculateDistanceKm(anchorLat, anchorLng, place.lat, place.lng)
+          : null;
+        const startsWithBoost = firstChar && (
+          place.label.toLowerCase().startsWith(firstChar) ||
+          place.city.toLowerCase().startsWith(firstChar) ||
+          (place.aliases || []).some((a) => a.toLowerCase().startsWith(firstChar))
+        ) ? 80 : 0;
+        const proxBoost = dist != null ? Math.max(0, 120 - dist * 1.5) : 0;
+        return {
+          label: place.label,
+          name: place.label,
+          locality: place.locality || '',
+          state: stateForCity(place.city),
+          fullAddress: place.fullAddress,
+          city: place.city,
+          lat: place.lat,
+          lng: place.lng,
+          category: place.category,
+          specificity: place.category === 'office' ? 82 : 70,
+          source: 'curated_local',
+          distanceKm: dist,
+          distanceFormatted: formatDistance(dist),
+          score: startsWithBoost + proxBoost + (place.category === 'office' ? 25 : 0)
+        };
+      });
+
+    items.sort((a, b) => (b.score || 0) - (a.score || 0));
+    return items.slice(0, 10);
+  }
 
   const matches = [];
 
@@ -517,27 +741,30 @@ export function searchCuratedPlaces(query, anchorLat, anchorLng) {
     if (targetCity && cityLower !== targetCity) {
       continue;
     }
+    if (targetCity && cityLower === targetCity && (!qCleanNoCity || qCleanNoCity === targetCity)) {
+      score += 95;
+    }
 
     // Direct match against label
-    if (labelLower.includes(qLower) || labelLower.includes(qCleanNoCity)) {
+    if (labelLower.includes(qLower) || (qCleanNoCity && labelLower.includes(qCleanNoCity))) {
       score += 100;
     }
 
     // Match against aliases
-    if (place.aliases?.some(a => a.includes(qLower) || qLower.includes(a) || a.includes(qCleanNoCity) || qCleanNoCity.includes(a))) {
-      score += 80;
+    if (place.aliases?.some(a => a.includes(qLower) || qLower.includes(a) || (qCleanNoCity && (a.includes(qCleanNoCity) || qCleanNoCity.includes(a))))) {
+      score += 85;
     }
 
-    // Match against address
-    if (addrLower.includes(qLower) || addrLower.includes(qCleanNoCity)) {
-      score += 40;
+    // Match against address or city
+    if (addrLower.includes(qLower) || cityLower.includes(qLower) || (qCleanNoCity && addrLower.includes(qCleanNoCity))) {
+      score += 45;
     }
 
     // Partial word token overlap
-    const words = qCleanNoCity.split(/\s+/).filter(w => w.length > 2);
-    const matchedWords = words.filter(w => labelLower.includes(w) || addrLower.includes(w));
+    const words = qCleanNoCity.split(/\s+/).filter(w => w.length >= 2);
+    const matchedWords = words.filter(w => labelLower.includes(w) || addrLower.includes(w) || cityLower.includes(w));
     if (matchedWords.length > 0) {
-      score += (matchedWords.length / words.length) * 50;
+      score += (matchedWords.length / words.length) * 55;
     }
 
     if (score > 30) {
@@ -547,15 +774,19 @@ export function searchCuratedPlaces(query, anchorLat, anchorLng) {
 
       matches.push({
         label: place.label,
+        name: place.label,
+        locality: place.locality || '',
+        state: stateForCity(place.city),
         fullAddress: place.fullAddress,
         city: place.city,
         lat: place.lat,
         lng: place.lng,
         category: place.category,
+        specificity: place.category === 'office' ? 82 : 70,
         source: 'curated_local',
         distanceKm: dist,
         distanceFormatted: formatDistance(dist),
-        score: score + (dist != null && dist < 30 ? (30 - dist) : 0)
+        score: score + (dist != null && dist < 50 ? (50 - dist) * 0.9 : 0)
       });
     }
   }
@@ -743,8 +974,10 @@ function scoreSuggestion(item, queryText) {
  * @returns {Promise<{results: Array, degraded: boolean, failures: Array}>}
  */
 export async function searchPlacesDetailed(searchQuery, anchorLat, anchorLng, abortSignal) {
-  if (!searchQuery || searchQuery.trim().length < 2) {
-    return { results: [], degraded: false, failures: [] };
+  const trimmed = (searchQuery || '').trim();
+  if (trimmed.length < 2) {
+    const instant = searchCuratedPlaces(trimmed, anchorLat, anchorLng);
+    return { results: instant, degraded: false, failures: [] };
   }
 
   const { raw, cleanWithoutCity, targetCity } = expandSearchQuery(searchQuery);

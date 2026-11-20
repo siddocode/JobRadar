@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { Search, SlidersHorizontal, RotateCcw, X, MapPin, Briefcase } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import PersonalizeModal from './PersonalizeModal';
 
@@ -478,6 +479,9 @@ export default function ReachOutView({ cities = [], onNavigateToDirectory, onPip
   });
   const [searchQuery, setSearchQuery] = useState('');
   const [copiedItem, setCopiedItem] = useState(null);
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+
+  const hasActiveFilters = searchQuery.trim() !== '' || selectedCity !== 'all' || stageFilter !== 'all';
 
   const groupedReachoutCities = useMemo(() => {
     const tier1Slugs = ['bengaluru', 'hyderabad', 'pune', 'kolkata', 'mumbai', 'delhi-ncr', 'chennai', 'gurgaon', 'noida'];
@@ -666,105 +670,7 @@ export default function ReachOutView({ cities = [], onNavigateToDirectory, onPip
         </div>
       )}
 
-      {/* Filter Row: Only displayed if user has tracked companies in pipeline */}
-      {stageCounts.all > 0 && (
-        <div className="directory-filter-bar">
-          <div className="filter-row-primary">
-            <div className="search-field-wrapper">
-              <svg className="search-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="11" cy="11" r="8" />
-                <line x1="21" y1="21" x2="16.65" y2="16.65" />
-              </svg>
-              <input
-                type="text"
-                id="reachout-search-input"
-                className="search-input"
-                placeholder="Search companies in your pipeline..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-              {searchQuery && (
-                <button className="clear-search-btn" onClick={() => setSearchQuery('')} aria-label="Clear search">Clear</button>
-              )}
-            </div>
-
-            <div className="filter-select-wrapper">
-              <svg className="filter-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" />
-                <circle cx="12" cy="10" r="3" />
-              </svg>
-              <select
-                id="reachout-city-select"
-                className="directory-select"
-                value={selectedCity}
-                onChange={(e) => setSelectedCity(e.target.value)}
-              >
-                <option value="all">All Indian Cities ({groupedReachoutCities.totalOffices} offices)</option>
-                {groupedReachoutCities.tier1.length > 0 && (
-                  <optgroup label="Major Indian Tech Hubs">
-                    {groupedReachoutCities.tier1.map((c) => (
-                      <option key={c.slug} value={c.slug}>
-                        {c.name}{c.state ? `, ${c.state}` : ''} {c.officeCount > 0 ? `(${c.officeCount} offices)` : ''}
-                      </option>
-                    ))}
-                  </optgroup>
-                )}
-                {groupedReachoutCities.others.length > 0 && (
-                  <optgroup label="Regional IT Clusters and Cities">
-                    {groupedReachoutCities.others.map((c) => (
-                      <option key={c.slug} value={c.slug}>
-                        {c.name}{c.state ? `, ${c.state}` : ''} {c.officeCount > 0 ? `(${c.officeCount} offices)` : ''}
-                      </option>
-                    ))}
-                  </optgroup>
-                )}
-              </select>
-            </div>
-          </div>
-
-          {/* Pipeline CRM Stage Tabs */}
-          <div className="filter-row-secondary">
-            <div className="hiring-toggle-group">
-              <button
-                className={`hiring-toggle-btn ${stageFilter === 'all' ? 'active' : ''}`}
-                onClick={() => setStageFilter('all')}
-              >
-                All In Pipeline {stageCounts.all > 0 && <span className="pill-badge">{stageCounts.all}</span>}
-              </button>
-              <button
-                className={`hiring-toggle-btn ${stageFilter === 'to_contact' ? 'active' : ''}`}
-                onClick={() => setStageFilter('to_contact')}
-              >
-                <span className="dot dot-to_contact"></span>
-                To Contact {stageCounts.to_contact > 0 && <span className="pill-badge">{stageCounts.to_contact}</span>}
-              </button>
-              <button
-                className={`hiring-toggle-btn ${stageFilter === 'contacted' ? 'active' : ''}`}
-                onClick={() => setStageFilter('contacted')}
-              >
-                <span className="dot dot-contacted"></span>
-                Contacted {stageCounts.contacted > 0 && <span className="pill-badge">{stageCounts.contacted}</span>}
-              </button>
-              <button
-                className={`hiring-toggle-btn ${stageFilter === 'replied' ? 'active' : ''}`}
-                onClick={() => setStageFilter('replied')}
-              >
-                <span className="dot dot-replied"></span>
-                Replied {stageCounts.replied > 0 && <span className="pill-badge">{stageCounts.replied}</span>}
-              </button>
-              <button
-                className={`hiring-toggle-btn ${stageFilter === 'not_interested' ? 'active' : ''}`}
-                onClick={() => setStageFilter('not_interested')}
-              >
-                <span className="dot dot-not_interested"></span>
-                Not Interested {stageCounts.not_interested > 0 && <span className="pill-badge">{stageCounts.not_interested}</span>}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Candidates Cards Grid or Clean Empty States */}
+      {/* Content Layout */}
       {loading ? (
         <div className="loading-state">
           <div className="spinner"></div>
@@ -858,36 +764,230 @@ export default function ReachOutView({ cities = [], onNavigateToDirectory, onPip
             </div>
           </div>
         </div>
-
-      ) : companies.length === 0 ? (
-        <div className="empty-state">
-          <h3>No companies match the current filter</h3>
-          <p>You have {stageCounts.all} {stageCounts.all === 1 ? 'company' : 'companies'} in your pipeline, but none match this stage or search query.</p>
-          <button
-            type="button"
-            className="empty-cta-btn primary"
-            onClick={handleResetFilters}
-            id="show-all-tracked-btn"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-              <path d="M3 3v5h5" />
-            </svg>
-            <span>Show All Tracked Companies</span>
-          </button>
-        </div>
       ) : (
-        <div className="companies-grid">
-          {companies.map((comp) => (
-            <ReachOutCard
-              key={comp._id}
-              comp={comp}
-              onUpdateFollowUp={updateFollowUp}
-              copyToClipboard={copyToClipboard}
-              copiedItem={copiedItem}
-              onPersonalize={setPersonalizeCompany}
+        <div className="companies-discovery-layout">
+          {/* Mobile Backdrop */}
+          {mobileFiltersOpen && (
+            <div
+              className="companies-filter-backdrop"
+              onClick={() => setMobileFiltersOpen(false)}
+              aria-hidden="true"
             />
-          ))}
+          )}
+
+          {/* Sticky Filter Sidebar */}
+          <aside className={`companies-filter-sidebar ${mobileFiltersOpen ? 'is-mobile-open' : ''}`} aria-label="Pipeline Filters">
+            <div className="sidebar-filter-header">
+              <div className="sidebar-filter-title">
+                <SlidersHorizontal size={15} />
+                <span>Filters</span>
+                {hasActiveFilters && (
+                  <span className="sidebar-active-pill">Active</span>
+                )}
+              </div>
+              <div className="sidebar-header-actions">
+                {hasActiveFilters && (
+                  <button
+                    type="button"
+                    className="sidebar-reset-btn"
+                    onClick={handleResetFilters}
+                    title="Reset all filters to default"
+                  >
+                    <RotateCcw size={11} />
+                    <span>Reset</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="sidebar-mobile-close"
+                  onClick={() => setMobileFiltersOpen(false)}
+                  aria-label="Close filters drawer"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+
+            <div className="sidebar-filter-body">
+              {/* Search in Pipeline */}
+              <div className="sidebar-filter-group">
+                <label className="sidebar-group-label" htmlFor="reachout-search-input">
+                  <Search size={12} />
+                  <span>Search Pipeline</span>
+                </label>
+                <div className="input-field-wrapper">
+                  <Search size={14} />
+                  <input
+                    type="text"
+                    id="reachout-search-input"
+                    className="custom-input"
+                    placeholder="Search tracked companies..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      className="input-clear-icon-btn"
+                      onClick={() => setSearchQuery('')}
+                      title="Clear search"
+                      aria-label="Clear search"
+                    >
+                      <X size={12} />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* City Hub Filter */}
+              <div className="sidebar-filter-group">
+                <label className="sidebar-group-label" htmlFor="reachout-city-select">
+                  <MapPin size={12} />
+                  <span>City Hub</span>
+                </label>
+                <div className="filter-select-wrapper" style={{ width: '100%' }}>
+                  <select
+                    id="reachout-city-select"
+                    className="directory-select"
+                    value={selectedCity}
+                    onChange={(e) => setSelectedCity(e.target.value)}
+                    style={{ width: '100%', height: '36px', borderRadius: '8px' }}
+                  >
+                    <option value="all">All Indian Cities ({groupedReachoutCities.totalOffices} offices)</option>
+                    {groupedReachoutCities.tier1.length > 0 && (
+                      <optgroup label="Major Indian Tech Hubs">
+                        {groupedReachoutCities.tier1.map((c) => (
+                          <option key={c.slug} value={c.slug}>
+                            {c.name}{c.state ? `, ${c.state}` : ''} {c.officeCount > 0 ? `(${c.officeCount} offices)` : ''}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                    {groupedReachoutCities.others.length > 0 && (
+                      <optgroup label="Regional IT Clusters and Cities">
+                        {groupedReachoutCities.others.map((c) => (
+                          <option key={c.slug} value={c.slug}>
+                            {c.name}{c.state ? `, ${c.state}` : ''} {c.officeCount > 0 ? `(${c.officeCount} offices)` : ''}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                  </select>
+                </div>
+              </div>
+
+              {/* Pipeline CRM Stage Stack */}
+              <div className="sidebar-filter-group">
+                <label className="sidebar-group-label">
+                  <Briefcase size={12} />
+                  <span>Pipeline Stage</span>
+                </label>
+                <div className="experience-sidebar-stack">
+                  <button
+                    type="button"
+                    className={`exp-sidebar-option ${stageFilter === 'all' ? 'active' : ''}`}
+                    onClick={() => setStageFilter('all')}
+                  >
+                    <span>All In Pipeline</span>
+                    {stageCounts.all > 0 && <span className="pill-badge" style={{ marginLeft: 'auto' }}>{stageCounts.all}</span>}
+                  </button>
+                  <button
+                    type="button"
+                    className={`exp-sidebar-option ${stageFilter === 'to_contact' ? 'active' : ''}`}
+                    onClick={() => setStageFilter('to_contact')}
+                  >
+                    <span className="dot dot-to_contact" />
+                    <span>To Contact</span>
+                    {stageCounts.to_contact > 0 && <span className="pill-badge" style={{ marginLeft: 'auto' }}>{stageCounts.to_contact}</span>}
+                  </button>
+                  <button
+                    type="button"
+                    className={`exp-sidebar-option ${stageFilter === 'contacted' ? 'active' : ''}`}
+                    onClick={() => setStageFilter('contacted')}
+                  >
+                    <span className="dot dot-contacted" />
+                    <span>Contacted</span>
+                    {stageCounts.contacted > 0 && <span className="pill-badge" style={{ marginLeft: 'auto' }}>{stageCounts.contacted}</span>}
+                  </button>
+                  <button
+                    type="button"
+                    className={`exp-sidebar-option ${stageFilter === 'replied' ? 'active' : ''}`}
+                    onClick={() => setStageFilter('replied')}
+                  >
+                    <span className="dot dot-replied" />
+                    <span>Replied</span>
+                    {stageCounts.replied > 0 && <span className="pill-badge" style={{ marginLeft: 'auto' }}>{stageCounts.replied}</span>}
+                  </button>
+                  <button
+                    type="button"
+                    className={`exp-sidebar-option ${stageFilter === 'not_interested' ? 'active' : ''}`}
+                    onClick={() => setStageFilter('not_interested')}
+                  >
+                    <span className="dot dot-not_interested" />
+                    <span>Not Interested</span>
+                    {stageCounts.not_interested > 0 && <span className="pill-badge" style={{ marginLeft: 'auto' }}>{stageCounts.not_interested}</span>}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </aside>
+
+          {/* Main Content Area */}
+          <main className="companies-main-content">
+            {/* Results Header */}
+            <div className="companies-results-header">
+              <div className="results-header-left">
+                <button
+                  type="button"
+                  className="mobile-filter-trigger-btn"
+                  onClick={() => setMobileFiltersOpen(true)}
+                  aria-label="Open filter options"
+                >
+                  <SlidersHorizontal size={14} />
+                  <span>Filters</span>
+                  {hasActiveFilters && <span className="filter-count-badge">●</span>}
+                </button>
+                <span className="results-count">
+                  Showing <strong>{companies.length}</strong> {companies.length === 1 ? 'company' : 'companies'} in pipeline
+                </span>
+              </div>
+              {hasActiveFilters && (
+                <button className="reset-filters-inline-btn" onClick={handleResetFilters}>
+                  Reset Filters
+                </button>
+              )}
+            </div>
+
+            {/* Companies Grid or Filtered Empty State */}
+            {companies.length === 0 ? (
+              <div className="empty-state">
+                <h3>No companies match the current filter</h3>
+                <p>You have {stageCounts.all} {stageCounts.all === 1 ? 'company' : 'companies'} in your pipeline, but none match this stage or search query.</p>
+                <button
+                  type="button"
+                  className="empty-cta-btn primary"
+                  onClick={handleResetFilters}
+                  id="show-all-tracked-btn"
+                >
+                  <RotateCcw size={14} />
+                  <span>Show All Tracked Companies</span>
+                </button>
+              </div>
+            ) : (
+              <div className="companies-grid">
+                {companies.map((comp) => (
+                  <ReachOutCard
+                    key={comp._id}
+                    comp={comp}
+                    onUpdateFollowUp={updateFollowUp}
+                    copyToClipboard={copyToClipboard}
+                    copiedItem={copiedItem}
+                    onPersonalize={setPersonalizeCompany}
+                  />
+                ))}
+              </div>
+            )}
+          </main>
         </div>
       )}
 

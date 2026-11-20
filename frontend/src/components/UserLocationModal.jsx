@@ -23,6 +23,7 @@ import { useLocation, POPULAR_TECH_HUBS, calculateDistanceKm } from '../context/
 import { useModalScrollLock } from '../utils/useModalScrollLock';
 import {
   searchPlacesDetailed,
+  searchCuratedPlaces,
   formatPlaceSubtitle,
   zoomForPlace
 } from '../utils/placeSearchService';
@@ -126,6 +127,7 @@ export default function UserLocationModal() {
   // "Pin mode" makes the map-click affordance explicit instead of hidden.
   const [pinMode, setPinMode] = useState(false);
   const [permissionState, setPermissionState] = useState('unknown');
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
 
   // Surface the browser's actual geolocation permission state so a blocked or
   // not-yet-granted permission is visible instead of looking like a GPS failure.
@@ -165,6 +167,19 @@ export default function UserLocationModal() {
   const markerRef = useRef(null);
   const liveGpsMarkerRef = useRef(null);
   const searchInputRef = useRef(null);
+  const searchWrapperRef = useRef(null);
+
+  // Close suggestions dropdown when clicking outside the search wrapper
+  useEffect(() => {
+    if (!isLocationModalOpen) return undefined;
+    const handlePointerDown = (e) => {
+      if (searchWrapperRef.current && !searchWrapperRef.current.contains(e.target)) {
+        setIsSearchFocused(false);
+      }
+    };
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => document.removeEventListener('mousedown', handlePointerDown);
+  }, [isLocationModalOpen]);
 
   // Reset the whole draft each time the modal opens so Cancel never leaves a
   // half-applied location or radius behind.
@@ -179,42 +194,21 @@ export default function UserLocationModal() {
     setSearchSelection(null);
     setActiveResultIndex(-1);
     setPinMode(false);
+    setIsSearchFocused(false);
   }, [isLocationModalOpen, userLocation, maxDistanceKm]);
 
   // Debounced, abortable, sequence-guarded place search.
+  // Shows instant location-biased recommendations the moment the user focuses or
+  // types even 1 character, and queries remote + DB providers for >= 2 characters.
   // A stale response can never overwrite a newer one: the sequence check runs
   // after every await, and each keystroke aborts the previous request.
   useEffect(() => {
     const trimmed = searchQuery.trim();
 
-    if (trimmed.length < 2) {
-      searchSeqRef.current += 1;
-      if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
-      if (searchAbortRef.current) searchAbortRef.current.abort();
-      searchAbortRef.current = null;
-      setSearchResults([]);
-      setSearchStatus('idle');
-      setSearchNotice('');
-      setActiveResultIndex(-1);
-      return undefined;
-    }
-
-    const seq = searchSeqRef.current + 1;
-    searchSeqRef.current = seq;
-
-    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
-    if (searchAbortRef.current) searchAbortRef.current.abort();
-
-    const controller = new AbortController();
-    searchAbortRef.current = controller;
-    setSearchStatus('loading');
-    setSearchNotice('');
-    setActiveResultIndex(-1);
-
     // Bias the search to the committed / known position, never to the draft
     // pin, so dragging the marker does not restart the search.
-    let anchorLat = userLocation?.lat ?? liveGpsPosition?.lat ?? null;
-    let anchorLng = userLocation?.lng ?? liveGpsPosition?.lng ?? null;
+    let anchorLat = userLocation?.lat ?? liveGpsPosition?.lat ?? draftLocation?.lat ?? null;
+    let anchorLng = userLocation?.lng ?? liveGpsPosition?.lng ?? draftLocation?.lng ?? null;
     if (anchorLat == null && mapInstanceRef.current) {
       try {
         const center = mapInstanceRef.current.getCenter();
@@ -228,6 +222,37 @@ export default function UserLocationModal() {
       anchorLat = 20.5937;
       anchorLng = 78.9629;
     }
+
+    // Instant 0ms local recommendations for 0 or 1 character while focused or typing
+    const instantMatches = searchCuratedPlaces(trimmed, anchorLat, anchorLng);
+
+    if (trimmed.length < 2) {
+      searchSeqRef.current += 1;
+      if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+      if (searchAbortRef.current) searchAbortRef.current.abort();
+      searchAbortRef.current = null;
+      setSearchResults(instantMatches);
+      setSearchStatus(trimmed.length === 1 ? 'done' : 'idle');
+      setSearchNotice('');
+      setActiveResultIndex(-1);
+      return undefined;
+    }
+
+    const seq = searchSeqRef.current + 1;
+    searchSeqRef.current = seq;
+
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    if (searchAbortRef.current) searchAbortRef.current.abort();
+
+    const controller = new AbortController();
+    searchAbortRef.current = controller;
+    // Show instant local recommendations immediately while live providers load
+    if (instantMatches.length > 0) {
+      setSearchResults(instantMatches);
+    }
+    setSearchStatus('loading');
+    setSearchNotice('');
+    setActiveResultIndex(-1);
 
     searchDebounceRef.current = setTimeout(async () => {
       try {
@@ -263,7 +288,7 @@ export default function UserLocationModal() {
         setSearchStatus('error');
         setSearchNotice('Location search failed. Click your building on the map or pick a tech hub below.');
       }
-    }, 300);
+    }, 180);
 
     return () => {
       if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
@@ -535,6 +560,7 @@ export default function UserLocationModal() {
     if (!clean) return;
     setSearchSelection(clean);
     clearSearchPanel();
+    setIsSearchFocused(false);
   };
 
   // Curated tech-hub chips stage a city/hub centroid, so they are labelled as
@@ -545,6 +571,7 @@ export default function UserLocationModal() {
       'curated'
     );
     clearSearchPanel();
+    setIsSearchFocused(false);
   };
 
   // Put the pin back on the exact suggestion the user picked.
@@ -558,6 +585,7 @@ export default function UserLocationModal() {
 
   const focusSearchInput = () => {
     if (searchInputRef.current) {
+      setIsSearchFocused(true);
       searchInputRef.current.focus();
       searchInputRef.current.select();
     }
@@ -566,9 +594,10 @@ export default function UserLocationModal() {
   // Keyboard combobox: arrows move, Enter selects, Escape only closes search.
   const handleSearchKeyDown = (event) => {
     if (event.key === 'Escape') {
-      if (searchQuery) {
+      if (searchQuery || isSearchFocused) {
         event.stopPropagation();
         clearSearchPanel();
+        setIsSearchFocused(false);
       }
       return;
     }
@@ -687,14 +716,16 @@ export default function UserLocationModal() {
   }[permissionState] || '';
   const permissionIsWarning = permissionState === 'denied';
 
-  const searchTooShort = searchQuery.trim().length > 0 && searchQuery.trim().length < 2;
   const distanceReferenceLabel = liveGpsPosition?.source === 'gps'
     ? 'your live GPS fix'
     : userLocation
       ? 'your saved location'
-      : 'the map centre';
+      : draftLocation
+        ? 'your current pin'
+        : 'the map centre';
+  const hasTypedQuery = searchQuery.trim().length > 0;
   const searchDropdownOpen =
-    searchQuery.trim().length >= 2 &&
+    (hasTypedQuery || isSearchFocused) &&
     (searchStatus === 'loading' || searchStatus === 'error' || searchResults.length > 0 || Boolean(searchNotice));
 
   // What the pin is currently based on, stated explicitly.
@@ -751,6 +782,16 @@ export default function UserLocationModal() {
     : null;
   const gpsDisagreesWithSearch = gpsVsSearchKm != null && gpsVsSearchKm >= 0.2;
 
+  // Nearby hubs within 45 km of the current draft location (especially helpful when
+  // desktop browser GPS drops the user in a coarse city center like Central Kolkata
+  // while their actual office is in Salt Lake Sector V or New Town).
+  const nearbyCityHubs = draftLocation
+    ? POPULAR_TECH_HUBS.filter((hub) => {
+        const d = calculateDistanceKm(draftLocation.lat, draftLocation.lng, hub.lat, hub.lng);
+        return d != null && d > 0.25 && d <= 45;
+      })
+    : [];
+
   return (
     <div className="location-modal-overlay" onClick={closeLocationModal}>
       <div
@@ -767,9 +808,9 @@ export default function UserLocationModal() {
               <Globe size={20} />
             </div>
             <div>
-              <h3 className="location-modal-heading" id="location-modal-title">Set Your Job Radar Location</h3>
+              <h3 className="location-modal-heading" id="location-modal-title">Set Your Location</h3>
               <p className="location-modal-subheading">
-                Companies and live jobs will be sorted and measured nearest to this spot
+                Find live jobs and offices nearest to where you work
               </p>
             </div>
           </div>
@@ -787,28 +828,22 @@ export default function UserLocationModal() {
         <div className="location-modal-grid">
           {/* Left Panel: Search & Controls */}
           <div className="location-controls-pane">
-            {/* STEP 1 — primary method: search */}
-            <div className="location-step-head">
-              <span className="location-step-index">1</span>
-              <div className="location-step-copy">
-                <span className="location-step-title">Search for your building</span>
-                <span className="location-step-desc">Tower, office, tech park, street, sector or PIN code</span>
-              </div>
-            </div>
-
-            <div className="location-search-wrapper">
+            <div className="location-search-wrapper" ref={searchWrapperRef}>
               <div className="location-search-field">
                 <Search className="location-search-field-icon" size={16} />
                 <input
                   type="text"
                   ref={searchInputRef}
                   className="location-search-field-input"
-                  placeholder="Try “Technopolis, Sector V” or “Candor TechSpace”"
+                  placeholder="Search building, tech park, locality or city…"
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onFocus={() => setIsSearchFocused(true)}
+                  onChange={(e) => {
+                    setIsSearchFocused(true);
+                    setSearchQuery(e.target.value);
+                  }}
                   onKeyDown={handleSearchKeyDown}
                   autoComplete="off"
-                  autoFocus
                   role="combobox"
                   aria-expanded={searchDropdownOpen}
                   aria-controls="location-search-suggestions"
@@ -829,17 +864,6 @@ export default function UserLocationModal() {
                 )}
               </div>
 
-              {searchTooShort && (
-                <span className="location-search-hint">Type at least 2 characters to search.</span>
-              )}
-
-              {searchQuery.trim().length >= 2 && (
-                <span className="location-search-hint">
-                  Distances are measured from {distanceReferenceLabel}.
-                  {!liveGpsPosition && ' Use my current location to measure from where you are standing.'}
-                </span>
-              )}
-
               {searchDropdownOpen && (
                 <div
                   className="location-dropdown-list"
@@ -847,7 +871,14 @@ export default function UserLocationModal() {
                   role="listbox"
                   aria-label="Location suggestions"
                 >
-                  {searchStatus === 'loading' && searchResults.length === 0 && (
+                  {!hasTypedQuery && searchResults.length > 0 && (
+                    <div className="location-dropdown-section-header">
+                      <Sparkles size={12} />
+                      <span>Recommended near {distanceReferenceLabel}</span>
+                    </div>
+                  )}
+
+                  {searchStatus === 'loading' && (
                     <div className="location-dropdown-loading">
                       <Search size={14} />
                       <span>Searching buildings, offices and localities…</span>
@@ -858,7 +889,7 @@ export default function UserLocationModal() {
                     <div className="location-dropdown-empty">
                       {searchStatus === 'error'
                         ? (searchNotice || 'Location search failed.')
-                        : `No matches for “${searchQuery.trim()}”. Try the tower name, the locality, or click your building on the map.`}
+                        : `No matches for “${searchQuery.trim()}”. Try the tower name or select on the map.`}
                     </div>
                   )}
 
@@ -909,15 +940,7 @@ export default function UserLocationModal() {
               )}
             </div>
 
-            {/* STEP 2 — optional GPS shortcut */}
-            <div className="location-step-head">
-              <span className="location-step-index">2</span>
-              <div className="location-step-copy">
-                <span className="location-step-title">Or use your current location</span>
-                <span className="location-step-desc">Optional GPS shortcut — search stays usable if it fails</span>
-              </div>
-            </div>
-
+            {/* 1-Click GPS Button */}
             <button
               type="button"
               className="gps-hero-btn is-secondary"
@@ -931,40 +954,30 @@ export default function UserLocationModal() {
                 </div>
                 <div className="gps-hero-text">
                   <span className="gps-hero-title">
-                    {isDetecting ? 'Pinpointing GPS Location...' : 'Use My Current Location'}
+                    {isDetecting ? 'Detecting Location...' : 'Use My Current Location'}
                   </span>
                   <span className="gps-hero-desc">
-                    {isDetecting ? 'Sampling the most accurate fix' : 'Auto-pinpoint via browser GPS'}
+                    {isDetecting ? 'Sampling accurate fix...' : 'Auto-detect via GPS'}
                   </span>
                 </div>
               </div>
               <span className="gps-hero-badge">1-Click GPS</span>
             </button>
 
-            {permissionCopy && (
-              <div
-                className={`location-permission-note ${permissionIsWarning ? 'is-warning' : 'is-ok'}`}
-                aria-live="polite"
-              >
-                {permissionIsWarning ? <ShieldAlert size={13} /> : <ShieldCheck size={13} />}
-                <span>{permissionCopy}</span>
-              </div>
-            )}
-
             {detectError && (
               <div className="location-error-alert" role="alert">
-                <AlertCircle size={15} />
+                <AlertCircle size={14} />
                 <span>{detectError}</span>
               </div>
             )}
 
-            {/* Staged selection card (draft only until Apply) */}
+            {/* Staged selection card */}
             {draftLocation ? (
               <div className="active-pinpoint-card">
                 <div className="active-pinpoint-header">
                   <span className="active-pinpoint-tag">
                     <span className="active-pulse-dot" />
-                    Draft location — not applied yet
+                    Selected Location
                   </span>
                   <button
                     type="button"
@@ -1004,64 +1017,22 @@ export default function UserLocationModal() {
                   </span>
                 </div>
                 {fixAssessment.isCoarse && (
-                  <div className="location-fix-warning" role="status">
-                    <AlertTriangle size={14} className="location-fix-warning-icon" />
-                    <div className="location-fix-warning-body">
-                      <span>{fixAssessment.message}</span>
-                      <button
-                        type="button"
-                        className="location-fix-warning-action"
-                        onClick={() => setPinMode(true)}
-                      >
-                        <Crosshair size={12} />
-                        <span>Pin my building</span>
-                      </button>
-                      <button
-                        type="button"
-                        className="location-fix-warning-action is-search"
-                        onClick={focusSearchInput}
-                      >
-                        <Search size={12} />
-                        <span>Search my building instead</span>
-                      </button>
-                    </div>
+                  <div className="location-fix-simple-hint" role="status">
+                    <AlertTriangle size={13} />
+                    <span>Approximate area. Drag the pin on the map to place on your exact building.</span>
                   </div>
                 )}
                 {gpsDisagreesWithSearch && (
-                  <div className="location-gps-mismatch" role="alert">
-                    <AlertTriangle size={14} />
-                    <div className="location-gps-mismatch-body">
-                      <strong>Browser GPS looks off</strong>
-                      <span>
-                        This fix is {formatDistance(gpsVsSearchKm)} from “{searchSelection.name || searchSelection.label}”.
-                        Desktop browsers often fall back to city-level IP location. Keep the searched pin for exact distances.
-                      </span>
-                      <button
-                        type="button"
-                        className="location-reset-link"
-                        onClick={handleResetToSearchResult}
-                      >
-                        Keep searched pin
-                      </button>
-                    </div>
-                  </div>
-                )}
-                {coarseSearchHit && (
-                  <div className="location-precision-note" role="status">
-                    <Info size={13} />
-                    <span>
-                      This match is area-level. Drag the pin to your tower, or search the building name
-                      for building-level distances.
-                    </span>
-                  </div>
-                )}
-                {legacyCoarseDraft && (
-                  <div className="location-precision-note" role="status">
-                    <Info size={13} />
-                    <span>
-                      This saved location has no building detail. Search your tower above, then press Apply
-                      for exact distances.
-                    </span>
+                  <div className="location-mismatch-simple-hint" role="alert">
+                    <AlertTriangle size={13} />
+                    <span>GPS differs by {formatDistance(gpsVsSearchKm)} from searched spot.</span>
+                    <button
+                      type="button"
+                      className="location-reset-link"
+                      onClick={handleResetToSearchResult}
+                    >
+                      Keep searched pin
+                    </button>
                   </div>
                 )}
               </div>
@@ -1076,16 +1047,15 @@ export default function UserLocationModal() {
                 title="Click the map to drop a pin on your exact building"
               >
                 <Crosshair size={14} />
-                <span>{pinMode ? 'Now click your building on the map' : 'Pin my building on the map'}</span>
+                <span>{pinMode ? 'Click your building on the map' : 'Pin my building on the map'}</span>
               </button>
-              <span className="location-pin-hint">or drag the red pin to fine-tune</span>
             </div>
 
             {/* Curated Indian Tech Corridors */}
             <div className="corridors-section">
               <span className="corridors-heading">
                 <Sparkles size={14} className="text-copper" />
-                <span>Curated Tech Hubs</span>
+                <span>Popular Tech Hubs</span>
               </span>
               <div className="corridors-chips-grid">
                 {POPULAR_TECH_HUBS.map((hub, idx) => {
@@ -1143,26 +1113,25 @@ export default function UserLocationModal() {
             <div className="map-floating-overlay-bar">
               <span className="map-overlay-title">
                 <Compass size={14} />
-                {pinMode ? 'Click your exact building' : 'Preview & fine-tune your pin'}
+                {pinMode ? 'Click your exact building' : 'Preview & fine-tune pin'}
               </span>
               <span className="map-overlay-hint">
                 <Info size={12} />
                 <span>
                   {draftSource === 'search'
-                    ? 'Searched result'
+                    ? 'Searched'
                     : draftSource === 'gps'
                       ? 'GPS fix'
                       : draftSource === 'map_click'
-                        ? 'Map-adjusted'
+                        ? 'Map pin'
                         : draftSource === 'curated'
-                          ? 'Tech hub centroid'
+                          ? 'Tech hub'
                           : 'Drop a pin'}
                 </span>
               </span>
             </div>
 
-            {/* Map actions live bottom-left so they never collide with the
-                Leaflet zoom control and attribution at bottom-right. */}
+            {/* Map actions */}
             <div className="map-action-stack">
               {canResetToSearch && (
                 <button
@@ -1172,7 +1141,7 @@ export default function UserLocationModal() {
                   title="Move the pin back to the location you searched for"
                 >
                   <Search size={13} className="recenter-nav-icon" />
-                  <span>Reset to searched result</span>
+                  <span>Reset to search</span>
                 </button>
               )}
               <button
@@ -1182,13 +1151,8 @@ export default function UserLocationModal() {
                 title="Recenter map to your current live location"
               >
                 <Navigation size={13} className="recenter-nav-icon" />
-                <span>{isDetecting ? 'Locating…' : 'Recenter to My Location'}</span>
+                <span>{isDetecting ? 'Locating…' : 'Recenter to GPS'}</span>
               </button>
-            </div>
-
-            <div className="map-drag-instruction" role="note">
-              <Crosshair size={12} />
-              <span>Drag the pin or click the map to adjust your exact location.</span>
             </div>
 
             <div ref={mapContainerRef} className="modal-map-viewport" />
@@ -1197,10 +1161,6 @@ export default function UserLocationModal() {
 
         {/* Footer */}
         <footer className="location-modal-bottom-bar">
-          <span className="bottom-bar-hint">
-            <Navigation size={13} />
-            <span>Distance to all companies and live ATS jobs will be calculated in real-time</span>
-          </span>
           <div className="bottom-bar-actions">
             <button
               type="button"
@@ -1216,7 +1176,7 @@ export default function UserLocationModal() {
               title={draftLocation ? `Apply location: ${currentDisplayLabel}` : 'Done'}
             >
               <span className="btn-loc-apply-desktop">
-                {draftLocation ? `Apply & Sort: ${shortCityLabel}` : 'Done'}
+                {draftLocation ? `Apply Location (${shortCityLabel})` : 'Done'}
               </span>
               <span className="btn-loc-apply-mobile">
                 {draftLocation ? `Apply: ${shortCityLabel}` : 'Done'}

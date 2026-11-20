@@ -1087,8 +1087,115 @@ exports.searchPlaces = async (req, res) => {
       }
     }
 
-    // 2. Search MongoDB Offices and Companies
+    // 2. Search Curated Tech Hub Seeds & Company Office Registry (in-memory, 0ms)
     try {
+      const { TECH_HUB_SEEDS } = require('../data/seeds/techHubSeeds');
+      const officeRegistry = require('../config/companyOfficeRegistry.json');
+      const corridorsConfig = require('../config/techHubCorridors.json');
+      const qTokens = query.toLowerCase().split(/\s+/).filter(t => t.length >= 2);
+
+      const matchesQuery = (text) => {
+        const hay = String(text || '').toLowerCase();
+        if (hay.includes(query.toLowerCase())) return true;
+        return qTokens.length > 0 && qTokens.every(t => hay.includes(t));
+      };
+
+      // 2a. Tech corridors from techHubCorridors.json
+      const citiesObj = corridorsConfig?.cities || {};
+      for (const [cityName, cityData] of Object.entries(citiesObj)) {
+        const stateName = cityData.state || '';
+        for (const corr of Object.values(cityData.corridors || {})) {
+          const hay = `${corr.name || ''} ${corr.shortName || ''} ${cityName} ${(corr.aliases || []).join(' ')}`;
+          if (matchesQuery(hay) && corr.center?.lat != null && corr.center?.lng != null) {
+            const pLat = Number(corr.center.lat);
+            const pLng = Number(corr.center.lng);
+            const key = `${pLat.toFixed(3)},${pLng.toFixed(3)}`;
+            if (!seenKeys.has(key)) {
+              seenKeys.add(key);
+              results.push({
+                label: `${corr.name}, ${cityName}`,
+                name: corr.name,
+                locality: corr.shortName || corr.name,
+                city: cityName,
+                state: stateName,
+                fullAddress: `${corr.name}, ${cityName}, ${stateName}`,
+                lat: pLat,
+                lng: pLng,
+                category: 'office',
+                specificity: 78,
+                source: 'local_db'
+              });
+            }
+          }
+        }
+      }
+
+      // 2b. Verified company offices from companyOfficeRegistry.json
+      for (const [cityName, companiesMap] of Object.entries(officeRegistry || {})) {
+        for (const [compName, info] of Object.entries(companiesMap || {})) {
+          const hay = `${compName} ${info.officeName || ''} ${info.locality || ''} ${info.address || ''} ${cityName}`;
+          if (matchesQuery(hay) && info.coordinates?.lat != null && info.coordinates?.lng != null) {
+            const pLat = Number(info.coordinates.lat);
+            const pLng = Number(info.coordinates.lng);
+            const key = `${pLat.toFixed(3)},${pLng.toFixed(3)}`;
+            if (!seenKeys.has(key)) {
+              seenKeys.add(key);
+              results.push({
+                label: info.officeName || `${compName} (${info.locality || cityName})`,
+                name: info.officeName || compName,
+                locality: info.locality || '',
+                city: cityName,
+                state: '',
+                fullAddress: info.address || `${info.officeName || compName}, ${cityName}`,
+                lat: pLat,
+                lng: pLng,
+                category: 'office',
+                specificity: 92,
+                source: 'local_db'
+              });
+            }
+          }
+        }
+      }
+
+      // 2c. High-density tech hub seeds across all Indian cities
+      for (const [citySlug, seeds] of Object.entries(TECH_HUB_SEEDS || {})) {
+        const displayCity = citySlug.charAt(0).toUpperCase() + citySlug.slice(1);
+        for (const seed of (seeds || [])) {
+          const hay = `${seed.name || ''} ${seed.locality || ''} ${seed.formatted_address || ''} ${displayCity}`;
+          if (matchesQuery(hay) && seed.lat != null && seed.lng != null) {
+            const pLat = Number(seed.lat);
+            const pLng = Number(seed.lng);
+            const key = `${pLat.toFixed(3)},${pLng.toFixed(3)}`;
+            if (!seenKeys.has(key)) {
+              seenKeys.add(key);
+              results.push({
+                label: seed.name,
+                name: seed.name,
+                locality: seed.locality || '',
+                city: displayCity === 'Gurgaon' ? 'Gurugram' : displayCity,
+                state: '',
+                fullAddress: seed.formatted_address || `${seed.name}, ${displayCity}`,
+                lat: pLat,
+                lng: pLng,
+                category: 'office',
+                specificity: 90,
+                source: 'local_db'
+              });
+            }
+          }
+        }
+      }
+    } catch (seedErr) {
+      console.warn('[PlacesSearch] Seed search warning:', seedErr.message);
+    }
+
+    // 3. Search MongoDB Offices and Companies (only when Mongoose is connected)
+    try {
+      const mongoose = require('mongoose');
+      if (mongoose.connection.readyState !== 1) {
+        throw new Error('MongoDB not connected');
+      }
       const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const safeQuery = escapeRegex(query);
       const reg = new RegExp(safeQuery, 'i');
@@ -1150,9 +1257,10 @@ exports.searchPlaces = async (req, res) => {
       console.warn('[PlacesSearch] DB search error:', dbErr.message);
     }
 
-    // Distance calculation & precision-first ordering. A precise office/building
-    // must never be truncated in favour of a generic city centroid just because
-    // the centroid happens to be closer to the anchor.
+    // Distance calculation & proximity-aware precision ordering.
+    // A precise office/building within the user's metro area beats a generic city
+    // centroid, and a nearby office (e.g. Kolkata when anchor is in Kolkata) beats
+    // a faraway office in another state (e.g. Noida).
     if (userLat != null && userLng != null) {
       results.forEach(r => {
         r.distanceKm = calculateDistanceKm(userLat, userLng, r.lat, r.lng);
@@ -1161,7 +1269,11 @@ exports.searchPlaces = async (req, res) => {
     results.sort((a, b) => {
       const specA = Number.isFinite(a.specificity) ? a.specificity : 50;
       const specB = Number.isFinite(b.specificity) ? b.specificity : 50;
-      if (specB !== specA) return specB - specA;
+      const nearA = a.distanceKm != null && a.distanceKm <= 80;
+      const nearB = b.distanceKm != null && b.distanceKm <= 80;
+      if (nearA !== nearB) return nearA ? -1 : 1;
+      if (Math.abs(specB - specA) > 15) return specB - specA;
+      if (a.distanceKm == null && b.distanceKm == null) return specB - specA;
       if (a.distanceKm == null) return 1;
       if (b.distanceKm == null) return -1;
       return a.distanceKm - b.distanceKm;

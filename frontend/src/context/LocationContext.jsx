@@ -62,41 +62,64 @@ export function formatDistance(km) {
 
 // --- GPS sampling strategy -------------------------------------------------
 // Browsers emit several fixes with very different quality: a coarse IP/Wi-Fi
-// fix first, sometimes a cached fix with a suspiciously tiny radius, then a
-// real GNSS fix. Taking the single smallest "accuracy" value is not enough —
-// a cached fix can be 7 km away while claiming ±3 m. We collect samples,
-// discard outliers that disagree with the consensus, and then use the tightest
-// *observed* sample. Coordinates are never averaged or invented.
-const GPS_COLLECT_MS = 8000;
-const GPS_GOOD_ENOUGH_M = 15;
-const GPS_ACCEPTABLE_M = 60;
-const GPS_ACCEPTABLE_AFTER_MS = 3000;
+// fix first, sometimes a cached fix with a suspiciously tiny radius (e.g. ±1 m),
+// then a real GNSS/Wi-Fi fix. Taking the single smallest "accuracy" value is not
+// enough — a cached or simulated fix can be 7 km away while claiming ±1 m.
+// We collect samples, discard outliers that disagree with the consensus, treat
+// implausibly tiny accuracy radii (< 3 m) as suspect unless corroborated by
+// multiple samples, and then use the tightest *observed* sample. Coordinates
+// are never averaged or invented.
+const GPS_COLLECT_MS = 6500;
+const GPS_GOOD_ENOUGH_M = 20;
+const GPS_ACCEPTABLE_M = 75;
+const GPS_ACCEPTABLE_AFTER_MS = 2500;
 const GPS_OUTLIER_KM = 1.5;
 const GPS_MIN_CONSISTENT_SAMPLES = 2;
+const GPS_SUSPECT_TINY_ACCURACY_M = 3;
 
 /**
- * Choose the best observed sample: first filter out fixes far from the median
- * position, then prefer the smallest finite accuracy radius. A sample with a
- * missing/invalid accuracy can never displace a measured one.
+ * Effective accuracy score for ranking samples: an implausibly tiny radius
+ * (< 3 m) from a single uncorroborated sample is penalized so a real 8-35 m
+ * Wi-Fi/GNSS fix wins over a stale/simulated ±1 m cache hit.
+ */
+function effectiveSampleRankAccuracy(sample, clusterSize) {
+  if (sample.accuracy == null || sample.accuracy <= 0) return 999999;
+  if (sample.accuracy < GPS_SUSPECT_TINY_ACCURACY_M && clusterSize < 2) {
+    return 250 + sample.accuracy;
+  }
+  return sample.accuracy;
+}
+
+/**
+ * Choose the best observed sample: first filter out fixes far from the consensus
+ * cluster, then prefer realistic measured accuracy and newer timestamps.
  */
 function selectBestGpsSample(samples) {
   if (!samples.length) return null;
 
-  // Find the largest group of mutually consistent fixes. A single cached fix
-  // with a tiny accuracy radius must not outvote several real GNSS samples.
+  // Find the largest group of mutually consistent fixes. When clusters tie in
+  // size, prefer the cluster with realistic accuracy (>= 3 m) and newer fixes.
   let bestCluster = [];
+  let bestClusterScore = -Infinity;
   for (const anchor of samples) {
     const cluster = samples.filter((s) => {
       const d = calculateDistanceKm(anchor.lat, anchor.lng, s.lat, s.lng);
       return d == null || d <= GPS_OUTLIER_KM;
     });
-    if (cluster.length > bestCluster.length) bestCluster = cluster;
+    const hasRealistic = cluster.some((s) => s.accuracy != null && s.accuracy >= GPS_SUSPECT_TINY_ACCURACY_M && s.accuracy <= 150);
+    const newestTs = Math.max(...cluster.map((s) => Number(s.position?.timestamp) || 0));
+    const score = cluster.length * 1000 + (hasRealistic ? 200 : 0) + (newestTs / 1e13);
+    if (score > bestClusterScore) {
+      bestClusterScore = score;
+      bestCluster = cluster;
+    }
   }
   const pool = bestCluster.length ? bestCluster : samples;
   const withAccuracy = pool.filter((s) => s.accuracy != null && s.accuracy > 0);
   const chosen = withAccuracy.length
     ? [...withAccuracy].sort((a, b) =>
-        a.accuracy - b.accuracy || b.position.timestamp - a.position.timestamp
+        effectiveSampleRankAccuracy(a, pool.length) - effectiveSampleRankAccuracy(b, pool.length) ||
+        (Number(b.position?.timestamp) || 0) - (Number(a.position?.timestamp) || 0)
       )[0]
     : pool[pool.length - 1];
 
@@ -105,7 +128,9 @@ function selectBestGpsSample(samples) {
 
 /**
  * Collect GPS samples for a short window and resolve with the most accurate
- * consistent one. Resolves { position, error, aborted }. Never rejects.
+ * consistent one. Also fires a fresh getCurrentPosition probe in parallel with
+ * watchPosition so browsers that stall or return a stale watch sample get a
+ * clean hardware/Wi-Fi reading. Resolves { position, error, aborted }. Never rejects.
  */
 function sampleBestPosition({ signal } = {}) {
   return new Promise((resolve) => {
@@ -133,7 +158,11 @@ function sampleBestPosition({ signal } = {}) {
       if (done) return;
       done = true;
       cleanup();
-      resolve({ position: chosen?.position || null, error: chosen ? null : (error || lastError) });
+      resolve({
+        position: chosen?.position || null,
+        sampleMeta: chosen ? { sampleCount: chosen.sampleCount, clusterCount: chosen.clusterCount } : null,
+        error: chosen ? null : (error || lastError)
+      });
     };
 
     const onAbort = () => {
@@ -151,41 +180,67 @@ function sampleBestPosition({ signal } = {}) {
       signal.addEventListener('abort', onAbort);
     }
 
-    watchId = navigator.geolocation.watchPosition(
-      (position) => {
-        if (done) return;
-        const lat = Number(position?.coords?.latitude);
-        const lng = Number(position?.coords?.longitude);
-        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
-        if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return;
+    const recordPosition = (position) => {
+      if (done) return;
+      const lat = Number(position?.coords?.latitude);
+      const lng = Number(position?.coords?.longitude);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+      if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return;
 
-        const rawAccuracy = Number(position.coords?.accuracy);
+      const rawAccuracy = Number(position.coords?.accuracy);
+      const accuracy = Number.isFinite(rawAccuracy) && rawAccuracy > 0 ? rawAccuracy : null;
+
+      // Ignore exact duplicate coordinate+accuracy+timestamp emissions
+      const ts = Number(position?.timestamp) || 0;
+      const isDup = samples.some(
+        (s) => Math.abs(s.lat - lat) < 1e-7 && Math.abs(s.lng - lng) < 1e-7 && s.accuracy === accuracy && (Number(s.position?.timestamp) || 0) === ts
+      );
+      if (!isDup) {
         samples.push({
           position,
           lat,
           lng,
-          accuracy: Number.isFinite(rawAccuracy) && rawAccuracy > 0 ? rawAccuracy : null
+          accuracy
         });
-        chosen = selectBestGpsSample(samples);
+      }
+      chosen = selectBestGpsSample(samples);
 
-        // Only end early when several independent samples agree, so a single
-        // cached fix cannot win the race.
-        const consistent = chosen.clusterCount >= GPS_MIN_CONSISTENT_SAMPLES;
-        if (consistent && chosen.accuracy != null && chosen.accuracy <= GPS_GOOD_ENOUGH_M) finish();
-      },
+      // Only end early when several independent samples agree AND the accuracy
+      // is realistic (>= 3 m), so a single cached ±1 m fix cannot win the race.
+      const consistent = chosen.clusterCount >= GPS_MIN_CONSISTENT_SAMPLES;
+      const realisticAccuracy = chosen.accuracy != null && chosen.accuracy >= GPS_SUSPECT_TINY_ACCURACY_M && chosen.accuracy <= GPS_GOOD_ENOUGH_M;
+      if (consistent && realisticAccuracy) finish();
+    };
+
+    watchId = navigator.geolocation.watchPosition(
+      recordPosition,
       (error) => {
         lastError = error;
         // Permission denial will never be followed by a fix; fail fast.
-        if (error?.code === 1 || chosen) finish(error);
+        if (error?.code === 1) finish(error);
       },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
     );
+
+    // Parallel fresh one-shot hardware/Wi-Fi probe to force a non-cached fix
+    try {
+      navigator.geolocation.getCurrentPosition(
+        recordPosition,
+        () => {},
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      );
+    } catch {}
 
     collectTimer = setTimeout(() => finish(), GPS_COLLECT_MS);
     earlyTimer = setTimeout(() => {
       if (!chosen) return;
-      if (chosen.clusterCount >= GPS_MIN_CONSISTENT_SAMPLES &&
-          chosen.accuracy != null && chosen.accuracy <= GPS_ACCEPTABLE_M) finish();
+      const realisticAcceptable =
+        chosen.accuracy != null &&
+        chosen.accuracy >= GPS_SUSPECT_TINY_ACCURACY_M &&
+        chosen.accuracy <= GPS_ACCEPTABLE_M;
+      if (chosen.clusterCount >= GPS_MIN_CONSISTENT_SAMPLES && realisticAcceptable) {
+        finish();
+      }
     }, GPS_ACCEPTABLE_AFTER_MS);
   });
 }

@@ -9,7 +9,7 @@ import { useModalScrollLock } from '../utils/useModalScrollLock';
  * and allows reviewing/editing before saving.
  */
 export default function CandidateProfileUploadModal({ isOpen, onClose, onProfileUpdated }) {
-  const { token, isAuthenticated, openAuthModal, candidateProfile, updateCandidateProfile, clearCandidateProfile } = useAuth();
+  const { token, isAuthenticated, openAuthModal, candidateProfile, updateCandidateProfile, clearCandidateProfile, user } = useAuth();
 
   useModalScrollLock(isOpen);
 
@@ -218,6 +218,34 @@ export default function CandidateProfileUploadModal({ isOpen, onClose, onProfile
     setIsEditing(true);
   };
 
+  const handleStartManual = () => {
+    if (!isAuthenticated) {
+      onClose();
+      openAuthModal('Please sign in or create an account to fill your candidate profile.', 'login');
+      return;
+    }
+    const blank = {
+      name: user?.name || '',
+      headline: 'Software Engineer',
+      country: 'India',
+      city: 'Bengaluru',
+      isIndiaResident: true,
+      hasUSWorkAuth: false,
+      totalYearsExperience: 0,
+      experienceMonths: 0,
+      totalExperienceMonths: 0,
+      experienceDisplay: 'Fresher (0–1y)',
+      isFresher: true,
+      seniorityLevel: 'Fresher / Early Career (0–1y)',
+      skills: ['JavaScript', 'React', 'Git', 'SQL'],
+      education: 'B.Tech / Bachelor’s Degree in Engineering or CS',
+      sourceType: 'manual',
+      sourceName: 'Manual Entry'
+    };
+    setParsedData(blank);
+    setIsEditing(true);
+  };
+
   const updateExperience = (years, months, isFresherExplicit) => {
     const yrs = Math.max(0, parseInt(years, 10) || 0);
     const mos = Math.max(0, Math.min(11, parseInt(months, 10) || 0));
@@ -347,7 +375,20 @@ export default function CandidateProfileUploadModal({ isOpen, onClose, onProfile
                   <line x1="2" y1="12" x2="22" y2="12" />
                   <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
                 </svg>
-                <span>Portfolio / Personal Website</span>
+                <span>Portfolio Website</span>
+              </button>
+
+              <button
+                type="button"
+                className="candidate-tab-btn"
+                onClick={handleStartManual}
+                title="Fill in your profile details without uploading a file"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                </svg>
+                <span>Fill Details Manually</span>
               </button>
             </div>
 
@@ -428,6 +469,16 @@ export default function CandidateProfileUploadModal({ isOpen, onClose, onProfile
                         </svg>
                       </>
                     )}
+                  </button>
+                </div>
+
+                <div style={{ textAlign: 'center', marginTop: '10px' }}>
+                  <button
+                    type="button"
+                    onClick={handleStartManual}
+                    style={{ background: 'none', border: 'none', color: 'var(--primary)', fontSize: '12px', fontWeight: 600, cursor: 'pointer', textDecoration: 'underline' }}
+                  >
+                    Don't have a CV file? Fill your profile manually →
                   </button>
                 </div>
               </div>

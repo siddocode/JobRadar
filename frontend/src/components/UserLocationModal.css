@@ -859,7 +859,7 @@
 .location-modal-bottom-bar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   padding: 16px 26px;
   border-top: 1px solid #e2e8f0;
   background: #f8fafc;
@@ -868,6 +868,40 @@
 [data-theme='dark'] .location-modal-bottom-bar {
   background: #0b1120;
   border-color: #1e293b;
+}
+
+/* Simple compact location hints */
+.location-fix-simple-hint,
+.location-mismatch-simple-hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  padding: 7px 11px;
+  border-radius: 8px;
+  background: rgba(217, 119, 6, 0.08);
+  border: 1px solid rgba(217, 119, 6, 0.25);
+  color: #8a5a2b;
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
+[data-theme='dark'] .location-fix-simple-hint,
+[data-theme='dark'] .location-mismatch-simple-hint {
+  color: #f0c48a;
+  background: rgba(240, 160, 64, 0.12);
+  border-color: rgba(240, 160, 64, 0.32);
+}
+
+.location-fix-simple-hint svg,
+.location-mismatch-simple-hint svg {
+  flex-shrink: 0;
+  color: #d97706;
+}
+
+[data-theme='dark'] .location-fix-simple-hint svg,
+[data-theme='dark'] .location-mismatch-simple-hint svg {
+  color: #f59e0b;
 }
 
 .bottom-bar-hint {
@@ -1949,4 +1983,85 @@
 
 [data-theme='dark'] .location-gps-mismatch .location-reset-link:hover {
   color: #fecaca;
+}
+
+/* Instant recommendation dropdown section header */
+.location-dropdown-section-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px 6px;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #2563eb;
+  background: rgba(37, 99, 235, 0.04);
+  border-bottom: 1px solid #f1f5f9;
+}
+
+[data-theme='dark'] .location-dropdown-section-header {
+  color: #60a5fa;
+  background: rgba(37, 99, 235, 0.12);
+  border-color: #334155;
+}
+
+/* Quick nearby hub chips inside coarse GPS warning */
+.location-fix-quick-hubs {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 2px 0 4px;
+}
+
+.location-fix-quick-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: inherit;
+  opacity: 0.9;
+}
+
+.location-fix-quick-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.location-fix-hub-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3.5px 9px;
+  border-radius: 9999px;
+  border: 1px solid rgba(37, 99, 235, 0.35);
+  background: rgba(37, 99, 235, 0.08);
+  color: #1d4ed8;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.location-fix-hub-chip:hover {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #ffffff;
+}
+
+[data-theme='dark'] .location-fix-hub-chip {
+  border-color: rgba(96, 165, 250, 0.4);
+  background: rgba(96, 165, 250, 0.14);
+  color: #93c5fd;
+}
+
+[data-theme='dark'] .location-fix-hub-chip:hover {
+  background: #3b82f6;
+  border-color: #3b82f6;
+  color: #ffffff;
+}
+
+.location-fix-warning-actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }

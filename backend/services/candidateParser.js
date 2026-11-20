@@ -112,8 +112,8 @@ const EXTENDED_SKILL_KEYWORDS = [
   { name: 'Agile', regex: /\bagile\b/i }
 ];
 
-const INDIAN_CITIES_REGEX = /\b(bengaluru|bangalore|hyderabad|noida|gurgaon|gurugram|delhi|new delhi|ncr|pune|mumbai|chennai|kolkata|ahmedabad|kochi|indore|chandigarh|jaipur|trivandrum|thiruvananthapuram|coimbatore)\b/i;
-const INDIAN_LOCATIONS_REGEX = /\b(india|karnataka|telangana|maharashtra|tamil nadu|uttar pradesh|haryana|kerala|gujarat)\b/i;
+const INDIAN_CITIES_REGEX = /\b(bengaluru|bangalore|hyderabad|noida|greater noida|gurgaon|gurugram|delhi|new delhi|ncr|pune|mumbai|navi mumbai|thane|chennai|kolkata|howrah|durgapur|siliguri|ahmedabad|surat|vadodara|rajkot|kochi|ernakulam|indore|bhopal|chandigarh|mohali|panchkula|jaipur|jodhpur|udaipur|kota|trivandrum|thiruvananthapuram|coimbatore|madurai|trichy|salem|ballia|varanasi|lucknow|kanpur|prayagraj|allahabad|agra|meerut|ghaziabad|faridabad|patna|gaya|muzaffarpur|ranchi|jamshedpur|dhanbad|bhubaneswar|cuttack|rourkela|guwahati|nagpur|nashik|aurangabad|visakhapatnam|vijayawada|guntur|tirupati|mysuru|mysore|mangalore|mangaluru|hubli|ludhiana|amritsar|jalandhar|raipur|bilaspur|dehradun|haridwar|shimla|jammu|srinagar|goa|panaji)\b/i;
+const INDIAN_LOCATIONS_REGEX = /\b(india|karnataka|telangana|maharashtra|tamil nadu|uttar pradesh|west bengal|bihar|jharkhand|rajasthan|madhya pradesh|odisha|orissa|punjab|assam|chhattisgarh|uttarakhand|himachal pradesh|haryana|kerala|gujarat|andhra pradesh|goa|tripura|manipur)\b/i;
 
 const US_CITIES_REGEX = /\b(san francisco|san jose|seattle|austin|new york|boston|chicago|los angeles)\b/i;
 const US_LOCATIONS_REGEX = /\b(united states|usa|\bus\b|california|texas|washington|colorado|florida)\b/i;
@@ -129,14 +129,28 @@ const OTHER_COUNTRIES = [
 
 function htmlToReadableText(html = '') {
   const lineBreakToken = 'JOBRADAR_LINE_BREAK_TOKEN';
-  return stripHtml(
-    html
-      .replace(/<script\b(?![^>]*type=["']application\/ld\+json["'])[^>]*>[\s\S]*?<\/script>/gi, ' ')
-      .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ')
-      .replace(/<(?:br|hr)\b[^>]*\/?\s*>/gi, lineBreakToken)
-      .replace(/<\/(?:p|div|li|ul|ol|section|article|header|footer|h[1-6]|tr|td|th|dt|dd)\s*>/gi, lineBreakToken)
-      .replace(/<(?:p|div|li|ul|ol|section|article|header|footer|h[1-6]|tr|td|th|dt|dd)\b[^>]*>/gi, lineBreakToken)
-  ).split(lineBreakToken).map(line => line.trim()).filter(Boolean).join('\n');
+  return html
+    .replace(/<script\b(?![^>]*type=["']application\/ld\+json["'])[^>]*>[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<!--[\s\S]*?-->/g, ' ')
+    .replace(/<(?:br|hr)\b[^>]*\/?\s*>/gi, lineBreakToken)
+    .replace(/<\/(?:p|div|li|ul|ol|section|article|header|footer|h[1-6]|tr|td|th|dt|dd)\s*>/gi, lineBreakToken)
+    .replace(/<(?:p|div|li|ul|ol|section|article|header|footer|h[1-6]|tr|td|th|dt|dd)\b[^>]*>/gi, lineBreakToken)
+    .replace(/<\/?[a-zA-Z!][a-zA-Z0-9:-]*(?:\s[^>]*)?>/g, ' ')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#x27;|&#0*39;/gi, "'")
+    .replace(/&#x2F;/gi, '/')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&ndash;/gi, '–')
+    .replace(/&mdash;/gi, '—')
+    .replace(/&amp;/g, '&')
+    .replace(/[ \t\r]+/g, ' ')
+    .split(lineBreakToken)
+    .map(line => line.replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+    .join('\n');
 }
 
 function collectStructuredPersonFields(value, fields = {}, depth = 0) {
@@ -217,7 +231,15 @@ function extractExplicitSkillNames(text) {
 
   const seen = new Set();
   return candidates.map(skill => skill.replace(/^[\s\-–—*•]+|[\s\-–—*•]+$/g, '').trim())
-    .filter(skill => skill.length >= 2 && skill.length <= 50 && !/^(skills?|technical skills|technologies|tech stack|tools|expertise)$/i.test(skill))
+    .filter(skill => {
+      if (skill.length < 2 || skill.length > 40) return false;
+      if (/^(skills?|technical skills|technologies|tech stack|tools|expertise)$/i.test(skill)) return false;
+      if (/^(?:0\s*)?\d+(?:\s*\d+)?$/.test(skill)) return false;
+      if (/^all\s+(?:languages|frontend|backend|devops|tools)/i.test(skill)) return false;
+      if (/\b(?:languages|frontend|backend|devops|tools|database)\b/i.test(skill) && /\b(?:&|and)\b/i.test(skill) && skill.length > 20) return false;
+      if (/^(?:code|live|demo|view|download|terminal|theme|present|loading|skills?)\b/i.test(skill)) return false;
+      return true;
+    })
     .filter(skill => {
       const key = skill.toLowerCase().replace(/[^a-z0-9]/g, '');
       if (!key || seen.has(key)) return false;
@@ -243,15 +265,54 @@ function serializePortfolioApiData(value, depth = 0) {
   return lines.join('\n');
 }
 
+function safeResolveUrl(candidate, base) {
+  try {
+    return new URL(candidate, base).href;
+  } catch (_) {
+    return '';
+  }
+}
+
+async function safePublicFetch(urlString, options = {}, maxRedirects = 5) {
+  let currentUrl = urlString;
+  for (let hop = 0; hop <= maxRedirects; hop++) {
+    const allowed = await isPublicWebUrl(currentUrl);
+    if (!allowed) {
+      throw new Error('Blocked access to non-public or internal network URL.');
+    }
+    const response = await fetch(currentUrl, {
+      ...options,
+      redirect: 'manual'
+    });
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers.get('location');
+      if (!location) return response;
+      const nextUrl = safeResolveUrl(location, currentUrl);
+      if (!nextUrl) throw new Error('Invalid redirect target.');
+      currentUrl = nextUrl;
+      continue;
+    }
+    return response;
+  }
+  throw new Error('Too many redirects while fetching portfolio URL.');
+}
+
 async function extractPublicPortfolioApiData(html, pageUrl) {
   const page = new URL(pageUrl);
-  const scriptUrls = [...html.matchAll(/<script\b[^>]*\bsrc=["']([^"']+)["'][^>]*>/gi)]
-    .map(match => { try { return new URL(match[1], page).href; } catch (_) { return ''; } })
+  const scriptUrls = [
+    ...html.matchAll(/<script\b[^>]*\bsrc=["']([^"']+)["'][^>]*>/gi),
+    ...html.matchAll(/<link\b[^>]*rel=["']modulepreload["'][^>]*\bhref=["']([^"']+)["'][^>]*>/gi)
+  ]
+    .map(match => safeResolveUrl(match[1], page))
     .filter((value, index, all) => value && new URL(value).origin === page.origin && all.indexOf(value) === index)
-    .slice(0, 5);
+    .slice(0, 10);
+
   const bundles = await Promise.all(scriptUrls.map(async scriptUrl => {
     try {
-      const response = await fetch(scriptUrl, { signal: AbortSignal.timeout(7000), redirect: 'error', headers: { Accept: 'application/javascript,text/javascript,*/*' } });
+      const response = await safePublicFetch(scriptUrl, {
+        signal: AbortSignal.timeout(7000),
+        headers: { Accept: 'application/javascript,text/javascript,*/*' }
+      });
       if (!response.ok) return '';
       return (await response.text()).slice(0, 2_000_000);
     } catch (_) { return ''; }
@@ -262,7 +323,7 @@ async function extractPublicPortfolioApiData(html, pageUrl) {
     const bases = [...bundle.matchAll(/(?:const|let|var)\s+[\w$]+\s*=\s*["'](https?:\/\/[^"']+)["'](?:\.replace\([^)]*\))?/g)]
       .map(match => match[1].replace(/\/+$/, ''));
     const prefixes = [...bundle.matchAll(/(?:const|let|var)\s+[\w$]+\s*=\s*["'](\/[^"']*)["']/g)]
-      .map(match => match[1]).filter(path => /api/i.test(path));
+      .map(match => match[1]).filter(path => /api|data/i.test(path));
     const routes = [...bundle.matchAll(/(?:get|fetch|load)(Profile|About|Site|Skills?|Experience|Education|Projects?|Timeline|Achievements?|Resume|Stats)\s*:\s*(?:\([^)]*\)|[\w$]+)\s*=>\s*[\w$]+\(\s*["'](\/[^"']+)["']/gi)];
     for (const route of routes) {
       const routePath = route[2];
@@ -272,13 +333,25 @@ async function extractPublicPortfolioApiData(html, pageUrl) {
       const apiUrl = new URL(prefix && !endpoint.startsWith(`${prefix}/`) && endpoint !== prefix ? `${prefix}${endpoint}` : endpoint, base).href;
       endpointMap.set(apiUrl, route[1]);
     }
+    // Also catch direct fetch("/api/...") or static "/data/*.json" references (skipping widget/calendar telemetry)
+    const directEndpoints = [...bundle.matchAll(/["'](\/(?:api|data)\/[a-z0-9/_-]{2,60}(?:\.json)?)["']/gi)];
+    for (const m of directEndpoints) {
+      if (/calendar|contributions?|analytics|telemetry|visitor|views|og-image|sitemap/i.test(m[1])) continue;
+      const apiUrl = safeResolveUrl(m[1], bases[0] || page.origin);
+      if (apiUrl && !endpointMap.has(apiUrl)) {
+        endpointMap.set(apiUrl, m[1].split('/').pop().replace(/\.json$/i, '') || 'Data');
+      }
+    }
   }
 
   const endpoints = [...endpointMap.entries()].slice(0, 12);
   const responses = await Promise.all(endpoints.map(async ([apiUrl, label]) => {
     if (!await isPublicWebUrl(apiUrl)) return '';
     try {
-      const response = await fetch(apiUrl, { signal: AbortSignal.timeout(7000), redirect: 'error', headers: { Accept: 'application/json' } });
+      const response = await safePublicFetch(apiUrl, {
+        signal: AbortSignal.timeout(7000),
+        headers: { Accept: 'application/json' }
+      });
       if (!response.ok || !(response.headers.get('content-type') || '').includes('json')) return '';
       const raw = await response.text();
       if (raw.length > 1_000_000) return '';
@@ -385,6 +458,223 @@ function extractStringsFromJson(obj, maxDepth = 4, depth = 0) {
  * @param {string} url - Valid HTTP/HTTPS URL
  * @returns {Promise<string>} Cleaned website text content
  */
+/**
+ * Extract contact emails, phone numbers, social links, and linked Resume PDF URLs
+ * directly from HTML anchor tags and metadata before stripping tags.
+ */
+function extractHtmlSignals(html = '', baseUrl = '') {
+  const emails = new Set();
+  const phones = new Set();
+  const socialLinks = [];
+  const seenUrls = new Set();
+  let resumePdfUrl = '';
+
+  const anchorRegex = /<a\b([^>]*\bhref=["']([^"']+)["'][^>]*)>([\s\S]*?)<\/a>/gi;
+  for (const match of html.matchAll(anchorRegex)) {
+    const attrs = match[1] || '';
+    const rawHref = (match[2] || '').trim();
+    const linkText = htmlToReadableText(match[3] || '');
+    const ariaLabel = attrs.match(/(?:aria-label|title)=["']([^"']+)["']/i)?.[1] || '';
+    const labelText = `${linkText} ${ariaLabel}`.trim();
+
+    if (!rawHref || rawHref.startsWith('#') || /^javascript:/i.test(rawHref)) continue;
+
+    if (/^mailto:/i.test(rawHref)) {
+      const addr = rawHref.replace(/^mailto:/i, '').split('?')[0].trim();
+      if (addr && addr.includes('@')) emails.add(addr.toLowerCase());
+      continue;
+    }
+
+    if (/^tel:/i.test(rawHref)) {
+      const num = rawHref.replace(/^tel:/i, '').trim();
+      if (num) phones.add(num);
+      continue;
+    }
+
+    const resolved = safeResolveUrl(rawHref, baseUrl);
+    if (!resolved || seenUrls.has(resolved)) continue;
+    seenUrls.add(resolved);
+
+    if (/github\.com\/[a-zA-Z0-9_-]+/i.test(resolved)) {
+      socialLinks.push(`GitHub Profile: ${resolved}`);
+    } else if (/linkedin\.com\/in\/[a-zA-Z0-9_-]+/i.test(resolved)) {
+      socialLinks.push(`LinkedIn Profile: ${resolved}`);
+    } else if (/(?:twitter\.com|x\.com)\/[a-zA-Z0-9_]+/i.test(resolved)) {
+      socialLinks.push(`Twitter Profile: ${resolved}`);
+    } else if (/leetcode\.com\/(?:u\/)?[a-zA-Z0-9_-]+/i.test(resolved)) {
+      socialLinks.push(`LeetCode Profile: ${resolved}`);
+    }
+
+    if (
+      !resumePdfUrl &&
+      (/\.pdf(?:\?|#|$)/i.test(resolved) || /\b(?:resume|cv|curriculum vitae|download cv|view resume)\b/i.test(labelText)) &&
+      !/privacy|terms|policy|cookie/i.test(resolved + ' ' + labelText)
+    ) {
+      if (/\.pdf(?:\?|#|$)/i.test(resolved) || /\b(?:resume|cv)\b/i.test(resolved)) {
+        resumePdfUrl = resolved;
+      }
+    }
+  }
+
+  return {
+    emails: [...emails],
+    phones: [...phones],
+    socialLinks,
+    resumePdfUrl
+  };
+}
+
+/**
+ * Extract readable text strings embedded in Next.js App Router (self.__next_f.push) payloads.
+ */
+function extractNextFlightText(html = '') {
+  const chunks = [];
+  const flightRegex = /self\.__next_f\.push\(\[\s*\d+\s*,\s*"([\s\S]*?)"\s*\]\)/g;
+  for (const m of html.matchAll(flightRegex)) {
+    try {
+      const decoded = JSON.parse(`"${m[1]}"`);
+      const textTokens = decoded.match(/"(?:children|text|title|name|role|company|description|subtitle|headline|location|degree|institution|school|duration|period|summary)"\s*:\s*"([^"\\]{2,400})"/gi) || [];
+      for (const tok of textTokens) {
+        const valMatch = tok.match(/:\s*"([^"]+)"$/);
+        if (valMatch?.[1] && !valMatch[1].startsWith('$') && !valMatch[1].startsWith('/_next')) {
+          chunks.push(valMatch[1]);
+        }
+      }
+    } catch (_) {}
+  }
+  return chunks.join('\n');
+}
+
+/**
+ * Render client-side React/Vite/Next SPA portfolio pages using headless Chromium when
+ * static HTML contains minimal text (fallback with full SSRF validation).
+ */
+async function renderPortfolioWithBrowser(targetUrl) {
+  let browser = null;
+  try {
+    if (!await isPublicWebUrl(targetUrl)) return null;
+    const { chromium } = require('playwright');
+    browser = await chromium.launch({
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+    });
+    const context = await browser.newContext({
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+      viewport: { width: 1280, height: 900 }
+    });
+    const page = await context.newPage();
+    const apiChunks = [];
+
+    await page.route('**/*', async (route) => {
+      const req = route.request();
+      const reqUrl = req.url();
+      const resType = req.resourceType();
+      if (resType === 'image' || resType === 'media' || resType === 'font') {
+        return route.abort();
+      }
+      if (/^https?:\/\//i.test(reqUrl)) {
+        try {
+          const parsedReq = new URL(reqUrl);
+          const host = parsedReq.hostname.toLowerCase();
+          if (
+            host === 'localhost' ||
+            host === '127.0.0.1' ||
+            host === '::1' ||
+            host.startsWith('10.') ||
+            host.startsWith('192.168.') ||
+            host.startsWith('169.254.') ||
+            host.endsWith('.local') ||
+            host.endsWith('.internal')
+          ) {
+            return route.abort();
+          }
+        } catch (_) {
+          return route.abort();
+        }
+      }
+      return route.continue();
+    });
+
+    page.on('response', async (resp) => {
+      try {
+        const ct = (resp.headers()['content-type'] || '').toLowerCase();
+        if (resp.ok() && ct.includes('application/json') && apiChunks.length < 10) {
+          const txt = await resp.text();
+          if (txt && txt.length < 300_000) {
+            const data = JSON.parse(txt);
+            const serialized = serializePortfolioApiData(data);
+            if (serialized && serialized.length > 20) {
+              apiChunks.push(serialized);
+            }
+          }
+        }
+      } catch (_) {}
+    });
+
+    await page.goto(targetUrl, { waitUntil: 'networkidle', timeout: 10000 }).catch(() => {});
+    await page.waitForTimeout(800);
+    await page.evaluate(() => {
+      try { window.scrollTo(0, document.body.scrollHeight); } catch (_) {}
+    }).catch(() => {});
+    await page.waitForTimeout(400);
+
+    const domData = await page.evaluate(() => {
+      const title = document.title || '';
+      const h1 = document.querySelector('h1')?.innerText?.trim() || '';
+      const bodyText = document.body?.innerText || '';
+      const anchors = Array.from(document.querySelectorAll('a[href]')).map(a => ({
+        href: a.href || '',
+        text: (a.innerText || a.getAttribute('aria-label') || a.getAttribute('title') || '').trim()
+      })).slice(0, 120);
+      return { title, h1, bodyText, anchors };
+    });
+
+    const parts = [];
+    if (domData.title) parts.push(`Title: ${domData.title}`);
+    if (domData.h1) parts.push(`Hero Heading: ${domData.h1}`);
+
+    let resumePdfUrl = '';
+    for (const a of domData.anchors || []) {
+      if (!a.href) continue;
+      if (/^mailto:/i.test(a.href)) {
+        parts.push(`Email: ${a.href.replace(/^mailto:/i, '').split('?')[0].trim()}`);
+      } else if (/^tel:/i.test(a.href)) {
+        parts.push(`Phone: ${a.href.replace(/^tel:/i, '').trim()}`);
+      } else if (/github\.com\/|linkedin\.com\/in\/|(?:twitter|x)\.com\/|leetcode\.com\//i.test(a.href)) {
+        parts.push(`Links: ${a.href}`);
+      } else if (!resumePdfUrl && (/\.pdf(?:\?|#|$)/i.test(a.href) || (/\b(?:resume|cv)\b/i.test(a.text) && /\.pdf/i.test(a.href)))) {
+        resumePdfUrl = a.href;
+      }
+    }
+
+    if (apiChunks.length) parts.push(apiChunks.join('\n\n'));
+    if (domData.bodyText) parts.push(domData.bodyText);
+
+    return {
+      text: parts.join('\n\n').trim(),
+      resumePdfUrl
+    };
+  } catch (err) {
+    console.warn('[candidateParser:renderPortfolioWithBrowser] Playwright fallback skipped:', err.message);
+    return null;
+  } finally {
+    if (browser) {
+      await browser.close().catch(() => {});
+    }
+  }
+}
+
+/**
+ * Fetch and extract text from a Portfolio or personal website URL.
+ * Supports:
+ * - HTML Websites & SPAs (React, Next.js, Vue, Webflow, Framer — with Playwright fallback)
+ * - Direct PDF URLs & linked Resume PDFs on portfolio sites
+ * - GitHub Profiles & Repositories
+ * - LinkedIn Profile URLs
+ *
+ * @param {string} url - Valid HTTP/HTTPS URL
+ * @returns {Promise<string>} Cleaned website text content
+ */
 async function parsePortfolioUrl(url) {
   if (!url || typeof url !== 'string') {
     throw new Error('Portfolio URL is required');
@@ -403,16 +693,10 @@ async function parsePortfolioUrl(url) {
     throw new Error('Invalid URL format. Please provide a valid web address (e.g., https://myportfolio.com)');
   }
 
-  // Prevent local/internal IP SSRF
+  // Full SSRF protection via DNS resolution & private subnet check
   const hostname = parsedUrl.hostname.toLowerCase();
-  if (
-    hostname === 'localhost' ||
-    hostname === '127.0.0.1' ||
-    hostname.startsWith('192.168.') ||
-    hostname.startsWith('10.') ||
-    hostname.endsWith('.local')
-  ) {
-    throw new Error('Local or internal network URLs are not supported.');
+  if (!await isPublicWebUrl(formattedUrl)) {
+    throw new Error('Local, private, or internal network URLs are not supported.');
   }
 
   // 1. Specialized Handler: GitHub Profile / User page
@@ -425,6 +709,7 @@ async function parsePortfolioUrl(url) {
         let ghProfileText = `GitHub Profile: https://github.com/${ghUsername}\n`;
 
         // Query GitHub public User API
+        let blogUrl = '';
         try {
           const ghRes = await fetch(`https://api.github.com/users/${ghUsername}`, {
             headers: { 'User-Agent': 'JobRadar-ProfileScraper/1.0', 'Accept': 'application/vnd.github.v3+json' },
@@ -432,11 +717,15 @@ async function parsePortfolioUrl(url) {
           });
           if (ghRes.ok) {
             const uData = await ghRes.json();
-            if (uData.name) ghProfileText += `Name: ${uData.name}\n`;
-            if (uData.bio) ghProfileText += `Bio: ${uData.bio}\n`;
+            if (uData.name) ghProfileText += `Candidate Name: ${uData.name}\n`;
+            if (uData.email) ghProfileText += `Email: ${uData.email}\n`;
+            if (uData.bio) ghProfileText += `Headline: ${uData.bio}\n`;
             if (uData.company) ghProfileText += `Company: ${uData.company}\n`;
             if (uData.location) ghProfileText += `Location: ${uData.location}\n`;
-            if (uData.blog) ghProfileText += `Portfolio: ${uData.blog}\n`;
+            if (uData.blog) {
+              blogUrl = /^https?:\/\//i.test(uData.blog) ? uData.blog : `https://${uData.blog}`;
+              ghProfileText += `Portfolio: ${blogUrl}\n`;
+            }
             if (uData.public_repos) ghProfileText += `Public Repositories: ${uData.public_repos}\n`;
           }
         } catch (_) {}
@@ -463,15 +752,21 @@ async function parsePortfolioUrl(url) {
 
         // Fetch top updated repositories for languages and skills
         try {
-          const reposRes = await fetch(`https://api.github.com/users/${ghUsername}/repos?sort=updated&per_page=6`, {
+          const reposRes = await fetch(`https://api.github.com/users/${ghUsername}/repos?sort=updated&per_page=8`, {
             headers: { 'User-Agent': 'JobRadar-ProfileScraper/1.0', 'Accept': 'application/vnd.github.v3+json' },
             signal: AbortSignal.timeout(5000)
           });
           if (reposRes.ok) {
             const repos = await reposRes.json();
             if (Array.isArray(repos) && repos.length > 0) {
-              const repoSummaries = repos.map(r => `${r.name}: ${r.language || 'Code'} - ${r.description || ''} ${Array.isArray(r.topics) ? r.topics.join(' ') : ''}`).join('\n');
-              ghProfileText += `\nRecent Projects & Codebases:\n${repoSummaries}\n`;
+              const repoSummaries = repos
+                .filter(r => !r.fork)
+                .slice(0, 6)
+                .map(r => `${r.name} | ${r.description || 'Software Project'} | ${[r.language, ...(Array.isArray(r.topics) ? r.topics : [])].filter(Boolean).join(', ')}`)
+                .join('\n');
+              if (repoSummaries) {
+                ghProfileText += `\nProjects\n${repoSummaries}\n`;
+              }
             }
           }
         } catch (_) {}
@@ -502,7 +797,7 @@ async function parsePortfolioUrl(url) {
   }
 
   try {
-    const response = await fetch(formattedUrl, {
+    let response = await safePublicFetch(formattedUrl, {
       method: 'GET',
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
@@ -510,11 +805,17 @@ async function parsePortfolioUrl(url) {
         'Accept-Language': 'en-US,en;q=0.9',
         'Cache-Control': 'no-cache'
       },
-      signal: AbortSignal.timeout(15000), // 15 seconds
-      redirect: 'follow'
+      signal: AbortSignal.timeout(15000)
     });
 
     if (!response.ok) {
+      // If static fetch gets blocked (403/503), attempt browser rendering before failing
+      if (response.status === 403 || response.status === 503) {
+        const rendered = await renderPortfolioWithBrowser(formattedUrl);
+        if (rendered?.text && rendered.text.length > 80) {
+          return rendered.text;
+        }
+      }
       throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
 
@@ -529,9 +830,17 @@ async function parsePortfolioUrl(url) {
       return await parseCvPdf(buffer);
     }
 
+    const finalUrl = response.url || formattedUrl;
     const html = await response.text();
-    let textParts = [];
-    const publicApiText = await extractPublicPortfolioApiData(html, response.url || formattedUrl);
+    let textParts = [`Portfolio Website: ${finalUrl}`];
+
+    // Extract anchor links (mailto:, tel:, GitHub, LinkedIn, linked Resume PDF) before stripping HTML
+    const htmlSignals = extractHtmlSignals(html, finalUrl);
+    for (const email of htmlSignals.emails) textParts.push(`Email: ${email}`);
+    for (const phone of htmlSignals.phones) textParts.push(`Phone: ${phone}`);
+    if (htmlSignals.socialLinks.length) textParts.push(htmlSignals.socialLinks.join('\n'));
+
+    const publicApiText = await extractPublicPortfolioApiData(html, finalUrl);
     if (publicApiText) textParts.push(publicApiText);
 
     // Extract <title>
@@ -570,7 +879,7 @@ async function parsePortfolioUrl(url) {
       textParts.push(`Skills & Keywords: ${metaKeywordsMatch[1].trim()}`);
     }
 
-    // Extract Next.js / Nuxt / SPA inline data (e.g. __NEXT_DATA__)
+    // Extract Next.js / Nuxt / SPA inline data (__NEXT_DATA__ and App Router __next_f)
     const nextDataMatch = html.match(/<script[^>]*id=["']__NEXT_DATA__["'][^>]*>([\s\S]*?)<\/script>/i);
     if (nextDataMatch && nextDataMatch[1]) {
       try {
@@ -580,6 +889,10 @@ async function parsePortfolioUrl(url) {
           textParts.push(`Data: ${extractedJsonText.slice(0, 20000)}`);
         }
       } catch (_) {}
+    }
+    const nextFlightText = extractNextFlightText(html);
+    if (nextFlightText) {
+      textParts.push(nextFlightText.slice(0, 15000));
     }
 
     // Extract JSON-LD (Person / ProfilePage schemas)
@@ -610,7 +923,46 @@ async function parsePortfolioUrl(url) {
       if (skillText) textParts.push(`Portfolio Skills:\n${skillText}`);
     }
 
-    const combined = textParts.join('\n\n').trim();
+    let linkedPdfUrl = htmlSignals.resumePdfUrl;
+    const isSpaShell = /<div\s+id=["'](?:root|app|__next)["'][^>]*>\s*<\/div>/i.test(html) ||
+      cleanBodyText.length < 500;
+
+    // Fallback to headless Chromium rendering for client-side React/Vite/Next SPAs with sparse SSR content
+    if (isSpaShell && !publicApiText) {
+      const rendered = await renderPortfolioWithBrowser(finalUrl);
+      if (rendered?.text && rendered.text.length > cleanBodyText.length + 100) {
+        textParts.push(rendered.text);
+      }
+      if (!linkedPdfUrl && rendered?.resumePdfUrl) {
+        linkedPdfUrl = rendered.resumePdfUrl;
+      }
+    }
+
+    let combined = textParts.join('\n\n').trim();
+
+    // Enrich from a linked Resume PDF on the portfolio site if present and main page lacks depth
+    if (linkedPdfUrl && await isPublicWebUrl(linkedPdfUrl)) {
+      const needsEnrichment = combined.length < 1500 || !/\bexperience\b/i.test(combined) || !/\beducation\b/i.test(combined);
+      if (needsEnrichment) {
+        try {
+          const pdfResp = await safePublicFetch(linkedPdfUrl, { signal: AbortSignal.timeout(10000) });
+          const pdfCt = (pdfResp.headers.get('content-type') || '').toLowerCase();
+          if (pdfResp.ok && (pdfCt.includes('pdf') || /\.pdf(?:\?|#|$)/i.test(linkedPdfUrl))) {
+            const len = Number(pdfResp.headers.get('content-length') || 0);
+            if (!len || len <= 5 * 1024 * 1024) {
+              const pdfBuf = Buffer.from(await pdfResp.arrayBuffer());
+              if (pdfBuf.length <= 5 * 1024 * 1024) {
+                const pdfText = await parseCvPdf(pdfBuf);
+                if (pdfText) {
+                  textParts.push(`\n--- Linked Resume PDF ---\n${pdfText}`);
+                  combined = textParts.join('\n\n').trim();
+                }
+              }
+            }
+          }
+        } catch (_) {}
+      }
+    }
 
     // Fallback: If minimal text extracted, construct a basic portfolio context using hostname and title
     if (!combined || combined.length < 30) {
@@ -689,32 +1041,128 @@ function extractLinksAndPortfolio(text = '', meta = {}) {
   return { portfolio, github, linkedin, twitter, leetcode, links };
 }
 
+const GENERIC_SECTION_HEADING_REGEX = /^(?:[0-9]+[.\-)]\s*)?(?:about(?:\s+me)?|summary|overview|profile|home|experience|work\s+experience|professional\s+experience|employment\s+history|work\s+history|employment|relevant\s+experience|career\s+history|education|academic\s+background|academic\s+qualifications|academic\s+history|academics|qualifications|educational\s+background|degrees?|projects|featured\s+projects|personal\s+projects|key\s+projects|academic\s+projects|technical\s+projects|selected\s+projects|open\s*source(?:\s+projects)?|project\s+work|github\s+activity|contributions\s+in\s+the\s+past\s+year|technical\s+skills|skills(?:\s*&|\s+and|\s+technical)?|tech\s+stack|technologies|tools(?:\s*&\s*technologies)?|portfolio\s+skills|certifications?|licenses|awards?|achievements?|publications?|leadership|extracurricular|contact(?:\s+me)?|get\s+in\s+touch|links?)\s*:?$/i;
+
+const SECTION_NOISE_LINE_REGEX = /^(?:0?\s*\d{1,2}(?:\s+\d{1,3})?|present|loading activity graph\.{0,3}|404:\s*this page could not be found\.?|this page could not be found\.?|next\.metadataoutlet|next\.metadata|next-size-adjust|viewport|⌘k)$/i;
+const FOOTER_BOUNDARY_REGEX = /^(?:terminal(?:\s*\(.*\))?|light mode(?:\s*\(.*\))?|dark mode(?:\s*\(.*\))?|©\s*\d{4}\b|press\s+⌘k|portfolio skills\s*:?)$/i;
+
+function isStandaloneSectionHeading(line = '', targetRegex = null) {
+  const cleaned = line.replace(/^[#\s*]+|[:\s]+$/g, '').trim();
+  if (!cleaned) return false;
+  if (!targetRegex && FOOTER_BOUNDARY_REGEX.test(cleaned)) return true;
+  if (cleaned.length > 52 || /\.$/.test(cleaned)) return false;
+  if (targetRegex) return targetRegex.test(cleaned);
+  return GENERIC_SECTION_HEADING_REGEX.test(cleaned);
+}
+
 /**
- * Extract structured work experience entries from raw resume text.
+ * Detect whether a line is a tag-cloud / list of tech stack items rather than prose.
+ */
+function isTechStackTagLine(line = '') {
+  const trimmed = line.trim();
+  if (!trimmed || trimmed.length > 220) return false;
+  if (/[.!?:;]$/.test(trimmed) || trimmed.includes(':')) return false;
+  if (/\b(?:is|are|was|were|have|has|had|which|that|where|when|allowing|providing|ensuring|delivering|leading|built|engineered|designed|users|platform|applications)\b/i.test(trimmed)) {
+    return false;
+  }
+  const techHits = EXTENDED_SKILL_KEYWORDS.filter(k => k.regex.test(trimmed)).length;
+  return techHits >= 2 || (techHits >= 1 && /[,]/.test(trimmed) && trimmed.split(',').length >= 2);
+}
+
+/**
+ * Format a detected tech stack tag list cleanly for storage & pill rendering.
+ */
+function formatTechStackLine(line = '') {
+  const trimmed = line.trim();
+  if (!trimmed) return '';
+  if (trimmed.includes(',')) {
+    return trimmed.split(',').map(s => s.trim()).filter(Boolean).join(', ');
+  }
+  const multiWordTech = [
+    'React Native', 'Tailwind CSS v4', 'Tailwind CSS', 'Next.js 16', 'React 19',
+    'Server-Sent Events', 'Cloudflare TURN', 'YouTube Data API', 'Supabase Realtime',
+    'PostgreSQL RLS', 'REST APIs', 'Cloud Deployment', 'Prisma ORM', 'Upstash Redis',
+    'QStash Cron', 'EAS Build', 'TanStack Query', 'WebRTC Mesh', 'Groq API',
+    'Mobile UI', 'Brevo API', 'GitHub Actions'
+  ];
+  let working = trimmed;
+  const extracted = [];
+  for (const term of multiWordTech) {
+    const rx = new RegExp(`\\b${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
+    if (rx.test(working)) {
+      const m = working.match(rx);
+      if (m) extracted.push(m[0]);
+      working = working.replace(rx, ' ').replace(/\s+/g, ' ').trim();
+    }
+  }
+  const leftovers = working.split(/\s+/).filter(Boolean);
+  return [...extracted, ...leftovers].join(', ');
+}
+
+/**
+ * Extract all non-empty section blocks matching a heading regex, automatically
+ * skipping empty top-navbar links (e.g. "About\nExperience\nProjects\nSkills\nContact").
+ */
+function extractSectionBlocks(text = '', headerRegex) {
+  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const blocks = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (isStandaloneSectionHeading(lines[i], headerRegex)) {
+      const collected = [];
+      let j = i + 1;
+      while (j < lines.length && !isStandaloneSectionHeading(lines[j])) {
+        collected.push(lines[j]);
+        j++;
+      }
+      if (collected.length > 0) {
+        blocks.push(collected.join('\n'));
+      }
+      i = j - 1;
+    }
+  }
+  return blocks;
+}
+
+/**
+ * Extract structured work experience entries from raw resume or portfolio text.
  */
 function extractStructuredExperience(text = '') {
   const experiences = [];
-  const expHeaderRegex = /(?:^|\n)\s*(?:[0-9]+[.\-)]\s*)?(?:work\s+experience|professional\s+experience|employment\s+history|work\s+history|experience|employment|relevant\s+experience|career\s+history)\b/i;
-  const expHeaderMatch = text.match(expHeaderRegex);
-  if (!expHeaderMatch) return experiences;
+  const expHeaderRegex = /^(?:[0-9]+[.\-)]\s*)?(?:work\s+experience|professional\s+experience|employment\s+history|work\s+history|experience|employment|relevant\s+experience|career\s+history)$/i;
+  const blocks = extractSectionBlocks(text, expHeaderRegex);
+  if (blocks.length === 0) return experiences;
 
-  const afterHeader = text.slice(expHeaderMatch.index + expHeaderMatch[0].length);
-  const nextSectionRegex = /(?:^|\n)\s*(?:[0-9]+[.\-)]\s*)?(?:education|academic(?:s|\s+background|\s+history)?|projects|featured\s+projects|personal\s+projects|open\s*source|technical\s+skills|skills(?:\s*&|\s+and|\s+technical)?|certifications?|licenses|awards?|achievements?|publications?|leadership|extracurricular|contact|about(?:\s+me)?|summary)\b/i;
-  const nextMatch = afterHeader.match(nextSectionRegex);
-  const expSectionText = nextMatch ? afterHeader.slice(0, nextMatch.index) : afterHeader;
+  const expSectionText = blocks.join('\n');
+  const lines = expSectionText
+    .split(/\r?\n/)
+    .map(l => l.trim())
+    .filter(l => l && !SECTION_NOISE_LINE_REGEX.test(l));
 
-  const lines = expSectionText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
   const bulletSymbolRegex = /^[•\-\*–—▪▫◦⁃\+>]\s*|^\d+[\.\)]\s*/;
-  const dateRegex = /(?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s*)?\d{4}\s*[-–—to]+\s*(?:present|current|now|till date|(?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s*)?\d{4})|\b\d{4}\s*[-–—to]+\s*(?:present|current|\d{4})\b/i;
-  const actionVerbRegex = /^(?:developed|built|managed|led|created|implemented|designed|engineered|architected|maintained|reduced|increased|spearheaded|optimized|automated|collaborated|integrated|deployed|configured|resolved|authored|trained|researched|conducted|established|coordinated|assisted|executed|wrote|delivered|launched|formulated|programmed|tested|enhanced|scaled|analyzed|refactored|secured|streamlined|supervised|administered)\b/i;
+  const dateRegex = /(?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s*['’]?\s*)?(?:20\d{2}|19\d{2}|\d{2}\/\d{4})\s*[-–—to]+\s*(?:present|current|now|till\s*date|(?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s*['’]?\s*)?(?:20\d{2}|19\d{2}|\d{2}\/\d{4}))/i;
+  const actionVerbRegex = /^(?:developed|built|managed|led|created|implemented|designed|engineered|architected|maintained|reduced|increased|spearheaded|optimized|automated|collaborated|integrated|deployed|configured|resolved|authored|trained|researched|conducted|established|coordinated|assisted|executed|wrote|delivered|launched|formulated|programmed|tested|enhanced|scaled|analyzed|refactored|secured|streamlined|supervised|administered|worked|contributed|improved|migrated|leading|building)\b/i;
+  const roleHintRegex = /\b(?:software|senior|junior|lead|principal|staff|frontend|front-end|backend|back-end|full[- ]?stack|devops|data|machine\s*learning|ml|ai|sde|intern|engineer|developer|consultant|architect|manager|analyst|specialist|officer|director|associate|trainee|founder|co-founder|designer|qa|tester)\b/i;
+  const companySuffixRegex = /\b(?:inc\.?|llc|ltd\.?|pvt\.?|limited|corp\.?|technologies|technology|consultancy|consulting|solutions|systems|labs|studio|studios|digital|agency|ventures|group|services|networks)\b/i;
+
+  const hasDateWithinNext = (idx, maxOffset = 2) => {
+    for (let k = idx; k <= Math.min(lines.length - 1, idx + maxOffset); k++) {
+      if (dateRegex.test(lines[k])) return true;
+    }
+    return false;
+  };
 
   let currExp = null;
-  for (const line of lines) {
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (/^(?:view more|show more|read more|see all)$/i.test(line)) continue;
+
     const isBullet = bulletSymbolRegex.test(line);
-    const cleanBulletText = line.replace(bulletSymbolRegex, '').trim();
+    const cleanText = line.replace(bulletSymbolRegex, '').trim();
     const hasDate = dateRegex.test(line);
-    const isAction = actionVerbRegex.test(cleanBulletText);
-    const isPureDateLine = hasDate && cleanBulletText.length <= 35 && !/[a-zA-Z]{5,}/.test(cleanBulletText.replace(/(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*|present|current|now|till date/gi, ''));
+    const isAction = actionVerbRegex.test(cleanText);
+    const isPureDateLine = hasDate && cleanText.length <= 42 && !/[a-zA-Z]{5,}/.test(cleanText.replace(/(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?|present|current|now|till|date|to)/gi, ''));
+    const isLabeledBullet = /^[A-Z][^:.!?]{2,48}\s:\s+[A-Z]/.test(cleanText);
+    const isProseSentence = cleanText.length > 75 || (/[.!?]$/.test(cleanText) && cleanText.includes(' '));
 
     if (currExp && isPureDateLine && !currExp.duration) {
       const dm = line.match(dateRegex);
@@ -722,46 +1170,111 @@ function extractStructuredExperience(text = '') {
       continue;
     }
 
-    const hasRoleOrCompanyMarker = /^(?:software|senior|junior|lead|principal|staff|frontend|backend|full\s*stack|devops|data|machine\s*learning|sde|intern|engineer|developer|consultant|architect|manager|analyst|specialist|officer|director|associate|trainee|founder|co-founder|vp|head)\b/i.test(cleanBulletText) ||
-      /[–—\-–|]/.test(cleanBulletText) ||
-      /\bat\b/i.test(cleanBulletText);
+    if (currExp && !isBullet && !hasDate && isTechStackTagLine(cleanText)) {
+      const formatted = formatTechStackLine(cleanText);
+      currExp.techStack = currExp.techStack ? `${currExp.techStack}, ${formatted}` : formatted;
+      currExp._afterTech = true;
+      continue;
+    }
 
-    const isNewEntry = !isBullet && !isAction && (
-      (hasDate && !isPureDateLine) ||
-      (!currExp) ||
-      (hasRoleOrCompanyMarker && currExp.bullets.length > 0)
-    );
+    if (
+      currExp &&
+      !currExp._afterTech &&
+      !isBullet &&
+      !isAction &&
+      !hasDate &&
+      !isLabeledBullet &&
+      !isProseSentence &&
+      currExp.bullets.length === 0 &&
+      !currExp.summary &&
+      cleanText.length <= 65
+    ) {
+      if (!currExp.company) {
+        const compParts = cleanText.split(/\s*[•|]\s*/);
+        const candSecond = compParts[0].trim();
+        const candLoc = compParts[1] ? compParts[1].trim() : '';
+        if (companySuffixRegex.test(currExp.role) && !companySuffixRegex.test(candSecond)) {
+          currExp.company = currExp.role;
+          currExp.role = candSecond;
+        } else {
+          currExp.company = candSecond;
+        }
+        if (candLoc && !currExp.location) currExp.location = candLoc;
+        continue;
+      } else if (!currExp.role && roleHintRegex.test(cleanText)) {
+        currExp.role = cleanText;
+        continue;
+      } else if (
+        !currExp.location &&
+        (INDIAN_CITIES_REGEX.test(cleanText) || US_CITIES_REGEX.test(cleanText) || /\b(?:remote|hybrid|on-?site|india)\b/i.test(cleanText) || cleanText.length <= 32)
+      ) {
+        currExp.location = cleanText;
+        continue;
+      }
+    }
+
+    const cardAlreadyPopulated = Boolean(currExp && (currExp.duration || currExp.bullets.length > 0 || currExp.summary));
+    const looksLikeNewHeader = !isBullet && !isAction && !isLabeledBullet && !isProseSentence && cleanText.length <= 78;
+    const isNewEntry = !currExp ||
+      (currExp._afterTech && looksLikeNewHeader) ||
+      (cardAlreadyPopulated && looksLikeNewHeader && (
+        (hasDate && !isPureDateLine) ||
+        hasDateWithinNext(i + 1, 2)
+      ));
 
     if (isNewEntry) {
       if (currExp && (currExp.role || currExp.company || currExp.bullets.length > 0)) {
-        experiences.push(currExp);
+        const { _afterTech, ...finalExp } = currExp;
+        experiences.push(finalExp);
       }
       const dm = line.match(dateRegex);
       const duration = dm ? dm[0].trim() : '';
-      const beforeDate = dm ? line.slice(0, dm.index).trim() : line;
-      const parts = beforeDate.split(/[–—\-–|]/);
-      const roleCompPart = parts[0] ? parts[0].trim() : beforeDate;
-      const roleParts = roleCompPart.split(',');
+      let beforeDate = dm ? (line.slice(0, dm.index) + ' ' + line.slice(dm.index + dm[0].length)).trim() : line;
+      beforeDate = beforeDate.replace(/\(\s*\)|\[\s*\]/g, '').replace(/[|\-–—,\s]+$/, '').trim();
 
-      let role = roleParts[0] ? roleParts[0].trim() : '';
-      let company = roleParts[1] ? roleParts[1].trim() : (parts[1] ? parts[1].trim() : '');
-      let loc = parts[2] ? parts[2].trim() : (parts[1] && parts[1] !== company ? parts[1].trim() : '');
+      let role = '';
+      let company = '';
+      let loc = '';
+
+      const atSplit = beforeDate.split(/\s+(?:at|@)\s+/i);
+      if (atSplit.length >= 2) {
+        role = atSplit[0].trim();
+        const rightParts = atSplit.slice(1).join(' ').split(/[–—|]/);
+        company = rightParts[0].trim();
+        loc = rightParts[1] ? rightParts[1].trim() : '';
+      } else {
+        const parts = beforeDate.split(/\s*[–—\-|]\s*/);
+        const roleCompPart = parts[0] ? parts[0].trim() : beforeDate;
+        const commaParts = roleCompPart.split(',');
+        role = commaParts[0] ? commaParts[0].trim() : '';
+        company = commaParts[1] ? commaParts[1].trim() : (parts[1] ? parts[1].trim() : '');
+        loc = parts[2] ? parts[2].trim() : (commaParts[1] && parts[1] ? parts[1].trim() : '');
+      }
 
       if (!role && company) {
         role = company;
         company = '';
       }
 
+      const cleanRole = role.replace(/^[#\*\-=\+_\[\]\(\)\d\.\sI|:]+/, '').replace(/[(\[]+$/, '').trim();
+      const cleanComp = company.replace(/[#\*\-=\+_\[\]\(\)\s|:]+$/, '').trim();
+      const singleCompanyOnly = !cleanComp && cleanRole && (companySuffixRegex.test(cleanRole) || !roleHintRegex.test(cleanRole));
+
       currExp = {
-        role: role.replace(/^[#\*\-=\+_\[\]\(\)\d\.\sI|:]+/, '').trim(),
-        company: company.replace(/[#\*\-=\+_\[\]\(\)\s|:]+$/, '').trim(),
+        role: singleCompanyOnly ? '' : cleanRole,
+        company: singleCompanyOnly ? cleanRole : cleanComp,
         location: loc.trim(),
         duration,
-        bullets: []
+        summary: '',
+        bullets: [],
+        techStack: '',
+        _afterTech: false
       };
     } else if (currExp) {
-      if (isBullet || isAction || currExp.bullets.length === 0) {
-        if (cleanBulletText) currExp.bullets.push(cleanBulletText);
+      if (!isBullet && !isLabeledBullet && isProseSentence && !currExp.summary && currExp.bullets.length === 0) {
+        currExp.summary = cleanText;
+      } else if (isBullet || isLabeledBullet || isAction || currExp.bullets.length === 0) {
+        if (cleanText) currExp.bullets.push(cleanText);
       } else if (currExp.bullets.length > 0 && line.length > 0) {
         currExp.bullets[currExp.bullets.length - 1] += ' ' + line;
       }
@@ -769,59 +1282,104 @@ function extractStructuredExperience(text = '') {
   }
 
   if (currExp && (currExp.role || currExp.company || currExp.bullets.length > 0)) {
-    experiences.push(currExp);
+    const { _afterTech, ...finalExp } = currExp;
+    experiences.push(finalExp);
   }
 
-  return experiences.filter(e => e.role || e.company);
+  // Post-processing consolidation pass: unite any fragmented sub-blocks into their parent company
+  const consolidated = [];
+  for (const exp of experiences) {
+    const comp = (exp.company || '').trim();
+    const role = (exp.role || '').trim();
+    const isSpurious = /^(?:leading|building|engineering|developing|multi|api integration)\b/i.test(comp) ||
+      /^(?:project client delivery|connected client)\b/i.test(role) ||
+      (!comp && !role);
+
+    if (isSpurious && consolidated.length > 0) {
+      const prev = consolidated[consolidated.length - 1];
+      if (exp.summary && !prev.summary) prev.summary = exp.summary;
+      else if (comp && !comp.toLowerCase().startsWith('multi') && !prev.summary) {
+        prev.summary = comp + (role ? ` • ${role}` : '');
+      }
+      if (Array.isArray(exp.bullets)) {
+        for (const b of exp.bullets) {
+          if (!prev.bullets.includes(b)) prev.bullets.push(b);
+        }
+      }
+      if (exp.techStack) {
+        const existingTech = (prev.techStack || '').split(',').map(s => s.trim()).filter(Boolean);
+        const newTech = exp.techStack.split(',').map(s => s.trim()).filter(Boolean);
+        prev.techStack = [...new Set([...existingTech, ...newTech])].join(', ');
+      }
+    } else if (!isSpurious && (comp || role)) {
+      consolidated.push(exp);
+    }
+  }
+
+  const seenExp = new Set();
+  return consolidated.filter(e => {
+    if (!e.role && !e.company) return false;
+    const key = `${(e.role || '').toLowerCase()}|${(e.company || '').toLowerCase()}|${(e.duration || '').toLowerCase()}`;
+    if (seenExp.has(key)) return false;
+    seenExp.add(key);
+    return true;
+  });
 }
 
 /**
- * Extract structured education records from raw resume text.
+ * Extract structured education records from raw resume or portfolio text.
  */
 function extractStructuredEducation(text = '') {
   const educationEntries = [];
-  const eduHeaderRegex = /(?:^|\n)\s*(?:[0-9]+[.\-)]\s*)?(?:education|academic\s+background|academic\s+qualifications|academic\s+history|academics|qualifications|educational\s+background|degrees?)\b/i;
-  const eduMatch = text.match(eduHeaderRegex);
-  if (!eduMatch) return educationEntries;
+  const eduHeaderRegex = /^(?:[0-9]+[.\-)]\s*)?(?:education|academic\s+background|academic\s+qualifications|academic\s+history|academics|qualifications|educational\s+background|degrees?)$/i;
+  const blocks = extractSectionBlocks(text, eduHeaderRegex);
+  if (blocks.length === 0) return educationEntries;
 
-  const afterHeader = text.slice(eduMatch.index + eduMatch[0].length);
-  const nextSectionRegex = /(?:^|\n)\s*(?:[0-9]+[.\-)]\s*)?(?:experience|work\s+experience|professional\s+experience|projects|featured\s+projects|personal\s+projects|technical\s+skills|skills|certifications?|awards?|achievements?|publications?|leadership|extracurricular|contact|about|summary)\b/i;
-  const nextMatch = afterHeader.match(nextSectionRegex);
-  const eduSectionText = nextMatch ? afterHeader.slice(0, nextMatch.index) : afterHeader;
+  const eduSectionText = blocks.join('\n');
+  const lines = eduSectionText
+    .split(/\r?\n/)
+    .map(l => l.trim())
+    .filter(l => l && !SECTION_NOISE_LINE_REGEX.test(l) && !FOOTER_BOUNDARY_REGEX.test(l) && !/^(?:github|linkedin|email|resume|twitter|contact|home|projects|skills)$/i.test(l));
 
-  const lines = eduSectionText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-  const yearRegex = /\b\d{4}\s*[-–—to]+\s*\d{4}\b|\b\d{4}\b/;
+  const yearRegex = /\b\d{4}\s*[-–—to]+\s*(?:\d{4}|present|expected\s+\d{4})\b|\b(?:19|20)\d{2}\b/i;
   const bulletSymbolRegex = /^[•\-\*–—▪▫◦⁃\+>]\s*|^\d+[\.\)]\s*/;
 
   let currEdu = null;
   for (const line of lines) {
     const cleanText = line.replace(bulletSymbolRegex, '').trim();
     const yrMatch = line.match(yearRegex);
-    const isDetailLine = /\b(?:gpa|cgpa|grade|score|percentage|honors|distinction|major|minor|coursework)\b/i.test(cleanText);
-    const hasDegreeKeyword = /\b(?:b\.?tech|b\.?e\b|b\.?sc|m\.?tech|mca|bca|m\.?s\b|ph\.?d|bachelor|master|degree|diploma|associate)\b/i.test(cleanText);
-    const hasInstKeyword = /\b(?:university|college|institute|school|academy|campus|iit|nit|bits|iiit)\b/i.test(cleanText);
-    const isPureYearLine = yrMatch && cleanText.length <= 25 && !/[a-zA-Z]{4,}/.test(cleanText);
+    const isDetailLine = /\b(?:gpa|cgpa|grade|score|percentage|honors|distinction|major|minor|coursework)\b/i.test(cleanText) && !/\b(?:b\.?tech|b\.?e\b|b\.?sc|m\.?tech|mca|bca|bachelor|master)\b/i.test(cleanText);
+    const hasDegreeKeyword = /\b(?:b\.?tech|b\.?e\b|b\.?sc|m\.?tech|mca|bca|m\.?s\b|ph\.?d|bachelor|master|degree|diploma|associate|high\s*school|12th|10th)\b/i.test(cleanText);
+    const hasInstKeyword = /\b(?:university|college|institute|school|academy|campus|iit|nit|bits|iiit|makaut|jncu)\b/i.test(cleanText);
+    const isPureYearLine = yrMatch && cleanText.length <= 28 && !/[a-zA-Z]{5,}/.test(cleanText.replace(/present|expected/gi, ''));
 
     if (isDetailLine && currEdu) {
       currEdu.details = currEdu.details ? `${currEdu.details} • ${cleanText}` : cleanText;
     } else if (currEdu && isPureYearLine && !currEdu.year) {
       currEdu.year = yrMatch[0].trim();
     } else if (currEdu && !currEdu.degree && hasDegreeKeyword) {
-      currEdu.degree = cleanText.replace(/\s*\((?:19|20)\d\d.*?\)/, '');
+      currEdu.degree = cleanText.replace(/\s*\((?:19|20)\d\d.*?\)/, '').trim();
       if (yrMatch && !currEdu.year) currEdu.year = yrMatch[0].trim();
     } else if (currEdu && !currEdu.institution && hasInstKeyword) {
-      currEdu.institution = cleanText;
+      currEdu.institution = cleanText.replace(/\b(?:19|20)\d{2}.*$/, '').replace(/[,\-–—|\s]+$/, '').trim();
       if (yrMatch && !currEdu.year) currEdu.year = yrMatch[0].trim();
     } else {
       if (currEdu && (currEdu.institution || currEdu.degree)) {
         educationEntries.push(currEdu);
       }
       const year = yrMatch ? yrMatch[0].trim() : '';
-      const titlePart = yrMatch ? line.slice(0, yrMatch.index).trim() : line;
-      const parts = titlePart.split(/[,|–—]/);
+      const titlePart = yrMatch
+        ? line.replace(yrMatch[0], '').replace(/\(\s*\)/g, '').replace(/[|\-–—,\s]+$/, '').trim()
+        : line;
+      const parts = titlePart.split(/[,|–—]/).map(s => s.trim()).filter(Boolean);
+      const bothPresent = hasInstKeyword && hasDegreeKeyword && parts.length >= 2;
       currEdu = {
-        institution: hasInstKeyword || !hasDegreeKeyword ? (parts[0] ? parts[0].trim() : titlePart) : '',
-        degree: hasDegreeKeyword ? cleanText.replace(/\s*\((?:19|20)\d\d.*?\)/, '') : (parts[1] ? parts[1].trim() : ''),
+        institution: bothPresent
+          ? (parts.find(pt => /\b(?:university|college|institute|school|academy|campus|iit|nit|bits|iiit|makaut|jncu)\b/i.test(pt)) || parts[0])
+          : (hasInstKeyword || !hasDegreeKeyword ? (parts[0] || titlePart) : ''),
+        degree: bothPresent
+          ? (parts.find(pt => /\b(?:b\.?tech|b\.?e\b|b\.?sc|m\.?tech|mca|bca|m\.?s\b|ph\.?d|bachelor|master|degree|diploma|associate)\b/i.test(pt)) || parts[1])
+          : (hasDegreeKeyword ? cleanText.replace(/\s*\((?:19|20)\d\d.*?\)/, '').trim() : (parts[1] || '')),
         year,
         details: ''
       };
@@ -832,60 +1390,118 @@ function extractStructuredEducation(text = '') {
     educationEntries.push(currEdu);
   }
 
-  return educationEntries.filter(e => e.institution || e.degree);
+  const seenEdu = new Set();
+  return educationEntries.filter(e => {
+    if (!e.institution && !e.degree) return false;
+    const key = `${(e.degree || '').toLowerCase()}|${(e.institution || '').toLowerCase()}`;
+    if (seenEdu.has(key)) return false;
+    seenEdu.add(key);
+    return true;
+  });
 }
 
 /**
- * Extract structured projects from raw resume text.
+ * Extract structured projects from raw resume or portfolio text.
  */
 function extractStructuredProjects(text = '') {
   const projects = [];
-  const projHeaderRegex = /(?:^|\n)\s*(?:[0-9]+[.\-)]\s*)?(?:technical\s+projects|featured\s+projects|personal\s+projects|key\s+projects|academic\s+projects|projects\s*(?:&|and)\s*initiatives|projects|open\s*source(?:\s+projects)?|project\s+work|selected\s+projects)\b/i;
-  const projMatch = text.match(projHeaderRegex);
-  if (!projMatch) return projects;
+  const projHeaderRegex = /^(?:[0-9]+[.\-)]\s*)?(?:technical\s+projects|featured\s+projects|personal\s+projects|key\s+projects|academic\s+projects|projects\s*(?:&|and)\s*initiatives|projects|project\s+work|selected\s+projects|recent\s+projects(?:\s*&\s*codebases)?|what\s+i(?:'|’)?ve\s+built)$/i;
+  const blocks = extractSectionBlocks(text, projHeaderRegex);
+  if (blocks.length === 0) return projects;
 
-  const afterHeader = text.slice(projMatch.index + projMatch[0].length);
-  const nextSectionRegex = /(?:^|\n)\s*(?:[0-9]+[.\-)]\s*)?(?:education|experience|work\s+experience|professional\s+experience|technical\s+skills|skills|certifications?|awards?|achievements?|publications?|leadership|extracurricular|contact|about|summary)\b/i;
-  const nextMatch = afterHeader.match(nextSectionRegex);
-  const projSectionText = nextMatch ? afterHeader.slice(0, nextMatch.index) : afterHeader;
+  const projSectionText = blocks.join('\n');
+  const rawLines = projSectionText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
 
-  const lines = projSectionText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const projNoiseRegex = /^(?:view project|live demo|source code|github|demo|view live|visit site|view system architecture.*|key features(?:\s*&\s*architecture)?|features|(?:api\s+)?code(?:\s+(?:live|download\s*apk|demo))?|download\s*apk|all\s+real-time.*tools|all\s+projects)$/i;
+  const lines = rawLines.filter(l => !SECTION_NOISE_LINE_REGEX.test(l) && !projNoiseRegex.test(l));
+
   const bulletSymbolRegex = /^[•\-\*–—▪▫◦⁃\+>]\s*|^\d+[\.\)]\s*/;
   const actionVerbRegex = /^(?:developed|built|managed|led|created|implemented|designed|engineered|architected|maintained|reduced|increased|spearheaded|optimized|automated|collaborated|integrated|deployed|configured|resolved|authored|trained|researched|conducted|established|coordinated|assisted|executed|wrote|delivered|launched|formulated|programmed|tested|enhanced|scaled|analyzed|refactored|secured|streamlined)\b/i;
 
   let currProj = null;
-  for (const line of lines) {
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
     const isBullet = bulletSymbolRegex.test(line);
-    const cleanBulletText = line.replace(bulletSymbolRegex, '').trim();
-    const isTechStack = /^•?\s*(?:tech(?:\s*stack)?|technologies(?:\s*used)?|tools|stack)\s*[:–—\-]\s*/i.test(line);
-    const isAction = actionVerbRegex.test(cleanBulletText);
+    const cleanText = line.replace(bulletSymbolRegex, '').trim();
+    const isExplicitTechLabel = /^•?\s*(?:tech(?:\s*stack)?|technologies(?:\s*used)?|tools|stack)\s*[:–—\-]\s*/i.test(line);
+    const isAction = actionVerbRegex.test(cleanText);
+    const isLabeledBullet = /^[A-Z0-9][^:.!?]{2,52}\s:\s+/.test(cleanText);
+    const isBranchBadgeLine = /^main\s+.+$/i.test(cleanText) && cleanText.length <= 75;
+    const isProseSentence = cleanText.length > 70 || (/[.!?]$/.test(cleanText) && cleanText.includes(' '));
+    const isTagLine = !isBullet && !isLabeledBullet && isTechStackTagLine(cleanText);
 
-    if (isTechStack && currProj) {
-      currProj.techStack = line.replace(/^•?\s*(?:tech(?:\s*stack)?|technologies(?:\s*used)?|tools|stack)\s*[:–—\-]\s*/i, '').trim();
-    } else if (currProj && (isBullet || isAction)) {
-      if (cleanBulletText) currProj.bullets.push(cleanBulletText);
-    } else if (!isBullet && !isAction) {
+    if (currProj && (isExplicitTechLabel || isTagLine)) {
+      const rawTech = isExplicitTechLabel
+        ? line.replace(/^•?\s*(?:tech(?:\s*stack)?|technologies(?:\s*used)?|tools|stack)\s*[:–—\-]\s*/i, '').trim()
+        : formatTechStackLine(cleanText);
+      currProj.techStack = currProj.techStack ? `${currProj.techStack}, ${rawTech}` : rawTech;
+      currProj._complete = true;
+      continue;
+    }
+
+    if (currProj && !currProj._complete && isBranchBadgeLine && !currProj.tagline) {
+      currProj.tagline = cleanText
+        .replace(/^main\s+/i, '')
+        .replace(/\s+(?:live|apk ready|beta|wip)$/i, '')
+        .trim();
+      continue;
+    }
+
+    const nextIsBadgeOrProse = i + 1 < lines.length && (
+      /^main\s+/i.test(lines[i + 1]) ||
+      lines[i + 1].length > 75
+    );
+
+    const looksLikeProjectTitle = !isBullet &&
+      !isAction &&
+      !isLabeledBullet &&
+      !isProseSentence &&
+      !isBranchBadgeLine &&
+      cleanText.length <= 65 &&
+      cleanText.split(/\s+/).length <= 7;
+
+    if (!currProj || (looksLikeProjectTitle && (currProj._complete || nextIsBadgeOrProse))) {
       if (currProj && (currProj.name || currProj.bullets.length > 0)) {
-        projects.push(currProj);
+        const { _complete, ...finalProj } = currProj;
+        projects.push(finalProj);
       }
-      const cleanLine = line.replace(/[§Š€#\d\s]+$/, '').trim();
+      const cleanLine = cleanText.replace(/[§Š€#]+$/, '').trim();
       const pParts = cleanLine.split(/[—–|]/);
       currProj = {
         name: pParts[0] ? pParts[0].trim() : cleanLine,
         tagline: pParts[1] ? pParts[1].trim() : '',
+        summary: '',
         bullets: [],
-        techStack: pParts[2] ? pParts[2].trim() : ''
+        techStack: pParts[2] ? pParts[2].trim() : '',
+        _complete: false
       };
-    } else if (currProj && currProj.bullets.length > 0) {
-      currProj.bullets[currProj.bullets.length - 1] += ' ' + line;
+      continue;
+    }
+
+    if (currProj) {
+      if (!isBullet && !isLabeledBullet && isProseSentence && !currProj.summary && currProj.bullets.length === 0) {
+        currProj.summary = cleanText;
+      } else if (isBullet || isLabeledBullet || isAction || currProj.bullets.length === 0) {
+        if (cleanText) currProj.bullets.push(cleanText);
+      } else if (currProj.bullets.length > 0) {
+        currProj.bullets[currProj.bullets.length - 1] += ' ' + cleanText;
+      }
     }
   }
 
   if (currProj && (currProj.name || currProj.bullets.length > 0)) {
-    projects.push(currProj);
+    const { _complete, ...finalProj } = currProj;
+    projects.push(finalProj);
   }
 
-  return projects.filter(p => p.name);
+  const seenProj = new Set();
+  return projects.filter(p => {
+    if (!p.name) return false;
+    const key = p.name.toLowerCase();
+    if (seenProj.has(key)) return false;
+    seenProj.add(key);
+    return true;
+  });
 }
 
 /**
@@ -953,22 +1569,42 @@ function extractCandidateProfile(rawText = '', meta = {}) {
     phone = phoneMatch[0];
   }
 
-  // Explicit Name marker check (e.g. from GitHub, LinkedIn, or structured tags)
-  const explicitNameMatch = text.match(/(?:Candidate Name|Full Name|Name|Author):\s*([^\r\n|;,]+)/i);
+  // Explicit Name marker check (prioritize Candidate Name / Full Name before generic Name:)
+  const explicitNameMatch = text.match(/(?:^|\n)\s*(?:Candidate Name|Full Name):\s*([^\r\n|;,]+)/i) ||
+    text.match(/(?:^|\n)\s*(?:Author|Hero Heading|Name):\s*([^\r\n|;,]+)/i);
   if (explicitNameMatch) {
     const candidateName = explicitNameMatch[1].trim()
+      .replace(/^(?:hi|hello|hey)[,!]?\s+(?:i['’]?m|i am|this is)\s+/i, '')
       .replace(/^(?:portfolio|resume|profile)\s+(?:of|for)\s+/i, '')
-      .replace(/\s*(?:[-–—|:]\s*)(?:portfolio|developer|engineer|software|full\s*stack|homepage|official|home).*$/i, '')
+      .replace(/\s*(?:[-–—|:]\s*)(?:portfolio|developer|engineer|software|full[\s-]*stack|frontend|front[\s-]*end|backend|back[\s-]*end|homepage|official|home).*$/i, '')
       .replace(/\s+(?:portfolio|website)$/i, '')
       .trim();
-    if (candidateName.length >= 2 && candidateName.length <= 50 && /^[a-zA-ZÀ-ÿ\s.'-]+$/.test(candidateName)) name = candidateName;
+    if (
+      candidateName.length >= 2 &&
+      candidateName.length <= 50 &&
+      /^[a-zA-ZÀ-ÿ\s.'-]+$/.test(candidateName) &&
+      !/^(?:software|full[\s-]*stack|frontend|backend|developer|engineer|designer|welcome|portfolio|home|hello|hey|about|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)$/i.test(candidateName)
+    ) {
+      name = candidateName;
+    }
   }
 
-  // Name inference: check title or top lines
+  // Name inference: check <title> (both "Siddharth Mishra" and "Siddharth | Full-Stack Developer")
   if (!name) {
-    const titleNameMatch = text.match(/Title:\s*([a-zA-Z\s.'-]+?)(?:\s*[-|–—:]\s*(?:portfolio|developer|engineer|software|full\s*stack|homepage|official|web))/i);
-    if (titleNameMatch && titleNameMatch[1].trim().length >= 3 && titleNameMatch[1].trim().length <= 35) {
-      name = titleNameMatch[1].trim();
+    const titleLineMatch = text.match(/(?:^|\n)\s*Title:\s*([^\r\n]{2,70})/i);
+    if (titleLineMatch) {
+      const cleanedTitle = titleLineMatch[1].trim()
+        .replace(/\s*[-|–—:]\s*(?:portfolio|developer|engineer|software|full[\s-]*stack|frontend|front[\s-]*end|backend|back[\s-]*end|sde|mern|homepage|official|web|tech).*$/i, '')
+        .split(/[|–—]/)[0]
+        .trim();
+      if (
+        cleanedTitle.length >= 2 &&
+        cleanedTitle.length <= 45 &&
+        /^[a-zA-ZÀ-ÿ\s.'-]+$/.test(cleanedTitle) &&
+        !/^(?:portfolio|home|welcome|developer|engineer|resume|cv|software|about)$/i.test(cleanedTitle)
+      ) {
+        name = cleanedTitle;
+      }
     }
   }
 
@@ -1000,16 +1636,26 @@ function extractCandidateProfile(rawText = '', meta = {}) {
   }
 
   // Headline / Role
-  const explicitHeadline = text.match(/(?:^|\n)\s*Headline:\s*([^\r\n]+)/i);
+  const explicitHeadline = text.match(/(?:^|\n)\s*Headline:\s*([^\r\n]{2,100})/i);
   let headline = explicitHeadline?.[1]?.trim() || '';
   const roleKeywords = [
-    'Full-Stack Developer', 'Full Stack Developer', 'Frontend Developer', 'Backend Developer', 'Software Engineer',
-    'Junior Web Developer', 'DevOps Engineer', 'Machine Learning Engineer', 'Data Scientist', 'Cloud Engineer',
-    'System Architect', 'Mobile Developer', 'Full Stack Engineer', 'Junior Software Developer'
+    'Full-Stack Developer', 'Full Stack Developer', 'Full-Stack Engineer', 'Full Stack Engineer',
+    'MERN Stack Developer', 'Frontend Developer', 'Front-End Developer', 'Frontend Engineer',
+    'Backend Developer', 'Back-End Developer', 'Backend Engineer', 'Software Developer',
+    'Software Engineer', 'Junior Web Developer', 'DevOps Engineer', 'Machine Learning Engineer',
+    'AI Engineer', 'Data Scientist', 'Cloud Engineer', 'System Architect', 'Mobile Developer',
+    'React Developer', 'Node.js Developer', 'Python Developer', 'Product Engineer',
+    'Junior Software Developer', 'UI/UX Designer'
   ];
   if (!headline) {
+    const titleRoleMatch = text.match(/(?:^|\n)\s*Title:\s*[^\n|–—-]{2,40}\s*[|–—-]\s*([^\r\n|]{3,65})/i);
+    if (titleRoleMatch?.[1] && !/^(?:portfolio|home|official|website|welcome)$/i.test(titleRoleMatch[1].trim())) {
+      headline = titleRoleMatch[1].trim();
+    }
+  }
+  if (!headline) {
     for (const rk of roleKeywords) {
-      if (new RegExp(`\\b${rk}\\b`, 'i').test(text)) {
+      if (new RegExp(`\\b${rk.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(text)) {
         headline = rk;
         break;
       }
@@ -1030,15 +1676,30 @@ function extractCandidateProfile(rawText = '', meta = {}) {
     hasUSWorkAuth = true;
   }
 
+  // Check explicit Location / Based in markers first (handles smaller towns like Ballia too)
+  const explicitLocMatch = text.match(/(?:^|\n)\s*(?:Location|Based in|City|Address)\s*:\s*([^\r\n]{2,80})/i) ||
+    text.match(/\bbased in\s+([A-Z][a-zA-Z\s]{1,30}(?:,\s*[A-Za-z\s]{2,30}){0,2})/i);
+  const explicitLocStr = explicitLocMatch?.[1]?.trim() || '';
+
   // Check explicit country & city markers
   const indCityMatch = text.match(INDIAN_CITIES_REGEX);
   const indLocMatch = text.match(INDIAN_LOCATIONS_REGEX);
   const usCityMatch = text.match(US_CITIES_REGEX);
   const usLocMatch = text.match(US_LOCATIONS_REGEX);
 
-  if (indCityMatch || indLocMatch) {
+  if (indCityMatch || indLocMatch || (explicitLocStr && INDIAN_LOCATIONS_REGEX.test(explicitLocStr))) {
     country = 'India';
-    city = indCityMatch ? capitalize(indCityMatch[0]) : '';
+    if (explicitLocStr) {
+      const locFirstPart = explicitLocStr.split(',')[0].trim();
+      if (INDIAN_CITIES_REGEX.test(locFirstPart)) {
+        city = capitalize(locFirstPart);
+      } else if (locFirstPart && locFirstPart.length <= 28 && !INDIAN_LOCATIONS_REGEX.test(locFirstPart) && /^[a-zA-Z\s.-]+$/.test(locFirstPart)) {
+        city = capitalize(locFirstPart);
+      }
+    }
+    if (!city && indCityMatch) {
+      city = capitalize(indCityMatch[0]);
+    }
     isIndiaResident = true;
     workAuthNotes = `Candidate based in ${city || 'India'}. Eligible for direct employment in India.`;
   } else if (usCityMatch || usLocMatch) {
@@ -1097,17 +1758,11 @@ function extractCandidateProfile(rawText = '', meta = {}) {
   const expMatch = text.match(/(?:more\s+than|>)?\s*([0-9]+(?:\.[0-9]+)?)\+?\s*years?(?:\s+of)?(?:\s+relevant|\s+professional|\s+software|\s+engineering|\s+industry|\s+total|\s+work)?\s*experience\b/i) ||
                    text.match(/\b([0-9]+)\+?\s*years?\s+in\s+(?:software|web|frontend|backend|tech|fullstack|engineering|development)\b/i);
 
-  // 3. Extract EXPERIENCE / WORK HISTORY section specifically to prevent education/college dates
-  // (e.g. 2020-2024 Bachelor, 2024-2026 Master) from being erroneously summed into work experience!
-  let expSectionText = text;
-  const expHeaderRegex = /(?:^|\n)\s*(?:[0-9]+[.\-)]\s*)?(?:work\s+experience|professional\s+experience|work\s+history|experience|employment|career\s+history)\b/i;
-  const expHeaderMatch = text.match(expHeaderRegex);
-  if (expHeaderMatch) {
-    const afterHeader = text.slice(expHeaderMatch.index + expHeaderMatch[0].length);
-    const nextSectionRegex = /(?:^|\n)\s*(?:[0-9]+[.\-)]\s*)?(?:education|academic(?:s|\s+background|\s+history)?|projects|featured\s+projects|personal\s+projects|open\s*source|technical\s+skills|skills(?:\s*&|\s+and|\s+technical)?|certifications?|licenses|awards?|achievements?|publications?|contact|about(?:\s+me)?|summary)\b/i;
-    const nextMatch = afterHeader.match(nextSectionRegex);
-    expSectionText = nextMatch ? afterHeader.slice(0, nextMatch.index) : afterHeader;
-  }
+  // 3. Extract EXPERIENCE / WORK HISTORY section specifically (skipping empty navbar items)
+  // to prevent education/college dates from being erroneously summed into work experience!
+  const expHeaderRegex = /^(?:[0-9]+[.\-)]\s*)?(?:work\s+experience|professional\s+experience|employment\s+history|work\s+history|experience|employment|relevant\s+experience|career\s+history)$/i;
+  const expBlocks = extractSectionBlocks(text, expHeaderRegex);
+  const expSectionText = expBlocks.length > 0 ? expBlocks.join('\n') : text;
 
   // Detect date ranges strictly in work history
   // e.g. "Jan 2026 - Present", "Apr 2024 - May 2024", "01/2026 - Present"
@@ -1253,7 +1908,9 @@ function extractCandidateProfile(rawText = '', meta = {}) {
   // --------------------------------------------------------------------------
   // 5. EDUCATION & DEGREE
   // --------------------------------------------------------------------------
-  const educationText = (text.match(/(?:^|\n)\s*(?:education|academic background|academic qualifications|qualifications)\s*:?\s*\n?([\s\S]*?)(?=\n\s*(?:experience|employment|projects|skills|certifications|awards|publications|summary|contact)\b|$)/i) || [])[1] || text;
+  const eduHeaderRegexForSummary = /^(?:[0-9]+[.\-)]\s*)?(?:education|academic\s+background|academic\s+qualifications|academic\s+history|academics|qualifications|educational\s+background|degrees?)$/i;
+  const eduBlocksForSummary = extractSectionBlocks(text, eduHeaderRegexForSummary);
+  const educationText = eduBlocksForSummary.length > 0 ? eduBlocksForSummary.join('\n') : text;
   let education = '';
   if (/\b(?:ph\.?d|doctorate)\b/i.test(educationText)) {
     education = 'Ph.D. / Doctorate in Computer Science or quantitative field';
@@ -1291,6 +1948,11 @@ function extractCandidateProfile(rawText = '', meta = {}) {
   const structuredEducation = extractStructuredEducation(text);
   const structuredProjects = extractStructuredProjects(text);
   const categorizedSkills = categorizeSkills(candidateSkills);
+
+  // Fallback headline to most recent structured role if still empty
+  if (!headline && structuredExperience.length > 0 && structuredExperience[0].role) {
+    headline = structuredExperience[0].role;
+  }
 
   // If highest degree string was not found but structured education was extracted, use it
   if (!education && structuredEducation.length > 0) {

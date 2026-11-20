@@ -12,7 +12,13 @@ import {
   Bookmark,
   Check,
   Globe,
-  Navigation
+  Navigation,
+  Search,
+  SlidersHorizontal,
+  RotateCcw,
+  X,
+  Laptop,
+  FileText
 } from 'lucide-react';
 import OverviewView from './components/OverviewView';
 import ApplicationsView from './components/ApplicationsView';
@@ -143,7 +149,7 @@ export default function App() {
   const [techOnlyJobs, setTechOnlyJobs] = useState(false);
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(24);
-  const [mobileFiltersExpanded, setMobileFiltersExpanded] = useState(false);
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
 
   // Status
   const [loading, setLoading] = useState(true);
@@ -1449,405 +1455,428 @@ export default function App() {
                 )}
               </div>
 
-              {/* Filter Card */}
-              <section className="filter-card" aria-label="Filters">
-                <div className="filter-card-header">
-                  <div className="filter-header-title">
-                    <span className="filter-header-icon-badge">
-                      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-                        <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
-                      </svg>
-                    </span>
-                    <span className="filter-header-title-text">Filter Openings</span>
-                    {activeFilters.length > 0 && (
-                      <span className="filter-active-count-badge">
-                        <span className="filter-pulse-dot" />
-                        {activeFilters.length} active
-                      </span>
-                    )}
-                  </div>
-                  <div className="filter-header-right-actions">
-                    <button
-                      type="button"
-                      id="mobile-filter-expand-btn"
-                      className="mobile-filter-expand-btn"
-                      onClick={() => setMobileFiltersExpanded(prev => !prev)}
-                      aria-expanded={mobileFiltersExpanded}
-                      title={mobileFiltersExpanded ? "Collapse additional filters" : "Show more filter options"}
-                    >
-                      <span>{mobileFiltersExpanded ? 'Less Filters' : 'More Filters'}</span>
-                      <svg
-                        viewBox="0 0 24 24"
-                        width="12"
-                        height="12"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2.5"
-                        style={{ transform: mobileFiltersExpanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s ease' }}
-                      >
-                        <polyline points="6 9 12 15 18 9" />
-                      </svg>
-                    </button>
-
-                    {hasNonDefaultFilters && (
-                      <button
-                        type="button"
-                        id="clear-filters-btn"
-                        className="filter-reset-header-btn"
-                        onClick={handleResetFilters}
-                        title="Reset all filters to default"
-                      >
-                        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-                          <path d="M3 3v5h5" />
-                        </svg>
-                        Reset Filters
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                <div className={`filter-grid ${mobileFiltersExpanded ? 'is-mobile-expanded' : ''}`}>
-                  {/* Search Box */}
-                  <div className="input-group">
-                    <label htmlFor="search-title-input" className="native-sr-only">Job Title / Keyword</label>
-                    <div className="input-field-wrapper">
-                      <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <circle cx="11" cy="11" r="8" />
-                        <line x1="21" y1="21" x2="16.65" y2="16.65" />
-                      </svg>
-                      <input
-                        id="search-title-input"
-                        type="text"
-                        className="custom-input"
-                        placeholder="Search role or tech (e.g. SRE, React)..."
-                        value={searchQuery}
-                        onChange={(e) => {
-                          setSearchQuery(e.target.value);
-                          setPage(1);
-                        }}
-                      />
+              {/* Modern 2-Column Discovery Layout: Filter Sidebar + Main Content */}
+              <div className="jobs-discovery-layout">
+                {/* Modern Filter Sidebar */}
+                <aside className={`jobs-filter-sidebar ${mobileFiltersOpen ? 'is-mobile-open' : ''}`} aria-label="Job Filters">
+                  {/* Sidebar Header */}
+                  <div className="sidebar-filter-header">
+                    <div className="sidebar-filter-title">
+                      <SlidersHorizontal size={15} />
+                      <span>Filters</span>
+                      {activeFilters.length > 0 && (
+                        <span className="sidebar-active-pill">{activeFilters.length}</span>
+                      )}
                     </div>
-                  </div>
-
-                  {/* Country Dropdown */}
-                  <div className="input-group">
-                    <label htmlFor="filter-country-select" className="native-sr-only">Country</label>
-                    <ClassyDropdown
-                      id="filter-country-select"
-                      value={selectedCountry}
-                      onChange={(nextCountry) => {
-                        setSelectedCountry(nextCountry);
-                        setSelectedCity('all');
-                        setSelectedCorridor('all');
-                        setPage(1);
-                      }}
-                      options={countryOptions}
-                      placeholder="All Countries (Global)"
-                      title="Select Country"
-                      icon={
-                        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-                      }
-                    />
-                  </div>
-
-                  {/* City Dropdown */}
-                  <div className="input-group">
-                    <label htmlFor="filter-city-select" className="native-sr-only">City</label>
-                    <ClassyDropdown
-                      id="filter-city-select"
-                      value={selectedCity}
-                      onChange={(nextCity) => {
-                        setSelectedCity(nextCity);
-                        setPage(1);
-                      }}
-                      options={cityOptions}
-                      placeholder="Select City"
-                      title="Select City or Tech Hub"
-                      searchable={true}
-                      icon={
-                        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-                      }
-                    />
-                  </div>
-
-                  {/* Work Mode Filter */}
-                  <div className="input-group">
-                    <label htmlFor="filter-workmode-select" className="native-sr-only">Work Mode</label>
-                    <ClassyDropdown
-                      id="filter-workmode-select"
-                      value={workModeFilter}
-                      onChange={(nextMode) => {
-                        setWorkModeFilter(nextMode);
-                        setPage(1);
-                      }}
-                      options={workModeOptions}
-                      placeholder="All Work Modes"
-                      title="Select Work Mode"
-                      icon={
-                        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-                      }
-                    />
-                  </div>
-
-                  {/* Company Filter */}
-                  {stats && stats.companies && stats.companies.length > 0 && (
-                    <div className="input-group">
-                      <label htmlFor="filter-company-select" className="native-sr-only">Company</label>
-                      <ClassyDropdown
-                        id="filter-company-select"
-                        value={companyFilter}
-                        onChange={(nextComp) => {
-                          setCompanyFilter(nextComp);
-                          setPage(1);
-                        }}
-                        options={companyOptions}
-                        placeholder={`All Companies (${stats.companies.length})`}
-                        title="Filter by Company"
-                        searchable={true}
-                        icon={
-                          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
-                        }
-                      />
-                    </div>
-                  )}
-
-                  {/* Experience Level Filter (Integrated Classy Segmented Control) */}
-                  <div className="input-group filter-group-experience">
-                    <label htmlFor="filter-experience-select" className="native-sr-only">Experience Level</label>
-                    <div className="experience-segmented" role="group" aria-label="Experience level filter">
-                      <button
-                        type="button"
-                        className={`segmented-option exp-option-all ${experienceLevel === 'all' ? 'active' : ''}`}
-                        onClick={() => { setExperienceLevel('all'); setPage(1); }}
-                        title="Show all verified roles across all seniority levels"
-                      >
-                        <span className="exp-sig-dot dot-all" />
-                        <span>All Exp</span>
-                      </button>
-                      <button
-                        type="button"
-                        className={`segmented-option exp-option-freshers ${experienceLevel === 'freshers' ? 'active' : ''}`}
-                        onClick={() => { setExperienceLevel('freshers'); setPage(1); }}
-                        title="Filter entry-level &amp; fresher roles (0 to 1 year experience)"
-                      >
-                        <span className="exp-sig-dot dot-freshers" />
-                        <span>Freshers (0–1y)</span>
-                      </button>
-                      <button
-                        type="button"
-                        className={`segmented-option exp-option-mid ${experienceLevel === 'mid' ? 'active' : ''}`}
-                        onClick={() => { setExperienceLevel('mid'); setPage(1); }}
-                        title="Filter mid-level roles (2 to 5 years experience)"
-                      >
-                        <span className="exp-sig-dot dot-mid" />
-                        <span>Mid (2–5y)</span>
-                      </button>
-                      <button
-                        type="button"
-                        className={`segmented-option exp-option-senior ${experienceLevel === 'senior' ? 'active' : ''}`}
-                        onClick={() => { setExperienceLevel('senior'); setPage(1); }}
-                        title="Filter senior, lead, and staff roles (5+ years experience)"
-                      >
-                        <span className="exp-sig-dot dot-senior" />
-                        <span>Senior (5y+)</span>
-                      </button>
-                    </div>
-
-                    {/* Preserved accessible select for automated tests & form identification */}
-                    <select
-                      id="filter-experience-select"
-                      className="native-checkbox-sr"
-                      value={experienceLevel}
-                      onChange={(e) => {
-                        setExperienceLevel(e.target.value);
-                        setPage(1);
-                      }}
-                      tabIndex={-1}
-                      aria-hidden="true"
-                    >
-                      <option value="all">All Experience Levels</option>
-                      <option value="freshers">Freshers &amp; Early Career (0–1y)</option>
-                      <option value="mid">Mid-Level Roles (2–5y)</option>
-                      <option value="senior">Senior &amp; Staff (5y+)</option>
-                    </select>
-                  </div>
-
-                  {/* Status Filter */}
-                  <div className="input-group">
-                    <label htmlFor="filter-status-select" className="native-sr-only">Status</label>
-                    <ClassyDropdown
-                      id="filter-status-select"
-                      value={statusFilter}
-                      onChange={(nextStatus) => {
-                        setStatusFilter(nextStatus);
-                        setPage(1);
-                      }}
-                      options={statusOptions}
-                      placeholder="Active and Open Postings Only"
-                      title="Filter Postings by Status"
-                      icon={
-                        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                      }
-                    />
-                  </div>
-                </div>
-
-                {/* Active Filters Row (Clearly Displays Every Active Filter with Dismiss Buttons) */}
-                {activeFilters.length > 0 && (
-                  <div className="filter-active-chips-strip">
-                    <span className="chips-strip-label">Applied Filters:</span>
-                    <div className="chips-strip-tags">
-                      {activeFilters.map((f) => (
-                        <button
-                          key={f.id}
-                          type="button"
-                          className={`active-filter-chip chip-${f.id}`}
-                          onClick={f.onRemove}
-                          title={`Click to remove ${f.label} filter`}
-                        >
-                          <span className="chip-key">{f.label}:</span>
-                          <span className="chip-val">{f.value}</span>
-                          <span className="chip-del-btn" aria-hidden="true">×</span>
-                        </button>
-                      ))}
+                    <div className="sidebar-header-actions">
                       {hasNonDefaultFilters && (
                         <button
                           type="button"
-                          className="chips-clear-all-btn"
+                          id="clear-filters-btn"
+                          className="sidebar-reset-btn"
                           onClick={handleResetFilters}
                           title="Reset all filters to default"
                         >
-                          Clear All
+                          <RotateCcw size={11} />
+                          <span>Reset</span>
                         </button>
                       )}
+                      <button
+                        type="button"
+                        className="sidebar-mobile-close"
+                        onClick={() => setMobileFiltersOpen(false)}
+                        aria-label="Close filters drawer"
+                      >
+                        <X size={16} />
+                      </button>
                     </div>
                   </div>
+
+                  <div className="sidebar-filter-body">
+                    {/* Search Input */}
+                    <div className="sidebar-filter-group">
+                      <label className="sidebar-group-label" htmlFor="search-title-input">
+                        <Search size={12} />
+                        <span>Search Roles</span>
+                      </label>
+                      <div className="input-field-wrapper">
+                        <Search size={14} />
+                        <input
+                          id="search-title-input"
+                          type="text"
+                          className="custom-input"
+                          placeholder="Role, tech or skill (e.g. React)..."
+                          value={searchQuery}
+                          onChange={(e) => {
+                            setSearchQuery(e.target.value);
+                            setPage(1);
+                          }}
+                        />
+                        {searchQuery && (
+                          <button
+                            type="button"
+                            className="input-clear-icon-btn"
+                            onClick={() => { setSearchQuery(''); setPage(1); }}
+                            aria-label="Clear search"
+                          >
+                            <X size={12} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Location Filter */}
+                    <div className="sidebar-filter-group">
+                      <label className="sidebar-group-label">
+                        <Globe size={12} />
+                        <span>Location</span>
+                      </label>
+                      <div className="sidebar-subgroup-stack">
+                        <ClassyDropdown
+                          id="filter-country-select"
+                          value={selectedCountry}
+                          onChange={(nextCountry) => {
+                            setSelectedCountry(nextCountry);
+                            setSelectedCity('all');
+                            setSelectedCorridor('all');
+                            setPage(1);
+                          }}
+                          options={countryOptions}
+                          placeholder="All Countries (Global)"
+                          title="Select Country"
+                          icon={<Globe size={13} />}
+                        />
+                        <ClassyDropdown
+                          id="filter-city-select"
+                          value={selectedCity}
+                          onChange={(nextCity) => {
+                            setSelectedCity(nextCity);
+                            setPage(1);
+                          }}
+                          options={cityOptions}
+                          placeholder="All Cities Worldwide"
+                          title="Select City or Tech Hub"
+                          searchable={true}
+                          icon={<MapPin size={13} />}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Work Mode Filter */}
+                    <div className="sidebar-filter-group">
+                      <label className="sidebar-group-label">
+                        <Laptop size={12} />
+                        <span>Work Mode</span>
+                      </label>
+                      <ClassyDropdown
+                        id="filter-workmode-select"
+                        value={workModeFilter}
+                        onChange={(nextMode) => {
+                          setWorkModeFilter(nextMode);
+                          setPage(1);
+                        }}
+                        options={workModeOptions}
+                        placeholder="All Work Modes"
+                        title="Select Work Mode"
+                        icon={<Briefcase size={13} />}
+                      />
+                    </div>
+
+                    {/* Experience Level */}
+                    <div className="sidebar-filter-group filter-group-experience">
+                      <label className="sidebar-group-label">
+                        <Sparkles size={12} />
+                        <span>Experience Level</span>
+                      </label>
+                      <div className="experience-sidebar-stack" role="group" aria-label="Experience level filter">
+                        <button
+                          type="button"
+                          className={`exp-sidebar-option ${experienceLevel === 'all' ? 'active' : ''}`}
+                          onClick={() => { setExperienceLevel('all'); setPage(1); }}
+                        >
+                          <span className="exp-sig-dot dot-all" />
+                          <span>All Experience</span>
+                        </button>
+                        <button
+                          type="button"
+                          className={`exp-sidebar-option ${experienceLevel === 'freshers' ? 'active' : ''}`}
+                          onClick={() => { setExperienceLevel('freshers'); setPage(1); }}
+                        >
+                          <span className="exp-sig-dot dot-freshers" />
+                          <span>Freshers (0–1y)</span>
+                        </button>
+                        <button
+                          type="button"
+                          className={`exp-sidebar-option ${experienceLevel === 'mid' ? 'active' : ''}`}
+                          onClick={() => { setExperienceLevel('mid'); setPage(1); }}
+                        >
+                          <span className="exp-sig-dot dot-mid" />
+                          <span>Mid (2–5y)</span>
+                        </button>
+                        <button
+                          type="button"
+                          className={`exp-sidebar-option ${experienceLevel === 'senior' ? 'active' : ''}`}
+                          onClick={() => { setExperienceLevel('senior'); setPage(1); }}
+                        >
+                          <span className="exp-sig-dot dot-senior" />
+                          <span>Senior (5y+)</span>
+                        </button>
+                      </div>
+
+                      {/* Preserved accessible select for automated tests */}
+                      <select
+                        id="filter-experience-select"
+                        className="native-checkbox-sr"
+                        value={experienceLevel}
+                        onChange={(e) => {
+                          setExperienceLevel(e.target.value);
+                          setPage(1);
+                        }}
+                        tabIndex={-1}
+                        aria-hidden="true"
+                      >
+                        <option value="all">All Experience Levels</option>
+                        <option value="freshers">Freshers & Early Career (0–1y)</option>
+                        <option value="mid">Mid-Level Roles (2–5y)</option>
+                        <option value="senior">Senior & Staff (5y+)</option>
+                      </select>
+                    </div>
+
+                    {/* Company Filter (when available) */}
+                    {stats && stats.companies && stats.companies.length > 0 && (
+                      <div className="sidebar-filter-group">
+                        <label className="sidebar-group-label">
+                          <Building2 size={12} />
+                          <span>Company</span>
+                        </label>
+                        <ClassyDropdown
+                          id="filter-company-select"
+                          value={companyFilter}
+                          onChange={(nextComp) => {
+                            setCompanyFilter(nextComp);
+                            setPage(1);
+                          }}
+                          options={companyOptions}
+                          placeholder={`All Companies (${stats.companies.length})`}
+                          title="Filter by Company"
+                          searchable={true}
+                          icon={<Building2 size={13} />}
+                        />
+                      </div>
+                    )}
+
+                    {/* Posting Status Filter */}
+                    <div className="sidebar-filter-group">
+                      <label className="sidebar-group-label">
+                        <CheckCircle2 size={12} />
+                        <span>Status</span>
+                      </label>
+                      <ClassyDropdown
+                        id="filter-status-select"
+                        value={statusFilter}
+                        onChange={(nextStatus) => {
+                          setStatusFilter(nextStatus);
+                          setPage(1);
+                        }}
+                        options={statusOptions}
+                        placeholder="Active & Open Postings"
+                        title="Filter Postings by Status"
+                        icon={<CheckCircle2 size={13} />}
+                      />
+                    </div>
+
+                    {/* Preferences / Toggles */}
+                    <div className="sidebar-filter-group">
+                      <label className="sidebar-group-label">
+                        <SlidersHorizontal size={12} />
+                        <span>Preferences</span>
+                      </label>
+                      <div className="sidebar-toggles-stack">
+                        <label className={`sidebar-toggle-card ${techOnlyJobs ? 'active' : ''}`} htmlFor="tech-jobs-toggle">
+                          <input
+                            id="tech-jobs-toggle"
+                            type="checkbox"
+                            checked={techOnlyJobs}
+                            onChange={(e) => {
+                              setTechOnlyJobs(e.target.checked);
+                              setPage(1);
+                            }}
+                            className="native-checkbox-sr"
+                          />
+                          <div className="toggle-card-content">
+                            <span className="toggle-card-title">Tech Roles Only</span>
+                            <span className="toggle-card-subtitle">Exclude non-tech roles</span>
+                          </div>
+                          <span className={`toggle-card-switch ${techOnlyJobs ? 'is-on' : ''}`}>
+                            <span className="toggle-switch-thumb" />
+                          </span>
+                        </label>
+
+                        <label
+                          className={`sidebar-toggle-card ${onlyEligibleJobs ? 'active' : ''}`}
+                          htmlFor="eligible-jobs-toggle"
+                          title={
+                            !isAuthenticated
+                              ? 'Sign in required to filter by eligibility'
+                              : (candidateProfile ? `Filter roles based on your eligibility (${candidateProfile.country}, ${candidateProfile.experienceDisplay})` : 'Upload CV or Portfolio to check eligibility across jobs')
+                          }
+                        >
+                          <input
+                            id="eligible-jobs-toggle"
+                            type="checkbox"
+                            checked={isAuthenticated && onlyEligibleJobs}
+                            onChange={(e) => {
+                              const checked = e.target.checked;
+                              if (checked && !isAuthenticated) {
+                                openAuthModal('Please sign in or create an account to filter jobs by your CV eligibility.', 'login');
+                                return;
+                              }
+                              if (checked && !candidateProfile) {
+                                setIsProfileModalOpen(true);
+                                return;
+                              }
+                              setOnlyEligibleJobs(checked);
+                              setPage(1);
+                            }}
+                            className="native-checkbox-sr"
+                          />
+                          <div className="toggle-card-content">
+                            <span className="toggle-card-title">Eligible Roles Only</span>
+                            <span className="toggle-card-subtitle">Matches experience & residency</span>
+                          </div>
+                          <span className={`toggle-card-switch ${isAuthenticated && onlyEligibleJobs ? 'is-on' : ''}`}>
+                            <span className="toggle-switch-thumb" />
+                          </span>
+                        </label>
+                      </div>
+                    </div>
+
+                    {/* CV Profile Match Card */}
+                    <div className="sidebar-filter-group sidebar-cv-group">
+                      <button
+                        type="button"
+                        className={`sidebar-cv-card ${isAuthenticated && candidateProfile ? 'has-profile' : ''}`}
+                        onClick={() => {
+                          if (!isAuthenticated) {
+                            openAuthModal('Please sign in or create an account to upload your CV and match your job eligibility.', 'login');
+                            return;
+                          }
+                          setIsProfileModalOpen(true);
+                        }}
+                        title={
+                          !isAuthenticated
+                            ? 'Sign in required to upload CV or portfolio'
+                            : (candidateProfile
+                              ? `Active CV Profile: ${candidateProfile.country}, ${candidateProfile.experienceDisplay || `${candidateProfile.totalYearsExperience} Yrs Exp`}`
+                              : 'Upload your CV in PDF or enter portfolio URL to check eligibility across jobs')
+                        }
+                        id="match-profile-trigger-btn"
+                      >
+                        <div className="sidebar-cv-icon-wrap">
+                          <FileText size={16} />
+                        </div>
+                        <div className="sidebar-cv-content">
+                          {isAuthenticated && candidateProfile ? (
+                            <>
+                              <div className="sidebar-cv-head">
+                                <span className="cv-status-pulse" />
+                                <span className="sidebar-cv-title">Active CV Profile</span>
+                                <span className="sidebar-cv-edit-tag">Edit</span>
+                              </div>
+                              <span className="sidebar-cv-meta">
+                                {candidateProfile.country} • {candidateProfile.experienceDisplay || (candidateProfile.totalExperienceMonths ? `${candidateProfile.totalExperienceMonths} Mos` : `${candidateProfile.totalYearsExperience || 0} Yrs`)}
+                              </span>
+                            </>
+                          ) : (
+                            <>
+                              <span className="sidebar-cv-title">+ Match My CV</span>
+                              <span className="sidebar-cv-meta">
+                                {!isAuthenticated ? 'Sign In Required' : 'Check Eligibility'}
+                              </span>
+                            </>
+                          )}
+                        </div>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Mobile drawer bottom bar */}
+                  <div className="sidebar-mobile-footer">
+                    <button
+                      type="button"
+                      className="sidebar-mobile-apply-btn"
+                      onClick={() => setMobileFiltersOpen(false)}
+                    >
+                      Show {displayedJobs.length} Roles
+                    </button>
+                  </div>
+                </aside>
+
+                {/* Mobile Backdrop */}
+                {mobileFiltersOpen && (
+                  <div
+                    className="jobs-filter-backdrop"
+                    onClick={() => setMobileFiltersOpen(false)}
+                    aria-hidden="true"
+                  />
                 )}
 
-                {/* Secondary Filter Row: Tech & Coding Roles Toggle + Only Eligible Toggle + CV Match Bar */}
-                <div className="filter-row-secondary">
-                  <div className="secondary-toggles-cluster">
-                    <label className={`tech-toggle-pill ${techOnlyJobs ? 'active' : ''}`} htmlFor="tech-jobs-toggle">
-                      <input
-                        id="tech-jobs-toggle"
-                        type="checkbox"
-                        checked={techOnlyJobs}
-                        onChange={(e) => {
-                          setTechOnlyJobs(e.target.checked);
-                          setPage(1);
-                        }}
-                        className="native-checkbox-sr"
-                      />
-                      <span className="toggle-pill-icon">
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                          <polyline points="16 18 22 12 16 6" />
-                          <polyline points="8 6 2 12 8 18" />
-                        </svg>
-                      </span>
-                      <span className="toggle-pill-text">Tech & Engineering Roles Only</span>
-                      {techOnlyJobs && (
-                        <span className="toggle-active-badge">Active</span>
-                      )}
-                    </label>
+                {/* Main Jobs Content Area */}
+                <main className="jobs-main-content">
+                  {/* Applied Filter Chips Strip */}
+                  {activeFilters.length > 0 && (
+                    <div className="filter-active-chips-strip">
+                      <span className="chips-strip-label">Applied:</span>
+                      <div className="chips-strip-tags">
+                        {activeFilters.map((f) => (
+                          <button
+                            key={f.id}
+                            type="button"
+                            className={`active-filter-chip chip-${f.id}`}
+                            onClick={f.onRemove}
+                            title={`Click to remove ${f.label} filter`}
+                          >
+                            <span className="chip-key">{f.label}:</span>
+                            <span className="chip-val">{f.value}</span>
+                            <span className="chip-del-btn" aria-hidden="true">×</span>
+                          </button>
+                        ))}
+                        {hasNonDefaultFilters && (
+                          <button
+                            type="button"
+                            className="chips-clear-all-btn"
+                            onClick={handleResetFilters}
+                            title="Reset all filters to default"
+                          >
+                            Clear All
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
 
-                    <label
-                      className={`eligible-toggle-pill ${onlyEligibleJobs ? 'active' : ''}`}
-                      htmlFor="eligible-jobs-toggle"
-                      title={
-                        !isAuthenticated
-                          ? 'Sign in required to filter by eligibility'
-                          : (candidateProfile ? `Filter roles based on your eligibility (${candidateProfile.country}, ${candidateProfile.experienceDisplay})` : 'Upload CV or Portfolio to check eligibility across jobs')
-                      }
-                    >
-                      <input
-                        id="eligible-jobs-toggle"
-                        type="checkbox"
-                        checked={isAuthenticated && onlyEligibleJobs}
-                        onChange={(e) => {
-                          const checked = e.target.checked;
-                          if (checked && !isAuthenticated) {
-                            openAuthModal('Please sign in or create an account to filter jobs by your CV eligibility.', 'login');
-                            return;
-                          }
-                          if (checked && !candidateProfile) {
-                            setIsProfileModalOpen(true);
-                            return;
-                          }
-                          setOnlyEligibleJobs(checked);
-                          setPage(1);
-                        }}
-                        className="native-checkbox-sr"
-                      />
-                      <span className="toggle-pill-icon">
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-                        </svg>
-                      </span>
-                      <span className="toggle-pill-text">Show Eligible Roles Only</span>
-                      {isAuthenticated && onlyEligibleJobs && (
-                        <span className="toggle-active-badge eligible-badge">Active</span>
-                      )}
-                    </label>
-                  </div>
+                  {/* Results Container */}
+                  <div className="results-container" id="results-header-anchor">
+                    <div className="results-header">
+                      <div className="results-header-left">
+                        <button
+                          type="button"
+                          className="mobile-filter-trigger-btn"
+                          onClick={() => setMobileFiltersOpen(true)}
+                          aria-label="Open filter sidebar"
+                        >
+                          <SlidersHorizontal size={13} />
+                          <span>Filters</span>
+                          {activeFilters.length > 0 && (
+                            <span className="mobile-filter-badge">{activeFilters.length}</span>
+                          )}
+                        </button>
+                        <div className="results-count" id="results-count-text">
+                          Showing <strong>{displayedJobs.length}</strong> of <strong>{meta.total}</strong> verified roles
+                        </div>
+                      </div>
 
-                  {/* Candidate Profile / CV Match Bar Trigger */}
-                  <button
-                    type="button"
-                    className={`btn-candidate-profile-trigger ${isAuthenticated && candidateProfile ? 'has-profile' : ''}`}
-                    onClick={() => {
-                      if (!isAuthenticated) {
-                        openAuthModal('Please sign in or create an account to upload your CV and match your job eligibility.', 'login');
-                        return;
-                      }
-                      setIsProfileModalOpen(true);
-                    }}
-                    title={
-                      !isAuthenticated
-                        ? 'Sign in required to upload CV or portfolio'
-                        : (candidateProfile
-                          ? `Active CV Profile: ${candidateProfile.country}, ${candidateProfile.experienceDisplay || `${candidateProfile.totalYearsExperience} Yrs Exp`}`
-                          : 'Upload your CV in PDF or enter portfolio URL to check eligibility across jobs')
-                    }
-                    id="match-profile-trigger-btn"
-                  >
-                    <span className="profile-trigger-icon">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                        <polyline points="14 2 14 8 20 8" />
-                        <line x1="16" y1="13" x2="8" y2="13" />
-                        <line x1="16" y1="17" x2="8" y2="17" />
-                      </svg>
-                    </span>
-                    <span className="profile-trigger-content">
-                      {isAuthenticated && candidateProfile ? (
-                        <>
-                          <span className="cv-status-pulse" />
-                          <span className="trigger-lead">CV Active:</span>
-                          <span className="trigger-detail">
-                            {candidateProfile.country} • {candidateProfile.experienceDisplay || (candidateProfile.totalExperienceMonths ? `${candidateProfile.totalExperienceMonths} Mos` : `${candidateProfile.totalYearsExperience || 0} Yrs`)} • {candidateProfile.skills?.length || 0} Skills
-                          </span>
-                          <span className="trigger-update-tag">Edit</span>
-                        </>
-                      ) : (
-                        <>
-                          <span className="trigger-lead">+ Match My CV / Portfolio</span>
-                          <span className="trigger-hint">{!isAuthenticated ? '(Sign In Required)' : '(Check Eligibility)'}</span>
-                        </>
-                      )}
-                    </span>
-                  </button>
-                </div>
-              </section>
-
-              {/* Results Container */}
-              <div className="results-container" id="results-header-anchor">
-                <div className="results-header">
-                  <div className="results-count" id="results-count-text">
-                    Showing <strong>{displayedJobs.length}</strong> of <strong>{meta.total}</strong> verified roles
-                  </div>
-
-                  <div className="results-controls-cluster">
+                      <div className="results-controls-cluster">
                     {/* Nearest to Me Proximity Toggle */}
                     <div
                       id="sort-nearest-pill-btn"
@@ -2046,11 +2075,12 @@ export default function App() {
                                   ) : quickMatch?.overall.isHardBlocker ? (
                                     <button
                                       type="button"
-                                      className="discover-match-badge"
+                                      className="discover-match-badge is-blocker"
                                       style={{ background: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger)', borderColor: 'rgba(239, 68, 68, 0.25)' }}
                                       onClick={() => setEligibilityJob(job)}
+                                      title={`Requirement gap: ${quickMatch.overall.blockerLabel || 'Seniority or location requirement not met'}. Click to view details.`}
                                     >
-                                      Auth Blocker
+                                      {quickMatch.overall.blockerLabel || 'Not Eligible'}
                                     </button>
                                   ) : (
                                     <span className={`status-badge ${job.status}`}>
@@ -2087,7 +2117,7 @@ export default function App() {
                                       <Navigation size={11} /> {job.distanceApproximate ? '~' : ''}{formatDistance(job.distanceKm)}
                                     </span>
                                   )}
-                                  {job.fresherFriendly && (
+                                  {job.fresherFriendly && !/\b(staff|principal|architect|tech lead|engineering manager|director|vp|senior|sr\.?)\b/i.test(job.title || '') && (
                                     <span className="discover-tag-chip" style={{ color: 'var(--success)' }}>Freshers (0–1y)</span>
                                   )}
                                 </div>
@@ -2165,7 +2195,7 @@ export default function App() {
                                         <span className="match-pill-dot" />
                                         <span className="match-pill-text">
                                           {quickMatch.overall.isHardBlocker
-                                            ? 'Work Authorization Required'
+                                            ? (quickMatch.overall.blockerLabel || 'Not Eligible')
                                             : `${quickMatch.overall.score}% Match • ${quickMatch.overall.status === 'ELIGIBLE' ? 'Eligible' : 'Partial Fit'}`}
                                         </span>
                                       </div>
@@ -2293,6 +2323,8 @@ export default function App() {
                   )}
                   </>
                 )}
+                  </div>
+                </main>
               </div>
             </div>
           )}

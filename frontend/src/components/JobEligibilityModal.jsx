@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { AlertCircle, Check } from 'lucide-react';
+import { AlertCircle, Check, User, MapPin, Sparkles, ExternalLink, Briefcase, ChevronRight } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { evaluateCandidateMatch, generateClientEligibility } from '../utils/candidateMatcher';
 import CvTailorSection from './CvTailorSection';
@@ -395,41 +395,20 @@ export default function JobEligibilityModal({
                       <div className="active-candidate-bar">
                         <div className="candidate-bar-left">
                           <div className="candidate-avatar-icon">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                              <circle cx="12" cy="7" r="4" />
-                            </svg>
+                            <User size={15} />
                           </div>
                           <div className="candidate-bar-info">
                             <div className="candidate-bar-name">
-                              <strong>{candidateMatch.candidateSummary.name}</strong>
+                              <strong>{candidateMatch.candidateSummary.name || 'Your Profile'}</strong>
                               <span className="candidate-country-tag">
-                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ display: 'inline-block', verticalAlign: '-1px', marginRight: '3px' }}>
-                                  <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
-                                  <circle cx="12" cy="10" r="3" />
-                                </svg>
-                                {candidateMatch.candidateSummary.country}
-                                {candidateMatch.candidateSummary.city ? `, ${candidateMatch.candidateSummary.city}` : ''}
+                                <MapPin size={11} style={{ display: 'inline-block', verticalAlign: '-1px', marginRight: '3px' }} />
+                                {candidateMatch.candidateSummary.country || 'India'}{candidateMatch.candidateSummary.city ? `, ${candidateMatch.candidateSummary.city}` : ''}
                               </span>
                             </div>
                             <div className="candidate-bar-meta">
-                              <span>
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ display: 'inline-block', verticalAlign: '-1.5px', marginRight: '3px' }}>
-                                  <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
-                                  <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
-                                </svg>
-                                {candidateMatch.candidateSummary.experienceDisplay || (candidateMatch.candidateSummary.totalExperienceMonths ? `${candidateMatch.candidateSummary.totalExperienceMonths} Mos Experience` : `${candidateMatch.candidateSummary.totalYearsExperience || 0} Yrs Experience`)}
-                              </span>
+                              <span>{candidateMatch.candidateSummary.experienceDisplay}</span>
                               <span className="meta-dot">•</span>
-                              <span>
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ display: 'inline-block', verticalAlign: '-1.5px', marginRight: '3px' }}>
-                                  <polyline points="16 18 22 12 16 6" />
-                                  <polyline points="8 6 2 12 8 18" />
-                                </svg>
-                                {candidateMatch.candidateSummary.skillsDetectedCount} Skills Detected
-                              </span>
-                              <span className="meta-dot">•</span>
-                              <span className="source-label">Source: {candidateMatch.candidateSummary.sourceName}</span>
+                              <span>{candidateMatch.candidateSummary.skillsDetectedCount} Skills</span>
                             </div>
                           </div>
                         </div>
@@ -442,9 +421,9 @@ export default function JobEligibilityModal({
                               onClose();
                               onOpenProfileModal();
                             }}
-                            title="Upload a different CV or portfolio URL"
+                            title="Edit profile or upload another CV"
                           >
-                            ↻ Change CV / URL
+                            Edit Profile
                           </button>
                         )}
                       </div>
@@ -454,7 +433,7 @@ export default function JobEligibilityModal({
                         <div className="verdict-hero-top">
                           <div className="verdict-score-badge">
                             <span className="score-number">{candidateMatch.overall.score}%</span>
-                            <span className="score-label">MATCH SCORE</span>
+                            <span className="score-label">MATCH</span>
                           </div>
 
                           <div className="verdict-status-column">
@@ -463,7 +442,9 @@ export default function JobEligibilityModal({
                                 {candidateMatch.overall.status.replace('_', ' ')}
                               </span>
                               {candidateMatch.overall.isHardBlocker && (
-                                <span className="blocker-pill">COUNTRY BLOCKER</span>
+                                <span className="blocker-pill">
+                                  {candidateMatch.overall.blockerTag || 'REQUIREMENT GAP'}
+                                </span>
                               )}
                             </div>
                             <h3 className="verdict-headline-text">
@@ -475,232 +456,103 @@ export default function JobEligibilityModal({
                         <p className="verdict-summary-paragraph">
                           {candidateMatch.overall.summary}
                         </p>
-
-                        {/* Actionable Tips */}
-                        {candidateMatch.overall.actionableTips?.length > 0 && (
-                          <div className="actionable-tips-box">
-                            <span className="tips-title">Actionable Recommendations:</span>
-                            <ul className="tips-list">
-                              {candidateMatch.overall.actionableTips.map((tip, idx) => (
-                                <li key={`tip-${idx}`}>{tip}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
                       </div>
 
-                      {/* SECTION A: ELIGIBLE FACTORS (What Candidate Qualifies For) */}
-                      <div className="factors-section eligible-section">
-                        <div className="factors-section-header">
-                          <div className="section-header-left">
-                            <span className="section-header-icon eligible-check">✓</span>
-                            <h4 className="section-heading">
-                              Eligible Factors ({candidateMatch.eligibleFactors.length} Passed)
-                            </h4>
+                      {/* QUALIFICATIONS COMPARISON MATRIX (Clean 2-Column Side-by-Side) */}
+                      <div className="modal-qualifications-matrix">
+                        <div className="matrix-col requirements-col">
+                          <h4 className="matrix-col-title">Role Requirements</h4>
+                          <div className="matrix-item">
+                            <span className="matrix-item-label">Experience Seniority</span>
+                            <span className="matrix-item-val">{eligibility?.seniority?.experienceText || 'Required experience specified in JD'}</span>
                           </div>
-                          <span className="section-sub-badge">Requirements You Satisfy</span>
-                        </div>
-
-                        <div className="factors-grid">
-                          {candidateMatch.eligibleFactors.map((factor) => (
-                            <div key={factor.id} className="factor-card factor-pass">
-                              <div className="factor-card-header">
-                                <span className="factor-icon-bubble pass-bubble">
-                                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                                    <polyline points="20 6 9 17 4 12" />
-                                  </svg>
-                                </span>
-                                <div className="factor-title-box">
-                                  <span className="factor-category">{factor.category}</span>
-                                  <h5 className="factor-card-title">{factor.title}</h5>
-                                </div>
-                                <span className="factor-status-badge pass">ELIGIBLE</span>
-                              </div>
-
-                              <p className="factor-card-detail">{factor.detail}</p>
-
-                              {factor.chips && factor.chips.length > 0 && (
-                                <div className="factor-chips-flow">
-                                  {factor.chips.map((chip, cIdx) => (
-                                    <span key={`fc-${cIdx}`} className="factor-chip pass-chip">
-                                      {chip}
-                                    </span>
-                                  ))}
-                                </div>
+                          <div className="matrix-item">
+                            <span className="matrix-item-label">Location & Work Mode</span>
+                            <span className="matrix-item-val">{eligibility?.workplace?.mode || 'On-site'} • {eligibility?.workplace?.locationDisplay || 'India'}</span>
+                          </div>
+                          <div className="matrix-item">
+                            <span className="matrix-item-label">Key Technical Skills</span>
+                            <div className="matrix-chips-wrap">
+                              {eligibility?.skills && eligibility.skills.length > 0 ? (
+                                eligibility.skills.slice(0, 10).map((s, idx) => (
+                                  <span key={idx} className="matrix-tech-chip">{s}</span>
+                                ))
+                              ) : (
+                                <span className="matrix-muted-text">General engineering competencies</span>
                               )}
                             </div>
-                          ))}
+                          </div>
+                          <div className="matrix-item">
+                            <span className="matrix-item-label">Education</span>
+                            <span className="matrix-item-val">{eligibility?.education?.degreeRequirement || 'B.Tech / Bachelor’s in CS or Engineering'}</span>
+                          </div>
+                        </div>
+
+                        <div className="matrix-col profile-col">
+                          <h4 className="matrix-col-title">Your Profile Alignment</h4>
+                          <div className="matrix-item">
+                            <span className="matrix-item-label">Your Seniority</span>
+                            <span className={`matrix-item-val ${candidateMatch.overall.blockerCategory === 'experience' ? 'is-gap' : 'is-match'}`}>
+                              {candidateMatch.candidateSummary.experienceDisplay}
+                              {candidateMatch.overall.blockerCategory === 'experience' ? ' (Seniority Gap)' : ' ✓ Qualified'}
+                            </span>
+                          </div>
+                          <div className="matrix-item">
+                            <span className="matrix-item-label">Your Location</span>
+                            <span className={`matrix-item-val ${candidateMatch.overall.blockerCategory === 'location' ? 'is-gap' : 'is-match'}`}>
+                              {candidateMatch.candidateSummary.country || 'India'}
+                              {candidateMatch.overall.blockerCategory === 'location' ? ' (Work Auth Mismatch)' : ' ✓ Eligible'}
+                            </span>
+                          </div>
+                          <div className="matrix-item">
+                            <span className="matrix-item-label">Skills Matched</span>
+                            <div className="matrix-chips-wrap">
+                              {candidateMatch.stats?.matchedSkillsCount > 0 ? (
+                                candidateMatch.eligibleFactors.find(f => f.id === 'matched-skills')?.chips?.map((s, idx) => (
+                                  <span key={idx} className="matrix-tech-chip match-chip">✓ {s}</span>
+                                ))
+                              ) : (
+                                <span className="matrix-muted-text">No direct skills overlap detected</span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="matrix-item">
+                            <span className="matrix-item-label">Your Credentials</span>
+                            <span className="matrix-item-val is-match">{candidateMatch.candidateSummary.education || 'Degree in Engineering'} ✓</span>
+                          </div>
                         </div>
                       </div>
 
-                      {/* CALLOUT TO TAILOR CV FOR THIS ROLE */}
-                      <div className="tailor-cta-banner">
-                        <div className="cta-left-content">
-                          <span className="cta-sparkle">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                              <polyline points="14 2 14 8 20 8" />
-                              <line x1="16" y1="13" x2="8" y2="13" />
-                              <line x1="16" y1="17" x2="8" y2="17" />
-                            </svg>
-                          </span>
-                          <div className="cta-text">
-                            <strong>Want to optimize your CV for {job.company}?</strong>
-                            <span>Automatically modify and align your CV with the target keywords for this role, then download your tailored ATS document.</span>
-                          </div>
-                        </div>
+                      {/* DIRECT ACTIONS BAR */}
+                      <div className="modal-direct-actions-bar">
                         <button
                           type="button"
-                          className="btn-cta-tailor"
+                          className="btn-modal-tailor"
                           onClick={() => setViewTab('tailor')}
                         >
-                          <span>Tailor My CV</span>
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                            <line x1="5" y1="12" x2="19" y2="12" />
-                            <polyline points="12 5 19 12 12 19" />
-                          </svg>
+                          <Sparkles size={14} />
+                          <span>Tailor My CV for {job.company}</span>
                         </button>
-                      </div>
 
-                      {/* CALLOUT TO STAGE DIRECTLY WITH AUTOPILOT */}
-                      <div className="autopilot-stage-banner">
-                        <div className="autopilot-stage-info">
-                          <span className="autopilot-bolt-icon">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-                            </svg>
-                          </span>
-                          <div className="autopilot-stage-text">
-                            <strong>Stage this job with Autopilot</strong>
-                            <span>1-click stage into your application pipeline with prefilled {job.source || 'ATS'} form blueprint and tailored snapshot.</span>
-                          </div>
-                        </div>
                         <button
                           type="button"
                           className={`btn-stage-autopilot ${isStaged ? 'staged' : ''}`}
                           onClick={handleStageWithAutopilot}
                           disabled={isStaging || isStaged}
-                          title={isStaged ? 'Job is already staged in your Applications pipeline' : '1-click stage into application pipeline with prefilled snapshot'}
                         >
-                          {isStaging ? (
-                            <span>Staging...</span>
-                          ) : isStaged ? (
-                            <>
-                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                                <polyline points="20 6 9 17 4 12" />
-                              </svg>
-                              <span>✓ Staged in Pipeline</span>
-                            </>
-                          ) : (
-                            <>
-                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-                              </svg>
-                              <span>Stage with Autopilot</span>
-                            </>
-                          )}
+                          {isStaging ? 'Staging...' : isStaged ? '✓ Staged in Pipeline' : 'Stage with Autopilot'}
                         </button>
-                      </div>
 
-                      {/* SECTION B: NON-ELIGIBLE FACTORS & GAPS (What is Missing or Blocking) */}
-                      <div className="factors-section non-eligible-section">
-                        <div className="factors-section-header">
-                          <div className="section-header-left">
-                            <span className="section-header-icon gap-warn">
-                              {candidateMatch.nonEligibleFactors.length > 0 ? (
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                                  <circle cx="12" cy="12" r="10" />
-                                  <line x1="12" y1="8" x2="12" y2="12" />
-                                  <line x1="12" y1="16" x2="12.01" y2="16" />
-                                </svg>
-                              ) : (
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                                  <polyline points="20 6 9 17 4 12" />
-                                </svg>
-                              )}
-                            </span>
-                            <h4 className="section-heading">
-                              Non-Eligible Factors &amp; Gaps ({candidateMatch.nonEligibleFactors.length})
-                            </h4>
-                          </div>
-                          <span className="section-sub-badge">
-                            {candidateMatch.nonEligibleFactors.length > 0 ? 'Attention Needed' : 'Zero Blockers'}
-                          </span>
-                        </div>
-
-                        {candidateMatch.nonEligibleFactors.length === 0 ? (
-                          <div className="zero-blockers-card">
-                            <span className="zero-icon">
-                              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-                                <path d="M9 12l2 2 4-4" />
-                              </svg>
-                            </span>
-                            <div className="zero-text">
-                              <strong>Zero Blockers or Disqualifiers Found</strong>
-                              <span>Your profile satisfies all key country work authorization, experience, and primary skill requirements.</span>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="factors-grid">
-                            {candidateMatch.nonEligibleFactors.map((factor) => (
-                              <div
-                                key={factor.id}
-                                className={`factor-card factor-fail ${factor.isBlocker ? 'hard-blocker-card' : 'gap-card'}`}
-                              >
-                                <div className="factor-card-header">
-                                  <span className={`factor-icon-bubble ${factor.isBlocker ? 'blocker-bubble' : 'gap-bubble'}`}>
-                                    {factor.isBlocker ? (
-                                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                                        <circle cx="12" cy="12" r="10" />
-                                        <line x1="15" y1="9" x2="9" y2="15" />
-                                        <line x1="9" y1="9" x2="15" y2="15" />
-                                      </svg>
-                                    ) : (
-                                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                                        <circle cx="12" cy="12" r="10" />
-                                        <line x1="12" y1="8" x2="12" y2="12" />
-                                        <line x1="12" y1="16" x2="12.01" y2="16" />
-                                      </svg>
-                                    )}
-                                  </span>
-                                  <div className="factor-title-box">
-                                    <span className="factor-category">{factor.category}</span>
-                                    <h5 className="factor-card-title">{factor.title}</h5>
-                                  </div>
-                                  <span className={`factor-status-badge ${factor.isBlocker ? 'blocker' : 'gap'}`}>
-                                    {factor.isBlocker ? 'NON-ELIGIBLE' : 'SKILL GAP'}
-                                  </span>
-                                </div>
-
-                                <p className="factor-card-detail">{factor.detail}</p>
-
-                                {factor.missingItems && factor.missingItems.length > 0 && (
-                                  <div className="factor-chips-flow">
-                                    <span className="missing-label">Missing:</span>
-                                    {factor.missingItems.map((item, mIdx) => (
-                                      <span key={`mi-${mIdx}`} className="factor-chip missing-chip">
-                                        {item}
-                                      </span>
-                                    ))}
-                                  </div>
-                                )}
-
-                                {factor.recommendation && (
-                                  <div className="factor-recommendation-note">
-                                    <span className="rec-icon">
-                                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                                        <circle cx="12" cy="12" r="10" />
-                                        <line x1="12" y1="16" x2="12" y2="12" />
-                                        <line x1="12" y1="8" x2="12.01" y2="8" />
-                                      </svg>
-                                    </span>
-                                    <span className="rec-text">{factor.recommendation}</span>
-                                  </div>
-                                )}
-                              </div>
-                            ))}
-                          </div>
+                        {job.applyUrl && (
+                          <a
+                            href={job.applyUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="btn-modal-apply"
+                          >
+                            <span>Apply Direct</span>
+                            <ExternalLink size={13} />
+                          </a>
                         )}
                       </div>
                     </div>

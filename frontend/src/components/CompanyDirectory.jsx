@@ -1,5 +1,18 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Building2, CheckCircle2, MapPin, Zap, Plus } from 'lucide-react';
+import {
+  Building2,
+  CheckCircle2,
+  MapPin,
+  Zap,
+  Plus,
+  Search,
+  SlidersHorizontal,
+  RotateCcw,
+  X,
+  Briefcase,
+  Sparkles,
+  Compass
+} from 'lucide-react';
 import { getShortLocationLabel } from '../utils/resolveLocationName';
 import CompanyCard from './CompanyCard';
 import PersonalizeModal from './PersonalizeModal';
@@ -72,6 +85,7 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
   const [hiringFilter, setHiringFilter] = useState('all'); // 'all' | 'hiring' | 'no_vacancy'
   const [searchQuery, setSearchQuery] = useState('');
   const [techOnly, setTechOnly] = useState(true);
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
 
   // Dual-Engine Map-Wise Discovery Scanner Modal State
   const [showDiscoveryModal, setShowDiscoveryModal] = useState(false);
@@ -565,273 +579,384 @@ export default function CompanyDirectory({ cities = [], onRefreshMeta }) {
         </div>
       </section>
 
-      {/* Directory Filter Bar & Toolbar */}
-      <div className="directory-filter-bar">
-        <div className="filter-row-primary">
-          {/* Search box */}
-          <div className="search-field-wrapper">
-            <svg className="search-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="11" cy="11" r="8" />
-              <line x1="21" y1="21" x2="16.65" y2="16.65" />
-            </svg>
-            <input
-              type="text"
-              id="directory-search-input"
-              className="search-input"
-              placeholder="Search companies by name, category, or locality..."
-              value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
-                setPage(1);
-              }}
-            />
-            {searchQuery && (
-              <button
-                className="clear-search-btn"
-                onClick={() => { setSearchQuery(''); setPage(1); }}
-                title="Clear search"
-                aria-label="Clear search"
-              >
-                Clear
-              </button>
-            )}
-          </div>
-
-          {/* City Filter */}
-          <div className="filter-select-wrapper" style={{ minWidth: '220px' }}>
-            <ClassyDropdown
-              id="directory-city-select"
-              value={selectedCity}
-              onChange={(nextCity) => {
-                setSelectedCity(nextCity);
-                setPage(1);
-              }}
-              options={directoryCityOptions}
-              placeholder={`All Indian Cities (${groupedDirectoryCities.totalOffices} offices)`}
-              title="Filter Directory by City Hub"
-              searchable={true}
-              icon={
-                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" /><circle cx="12" cy="10" r="3" /></svg>
-              }
-            />
-          </div>
-
-          {/* Dual-Engine Map-Wise Discovery Trigger */}
-          <button
-            className={`osm-scan-trigger-btn ${isScanning ? 'is-scanning-active' : ''}`}
-            onClick={() => {
-              if (selectedCity !== 'all') {
-                setDiscoveryCitySlug(selectedCity);
-              }
-              setShowDiscoveryModal(true);
-            }}
-            title={isScanning ? 'Radar scanner is active - Click to view live progress' : 'Scan Google Places or OpenStreetMap map-wise for local startups and consultancies'}
-            id="open-city-scanner-btn"
-          >
-            <span className="osm-scan-icon">
-              {isScanning ? (
-                <span className="btn-spinner" style={{ width: '13px', height: '13px' }} />
-              ) : (
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2">
-                  <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6" />
-                  <line x1="8" y1="2" x2="8" y2="18" />
-                  <line x1="16" y1="6" x2="16" y2="22" />
-                </svg>
+      {/* Modern 2-Column Directory Layout: Sticky Sidebar + Main Content */}
+      <div className="companies-discovery-layout">
+        {/* Sticky Filter Sidebar */}
+        <aside className={`companies-filter-sidebar ${mobileFiltersOpen ? 'is-mobile-open' : ''}`} aria-label="Company Filters">
+          {/* Sidebar Header */}
+          <div className="sidebar-filter-header">
+            <div className="sidebar-filter-title">
+              <SlidersHorizontal size={15} />
+              <span>Filters</span>
+              {hasActiveFilters && (
+                <span className="sidebar-active-pill">Active</span>
               )}
-            </span>
-            <span className="osm-scan-text">
-              {isScanning
-                ? 'Scanning in Progress...'
-                : selectedCity !== 'all' 
-                ? `Scan ${cities.find(c => c.slug === selectedCity)?.name || selectedCity}` 
-                : 'Map-Wise Places'}
-            </span>
-          </button>
-
-          {/* Quick ATS Detector Trigger */}
-          <button
-            className="osm-scan-trigger-btn"
-            style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}
-            onClick={() => setShowAtsModal(true)}
-            title="Automatically detect and verify ATS provider for any company career portal"
-          >
-            <Zap size={14} className="osm-scan-icon" />
-            <span className="osm-scan-text">Detect ATS</span>
-          </button>
-
-          {/* Add Company Trigger */}
-          <button
-            className="osm-scan-trigger-btn"
-            onClick={() => {
-              if (!isAuthenticated) {
-                openAuthModal('Sign in to add a company to the verified directory.', 'login');
-                return;
-              }
-              handleOpenAddModal(searchQuery.trim());
-            }}
-            title="Add a missing company to the verified directory"
-            id="open-add-company-btn"
-          >
-            <Plus size={14} className="osm-scan-icon" />
-            <span className="osm-scan-text">Add Company</span>
-          </button>
-        </div>
-
-        {/* Secondary Filter Row: Hiring Status Tabs & Tech Checkbox */}
-        <div className="filter-row-secondary">
-          <div className="hiring-toggle-group">
-            <button
-              className={`hiring-toggle-btn ${hiringFilter === 'all' ? 'active' : ''}`}
-              onClick={() => { setHiringFilter('all'); setPage(1); }}
-            >
-              All Companies {aggregateStats.total > 0 && <span className="pill-badge">{aggregateStats.total}</span>}
-            </button>
-            <button
-              className={`hiring-toggle-btn ${hiringFilter === 'hiring' ? 'active' : ''}`}
-              onClick={() => { setHiringFilter('hiring'); setPage(1); }}
-            >
-              <span className="dot dot-green"></span>
-              Hiring now {aggregateStats.hiring > 0 && <span className="pill-badge">{aggregateStats.hiring}</span>}
-            </button>
-            <button
-              className={`hiring-toggle-btn ${hiringFilter === 'no_vacancy' ? 'active' : ''}`}
-              onClick={() => { setHiringFilter('no_vacancy'); setPage(1); }}
-            >
-              <span className="dot dot-gray"></span>
-              No known vacancies {aggregateStats.total > 0 && <span className="pill-badge">{Math.max(0, aggregateStats.total - aggregateStats.hiring)}</span>}
-            </button>
-          </div>
-
-          <div className="directory-filter-controls-right">
-            <button
-              type="button"
-              className={`directory-proximity-btn ${sortByDistance && userLocation ? 'is-active' : ''}`}
-              onClick={() => {
-                if (!userLocation) {
-                  openLocationModal();
-                } else {
-                  setSortByDistance(!sortByDistance);
-                }
-              }}
-              title={userLocation
-                ? (sortByDistance ? `Sorting by proximity to ${userLocation.label}. Click to switch to alphabetical` : `Click to sort nearest to ${userLocation.label}`)
-                : 'Set your location to see nearest companies first'}
-            >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
-                <circle cx="12" cy="10" r="3" />
-              </svg>
-              <span className="proximity-btn-text">
-                {userLocation
-                  ? (sortByDistance ? `Nearest: ${getShortLocationLabel(userLocation)}` : 'Sort by Distance')
-                  : 'Set Location'}
-              </span>
-              {userLocation && (
-                <span
-                  className="proximity-btn-change"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    openLocationModal();
-                  }}
-                  title="Change your active location"
+            </div>
+            <div className="sidebar-header-actions">
+              {hasActiveFilters && (
+                <button
+                  type="button"
+                  className="sidebar-reset-btn"
+                  onClick={handleResetFilters}
+                  title="Reset all filters to default"
                 >
-                  Change
-                </span>
+                  <RotateCcw size={11} />
+                  <span>Reset</span>
+                </button>
               )}
-            </button>
+              <button
+                type="button"
+                className="sidebar-mobile-close"
+                onClick={() => setMobileFiltersOpen(false)}
+                aria-label="Close filters drawer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+          </div>
 
-            <label className="tech-checkbox-label">
-              <input
-                type="checkbox"
-                id="tech-only-checkbox"
-                checked={techOnly}
-                onChange={(e) => {
-                  setTechOnly(e.target.checked);
+          <div className="sidebar-filter-body">
+            {/* Search Input */}
+            <div className="sidebar-filter-group">
+              <label className="sidebar-group-label" htmlFor="directory-search-input">
+                <Search size={12} />
+                <span>Search Companies</span>
+              </label>
+              <div className="input-field-wrapper">
+                <Search size={14} />
+                <input
+                  type="text"
+                  id="directory-search-input"
+                  className="custom-input"
+                  placeholder="Name, category, or locality..."
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    setPage(1);
+                  }}
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    className="input-clear-icon-btn"
+                    onClick={() => { setSearchQuery(''); setPage(1); }}
+                    title="Clear search"
+                    aria-label="Clear search"
+                  >
+                    <X size={12} />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* City Hub Filter */}
+            <div className="sidebar-filter-group">
+              <label className="sidebar-group-label">
+                <MapPin size={12} />
+                <span>City Hub</span>
+              </label>
+              <ClassyDropdown
+                id="directory-city-select"
+                value={selectedCity}
+                onChange={(nextCity) => {
+                  setSelectedCity(nextCity);
                   setPage(1);
                 }}
+                options={directoryCityOptions}
+                placeholder={`All Indian Cities (${groupedDirectoryCities.totalOffices} offices)`}
+                title="Filter Directory by City Hub"
+                searchable={true}
+                icon={<MapPin size={13} />}
               />
-              <span>Tech & product roles only</span>
-            </label>
-          </div>
-        </div>
-      </div>
+            </div>
 
-      {/* Results Header */}
-      <div className="results-header-row">
-        <span className="results-count">
-          Showing <strong>{companies.length}</strong> of <strong>{totalCount}</strong> companies
-          {selectedCity !== 'all' ? ` in ${selectedCity}` : ''}
-        </span>
-
-        {hasActiveFilters && (
-          <button className="reset-filters-inline-btn" onClick={handleResetFilters}>
-            Reset Filters
-          </button>
-        )}
-      </div>
-
-      {/* Content Area */}
-      {loading ? (
-        <div className="loading-state">
-          <div className="spinner"></div>
-          <p>Loading company directory...</p>
-        </div>
-      ) : error ? (
-        <div className="error-banner">
-          <span>{error}</span>
-          <button className="retry-btn" onClick={fetchCompanies}>Retry</button>
-        </div>
-      ) : companies.length === 0 ? (
-        <div className="empty-state">
-          <h3>{searchQuery ? `No companies matched "${searchQuery}"` : 'No companies matched your filters'}</h3>
-          <p>
-            Try resetting your search query, city, or hiring status filter.
-          </p>
-          <div className="empty-state-actions">
-            <button className="reset-filters-btn" onClick={handleResetFilters}>
-              Reset Filters
-            </button>
-          </div>
-        </div>
-      ) : (
-        <>
-          <div className="companies-grid">
-            {companies.map((comp) => (
-              <CompanyCard
-                key={comp._id}
-                company={comp}
-                onUpdate={handleCompanyUpdate}
-                onPersonalize={setPersonalizeCompany}
-              />
-            ))}
-          </div>
-
-          {/* Pagination Controls */}
-          {totalPages > 1 && (
-            <div className="pagination-container">
-              <span className="page-indicator">
-                Page {page} of {totalPages}
-              </span>
-              <div className="page-controls">
+            {/* Hiring Status */}
+            <div className="sidebar-filter-group">
+              <label className="sidebar-group-label">
+                <Briefcase size={12} />
+                <span>Hiring Status</span>
+              </label>
+              <div className="experience-sidebar-stack">
                 <button
-                  className="page-btn"
-                  disabled={page <= 1}
-                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  type="button"
+                  className={`exp-sidebar-option ${hiringFilter === 'all' ? 'active' : ''}`}
+                  onClick={() => { setHiringFilter('all'); setPage(1); }}
                 >
-                  Previous
+                  <span>All Companies</span>
+                  {aggregateStats.total > 0 && <span className="pill-badge" style={{ marginLeft: 'auto' }}>{aggregateStats.total}</span>}
                 </button>
                 <button
-                  className="page-btn"
-                  disabled={page >= totalPages}
-                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                  type="button"
+                  className={`exp-sidebar-option ${hiringFilter === 'hiring' ? 'active' : ''}`}
+                  onClick={() => { setHiringFilter('hiring'); setPage(1); }}
                 >
-                  Next
+                  <span className="dot dot-green" />
+                  <span>Hiring Now</span>
+                  {aggregateStats.hiring > 0 && <span className="pill-badge" style={{ marginLeft: 'auto' }}>{aggregateStats.hiring}</span>}
+                </button>
+                <button
+                  type="button"
+                  className={`exp-sidebar-option ${hiringFilter === 'no_vacancy' ? 'active' : ''}`}
+                  onClick={() => { setHiringFilter('no_vacancy'); setPage(1); }}
+                >
+                  <span className="dot dot-gray" />
+                  <span>No Vacancies</span>
+                  {aggregateStats.total > 0 && <span className="pill-badge" style={{ marginLeft: 'auto' }}>{Math.max(0, aggregateStats.total - aggregateStats.hiring)}</span>}
                 </button>
               </div>
             </div>
+
+            {/* Preferences: Tech Only */}
+            <div className="sidebar-filter-group">
+              <label className="sidebar-group-label">
+                <SlidersHorizontal size={12} />
+                <span>Preferences</span>
+              </label>
+              <label className={`sidebar-toggle-card ${techOnly ? 'active' : ''}`} htmlFor="tech-only-checkbox">
+                <input
+                  type="checkbox"
+                  id="tech-only-checkbox"
+                  checked={techOnly}
+                  onChange={(e) => {
+                    setTechOnly(e.target.checked);
+                    setPage(1);
+                  }}
+                  className="native-checkbox-sr"
+                />
+                <div className="toggle-card-content">
+                  <span className="toggle-card-title">Tech & Product Roles</span>
+                  <span className="toggle-card-subtitle">Exclude non-tech departments</span>
+                </div>
+                <span className={`toggle-card-switch ${techOnly ? 'is-on' : ''}`}>
+                  <span className="toggle-switch-thumb" />
+                </span>
+              </label>
+            </div>
+
+            {/* Tools & Discovery Action Cards */}
+            <div className="sidebar-filter-group">
+              <label className="sidebar-group-label">
+                <Sparkles size={12} />
+                <span>Tools & Discovery</span>
+              </label>
+              <div className="sidebar-tools-stack">
+                {/* Dual-Engine Map-Wise Discovery Trigger */}
+                <button
+                  type="button"
+                  className={`sidebar-tool-btn ${isScanning ? 'is-scanning-active' : ''}`}
+                  onClick={() => {
+                    if (selectedCity !== 'all') {
+                      setDiscoveryCitySlug(selectedCity);
+                    }
+                    setShowDiscoveryModal(true);
+                  }}
+                  id="open-city-scanner-btn"
+                >
+                  <span className="sidebar-tool-icon">
+                    {isScanning ? (
+                      <span className="btn-spinner" style={{ width: '13px', height: '13px' }} />
+                    ) : (
+                      <Compass size={14} />
+                    )}
+                  </span>
+                  <span className="sidebar-tool-text">
+                    {isScanning
+                      ? 'Scanning in Progress...'
+                      : selectedCity !== 'all'
+                      ? `Scan ${cities.find(c => c.slug === selectedCity)?.name || selectedCity}`
+                      : 'Map-Wise Places'}
+                  </span>
+                </button>
+
+                {/* Quick ATS Detector Trigger */}
+                <button
+                  type="button"
+                  className="sidebar-tool-btn"
+                  onClick={() => setShowAtsModal(true)}
+                  title="Automatically detect and verify ATS provider for any company career portal"
+                >
+                  <span className="sidebar-tool-icon" style={{ color: 'var(--accent)' }}>
+                    <Zap size={14} />
+                  </span>
+                  <span className="sidebar-tool-text">Detect ATS</span>
+                </button>
+
+                {/* Add Company Trigger */}
+                <button
+                  type="button"
+                  className="sidebar-tool-btn"
+                  onClick={() => {
+                    if (!isAuthenticated) {
+                      openAuthModal('Sign in to add a company to the verified directory.', 'login');
+                      return;
+                    }
+                    handleOpenAddModal(searchQuery.trim());
+                  }}
+                  id="open-add-company-btn"
+                >
+                  <span className="sidebar-tool-icon">
+                    <Plus size={14} />
+                  </span>
+                  <span className="sidebar-tool-text">Add Company</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Mobile drawer bottom bar */}
+          <div className="sidebar-mobile-footer">
+            <button
+              type="button"
+              className="sidebar-mobile-apply-btn"
+              onClick={() => setMobileFiltersOpen(false)}
+            >
+              Show {companies.length} Companies
+            </button>
+          </div>
+        </aside>
+
+        {/* Mobile Backdrop */}
+        {mobileFiltersOpen && (
+          <div
+            className="companies-filter-backdrop"
+            onClick={() => setMobileFiltersOpen(false)}
+            aria-hidden="true"
+          />
+        )}
+
+        {/* Main Content Area */}
+        <main className="companies-main-content">
+          {/* Results Header */}
+          <div className="results-header-row">
+            <div className="results-header-left">
+              <button
+                type="button"
+                className="mobile-filter-trigger-btn"
+                onClick={() => setMobileFiltersOpen(true)}
+                aria-label="Open filter sidebar"
+              >
+                <SlidersHorizontal size={13} />
+                <span>Filters</span>
+                {hasActiveFilters && (
+                  <span className="mobile-filter-badge">Active</span>
+                )}
+              </button>
+              <span className="results-count">
+                Showing <strong>{companies.length}</strong> of <strong>{totalCount}</strong> companies
+                {selectedCity !== 'all' ? ` in ${selectedCity}` : ''}
+              </span>
+            </div>
+
+            <div className="results-header-actions-cluster">
+              <button
+                type="button"
+                className={`directory-proximity-btn ${sortByDistance && userLocation ? 'is-active' : ''}`}
+                onClick={() => {
+                  if (!userLocation) {
+                    openLocationModal();
+                  } else {
+                    setSortByDistance(!sortByDistance);
+                  }
+                }}
+                title={userLocation
+                  ? (sortByDistance ? `Sorting by proximity to ${userLocation.label}. Click to switch to alphabetical` : `Click to sort nearest to ${userLocation.label}`)
+                  : 'Set your location to see nearest companies first'}
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+                  <circle cx="12" cy="10" r="3" />
+                </svg>
+                <span className="proximity-btn-text">
+                  {userLocation
+                    ? (sortByDistance ? `Nearest: ${getShortLocationLabel(userLocation)}` : 'Sort by Distance')
+                    : 'Nearest to Me'}
+                </span>
+                {userLocation && (
+                  <span
+                    className="proximity-btn-change"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openLocationModal();
+                    }}
+                    title="Change your active location"
+                  >
+                    Change
+                  </span>
+                )}
+              </button>
+
+              {hasActiveFilters && (
+                <button className="reset-filters-inline-btn" onClick={handleResetFilters}>
+                  Reset Filters
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Content Area */}
+          {loading ? (
+            <div className="loading-state">
+              <div className="spinner"></div>
+              <p>Loading company directory...</p>
+            </div>
+          ) : error ? (
+            <div className="error-banner">
+              <span>{error}</span>
+              <button className="retry-btn" onClick={fetchCompanies}>Retry</button>
+            </div>
+          ) : companies.length === 0 ? (
+            <div className="empty-state">
+              <h3>{searchQuery ? `No companies matched "${searchQuery}"` : 'No companies matched your filters'}</h3>
+              <p>
+                Try resetting your search query, city, or hiring status filter.
+              </p>
+              <div className="empty-state-actions">
+                <button className="reset-filters-btn" onClick={handleResetFilters}>
+                  Reset Filters
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="companies-grid">
+                {companies.map((comp) => (
+                  <CompanyCard
+                    key={comp._id}
+                    company={comp}
+                    onUpdate={handleCompanyUpdate}
+                    onPersonalize={setPersonalizeCompany}
+                  />
+                ))}
+              </div>
+
+              {/* Pagination Controls */}
+              {totalPages > 1 && (
+                <div className="pagination-container">
+                  <span className="page-indicator">
+                    Page {page} of {totalPages}
+                  </span>
+                  <div className="page-controls">
+                    <button
+                      className="page-btn"
+                      disabled={page <= 1}
+                      onClick={() => setPage(p => Math.max(1, p - 1))}
+                    >
+                      Previous
+                    </button>
+                    <button
+                      className="page-btn"
+                      disabled={page >= totalPages}
+                      onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
           )}
-        </>
-      )}
+        </main>
+      </div>
 
       {/* Dual-Engine Map-Wise Discovery Modal */}
       {showDiscoveryModal && (

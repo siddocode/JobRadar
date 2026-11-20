@@ -116,8 +116,25 @@ export function evaluateCandidateMatch(jobEligibility, candidateProfile) {
   const candYears = candidateProfile.totalYearsExperience !== null && candidateProfile.totalYearsExperience !== undefined ? candidateProfile.totalYearsExperience : 0;
   const candMonths = candidateProfile.experienceMonths || 0;
   const candTotalMonths = candidateProfile.totalExperienceMonths !== undefined ? candidateProfile.totalExperienceMonths : (candYears * 12 + candMonths);
-  const candIsFresher = Boolean(candidateProfile.isFresher);
-  const candExpDisplay = candidateProfile.experienceDisplay || (candTotalMonths < 12 ? `${candTotalMonths} Months` : (candMonths > 0 ? `${candYears} Yrs ${candMonths} Mos` : `${candYears} Yrs`));
+  const candIsFresher = Boolean(candidateProfile.isFresher) || candTotalMonths <= 12;
+
+  let candExpDisplay = candidateProfile.experienceDisplay;
+  if (!candExpDisplay || /not detected/i.test(candExpDisplay)) {
+    if (candTotalMonths === 0 || candIsFresher) {
+      candExpDisplay = 'Early Career / Fresher (0–1y)';
+    } else if (candTotalMonths < 12) {
+      candExpDisplay = `${candTotalMonths} Months`;
+    } else if (candMonths > 0) {
+      candExpDisplay = `${candYears} Yrs ${candMonths} Mos`;
+    } else {
+      candExpDisplay = `${candYears} Yrs`;
+    }
+  }
+
+  let candSeniority = candidateProfile.seniorityLevel;
+  if (!candSeniority || /not detected/i.test(candSeniority)) {
+    candSeniority = candIsFresher ? 'Early Career' : (candYears >= 5 ? 'Senior' : (candYears >= 2 ? 'Mid-Level' : 'Junior'));
+  }
 
   let expResult = {
     id: 'experience-eligibility',
@@ -138,7 +155,7 @@ export function evaluateCandidateMatch(jobEligibility, candidateProfile) {
     if (candIsFresher || candTotalMonths <= 24) {
       experienceScore = 30;
       expResult.title = `Experience Fit: 100% Eligible (${candExpDisplay} Exp)`;
-      expResult.detail = `Job welcomes early career talent, freshers, and developers with 0-2 years of experience. Your profile (${candExpDisplay}, ${candidateProfile.seniorityLevel || 'Early Career'}) is an ideal fit.`;
+      expResult.detail = `Job welcomes early career talent, freshers, and developers with 0-2 years of experience. Your profile (${candExpDisplay}, ${candSeniority}) is an ideal fit.`;
       expResult.icon = 'check';
       expResult.badgeTone = 'success';
       eligibleFactors.push(expResult);
@@ -154,7 +171,7 @@ export function evaluateCandidateMatch(jobEligibility, candidateProfile) {
     if (candTotalMonths >= jobMinMonths) {
       experienceScore = 30;
       expResult.title = `Experience Fit: Meets Seniority Requirement (${candExpDisplay} Exp)`;
-      expResult.detail = `Job specifies ${jobSeniority.experienceText}. Your profile reflects ${candExpDisplay} of experience (${candidateProfile.seniorityLevel}).`;
+      expResult.detail = `Job specifies ${jobSeniority.experienceText || `${jobMinYears}+ years`}. Your profile reflects ${candExpDisplay} of experience (${candSeniority}).`;
       expResult.icon = 'check';
       expResult.badgeTone = 'success';
       eligibleFactors.push(expResult);
@@ -162,7 +179,7 @@ export function evaluateCandidateMatch(jobEligibility, candidateProfile) {
       // Borderline (within 6 months, or 6+ months for 1-year role)
       experienceScore = 22;
       expResult.title = `Experience Level: Close Match (${candExpDisplay} vs ${jobMinYears}+ Yrs)`;
-      expResult.detail = `Role prefers ${jobSeniority.experienceText}; your profile shows ${candExpDisplay}. Your practical engineering experience and skill match provide strong qualification.`;
+      expResult.detail = `Role prefers ${jobSeniority.experienceText || `${jobMinYears}+ years`}; your profile shows ${candExpDisplay}. Your practical engineering experience and skill match provide strong qualification.`;
       expResult.icon = 'check';
       expResult.badgeTone = 'success';
       eligibleFactors.push(expResult);
@@ -173,7 +190,7 @@ export function evaluateCandidateMatch(jobEligibility, candidateProfile) {
       expResult.badgeTone = 'warning';
       expResult.icon = 'warning';
       expResult.title = 'Experience Gap: Seniority Requirement Not Met';
-      expResult.detail = `Job requires ${jobSeniority.experienceText} (${jobSeniority.level}). Your profile reflects ${candExpDisplay} (${candidateProfile.seniorityLevel}).`;
+      expResult.detail = `Job requires ${jobSeniority.experienceText || `${jobMinYears}+ years`} (${jobSeniority.level || 'Senior'}). Your profile reflects ${candExpDisplay} (${candSeniority}).`;
       expResult.recommendation = `Target roles matching your current experience level (0-${Math.max(2, candYears + 1)} years) or highlight deep hands-on project work in your application.`;
 
       // If gap is large (e.g. Senior/Lead/Architect/Director requiring 4+ years while candidate has < 24 months)
@@ -297,6 +314,24 @@ export function evaluateCandidateMatch(jobEligibility, candidateProfile) {
   let executiveSummary = '';
   let canApply = true;
 
+  let blockerCategory = null;
+  let blockerLabel = null;
+  let blockerTag = null;
+
+  if (countryResult.isBlocker) {
+    blockerCategory = 'location';
+    blockerLabel = 'Location Mismatch';
+    blockerTag = 'LOCATION GAP';
+  } else if (expResult.isBlocker) {
+    blockerCategory = 'experience';
+    blockerLabel = 'Seniority Gap';
+    blockerTag = 'SENIORITY GAP';
+  } else if (isHardBlocker) {
+    blockerCategory = 'requirements';
+    blockerLabel = 'Requirement Gap';
+    blockerTag = 'REQUIREMENT GAP';
+  }
+
   if (isHardBlocker || totalScore < 50) {
     overallStatus = 'NOT_ELIGIBLE';
     badgeTone = 'danger';
@@ -305,7 +340,7 @@ export function evaluateCandidateMatch(jobEligibility, candidateProfile) {
       verdictHeadline = `Not Eligible: ${countryResult.title}`;
       executiveSummary = countryResult.detail;
     } else if (expResult.isBlocker) {
-      verdictHeadline = `Not Eligible: ${expResult.title}`;
+      verdictHeadline = `Not Eligible: Seniority Requirement (${jobSeniority.experienceText || `${jobMinYears}+ years`})`;
       executiveSummary = expResult.detail;
     } else {
       verdictHeadline = isHardBlocker
@@ -313,7 +348,7 @@ export function evaluateCandidateMatch(jobEligibility, candidateProfile) {
         : 'Low Eligibility: Significant Requirements Mismatch';
       executiveSummary = isHardBlocker
         ? (nonEligibleFactors.find(f => f.isBlocker)?.detail || 'Core prerequisites are not satisfied.')
-        : `Your profile currently shows significant gaps in both required experience seniority (${jobSeniority.experienceText}) and technical competencies.`;
+        : `Your profile currently shows significant gaps in both required experience seniority (${jobSeniority.experienceText || 'experienced level'}) and technical competencies.`;
     }
   } else if (totalScore < 75 || nonEligibleFactors.some(f => f.status === 'NOT_ELIGIBLE')) {
     overallStatus = 'PARTIALLY_ELIGIBLE';
@@ -356,6 +391,9 @@ export function evaluateCandidateMatch(jobEligibility, candidateProfile) {
       summary: executiveSummary,
       canApply,
       isHardBlocker,
+      blockerCategory,
+      blockerLabel,
+      blockerTag,
       actionableTips
     },
     candidateSummary: {
@@ -368,7 +406,7 @@ export function evaluateCandidateMatch(jobEligibility, candidateProfile) {
       totalExperienceMonths: candTotalMonths,
       experienceDisplay: candExpDisplay,
       isFresher: candIsFresher,
-      seniorityLevel: candidateProfile.seniorityLevel,
+      seniorityLevel: candSeniority,
       skillsDetectedCount: candSkills.length,
       education: candEdu,
       sourceType: candidateProfile.sourceType,

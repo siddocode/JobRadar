@@ -282,11 +282,28 @@ function classifyRole(title = '', descriptionText = '') {
     }
   }
 
-  // 2. Seniority & Fresher Classification
+  // 2. Seniority & Fresher Classification (Check leadership & senior tiers first to avoid classifying Staff/Lead as entry)
   let seniority = 'mid';
   let fresherFriendly = false;
 
-  if (
+  const isDirector = /\b(director|vp|vice president|chief|head of)\b/i.test(titleLower);
+  const isLeadOrStaff = /\b(staff|principal|architect|tech lead|engineering manager)\b/i.test(titleLower) || /\blead\b/i.test(titleLower);
+  const isManager = /\b(manager|engineering manager|lead manager)\b/i.test(titleLower);
+  const isSeniorTitle = /\b(senior|sr\.?|sr\s)\b/i.test(titleLower) || (expMin !== null && expMin >= 5);
+
+  if (isDirector) {
+    seniority = 'director_plus';
+    fresherFriendly = false;
+  } else if (isLeadOrStaff) {
+    seniority = 'lead_staff';
+    fresherFriendly = false;
+  } else if (isManager) {
+    seniority = 'manager';
+    fresherFriendly = false;
+  } else if (isSeniorTitle) {
+    seniority = 'senior';
+    fresherFriendly = false;
+  } else if (
     titleLower.includes('intern') ||
     titleLower.includes('trainee') ||
     titleLower.includes('apprentice') ||
@@ -299,43 +316,12 @@ function classifyRole(title = '', descriptionText = '') {
     titleLower.includes('graduate engineer') ||
     titleLower.includes('entry level') ||
     titleLower.includes('junior') ||
-    titleLower.includes('assoc ') ||
-    titleLower.includes('associate') ||
     titleLower.includes('new grad') ||
     titleLower.includes('campus') ||
-    (expMin !== null && expMin <= 1)
+    (expMin !== null && expMin <= 1 && (expMax === null || expMax <= 2))
   ) {
     seniority = 'entry';
     fresherFriendly = true;
-  } else if (
-    titleLower.includes('director') ||
-    titleLower.includes('vp') ||
-    titleLower.includes('vice president') ||
-    titleLower.includes('head of') ||
-    titleLower.includes('chief')
-  ) {
-    seniority = 'director_plus';
-  } else if (
-    titleLower.includes('manager') ||
-    titleLower.includes('engineering manager') ||
-    titleLower.includes('lead manager')
-  ) {
-    seniority = 'manager';
-  } else if (
-    titleLower.includes('staff') ||
-    titleLower.includes('principal') ||
-    titleLower.includes('architect') ||
-    titleLower.includes('tech lead') ||
-    /\blead\b/i.test(titleLower)
-  ) {
-    seniority = 'lead_staff';
-  } else if (
-    titleLower.includes('sr.') ||
-    titleLower.includes('sr ') ||
-    titleLower.includes('senior') ||
-    (expMin !== null && expMin >= 5)
-  ) {
-    seniority = 'senior';
   }
 
   // 3. Role Family Classification

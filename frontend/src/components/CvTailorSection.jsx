@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { downloadResumePdf, downloadResumeText, copyResumeToClipboard } from '../utils/pdfGenerator';
 
 export default function CvTailorSection({ job, candidateProfile, token, onProfileUpdated }) {
-  const { isAuthenticated, openAuthModal } = useAuth();
+  const { isAuthenticated, openAuthModal, authFetch } = useAuth();
   const [selectedFile, setSelectedFile] = useState(null);
   const [sourceType, setSourceType] = useState(() => (candidateProfile ? 'profile' : 'pdf'));
   const [portfolioUrl, setPortfolioUrl] = useState(() => {
@@ -83,26 +83,23 @@ export default function CvTailorSection({ job, candidateProfile, token, onProfil
     }, 650);
 
     try {
-      const jobId = job._id || job.sourceJobId;
-      const headers = {};
-      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const jobId = job?._id || job?.sourceJobId;
+      if (!jobId) {
+        throw new Error('Valid Job ID is required to tailor CV.');
+      }
 
       let res;
       if (sourceType === 'pdf' && selectedFile) {
         const formData = new FormData();
         formData.append('cv', selectedFile);
-        res = await fetch(`/api/jobs/${jobId}/tailor-cv`, {
+        res = await authFetch(`/api/jobs/${jobId}/tailor-cv`, {
           method: 'POST',
-          credentials: 'include',
-          headers,
           body: formData
         });
-      } else if (sourceType === 'profile') {
-        headers['Content-Type'] = 'application/json';
-        res = await fetch(`/api/jobs/${jobId}/tailor-cv`, {
+      } else if (candidateProfile || sourceType === 'profile') {
+        res = await authFetch(`/api/jobs/${jobId}/tailor-cv`, {
           method: 'POST',
-          credentials: 'include',
-          headers,
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             candidateProfile: candidateProfile || undefined
           })
@@ -112,18 +109,16 @@ export default function CvTailorSection({ job, candidateProfile, token, onProfil
         if (!cleanUrl && !candidateProfile) {
           throw new Error('Please enter your portfolio website URL (e.g. https://myportfolio.com)');
         }
-        headers['Content-Type'] = 'application/json';
-        res = await fetch(`/api/jobs/${jobId}/tailor-cv`, {
+        res = await authFetch(`/api/jobs/${jobId}/tailor-cv`, {
           method: 'POST',
-          credentials: 'include',
-          headers,
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             portfolioUrl: cleanUrl || undefined,
             candidateProfile: candidateProfile || undefined
           })
         });
       } else {
-        throw new Error('Please select a CV source to tailor.');
+        throw new Error('Please select a CV source or save your profile to tailor.');
       }
 
       const data = await res.json();
